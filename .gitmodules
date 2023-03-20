@@ -1,0 +1,3 @@
+[submodule "JaxSeq2"]
+	path = JaxSeq2
+	url = https://github.com/Sea-Snell/JaxSeq2.git
