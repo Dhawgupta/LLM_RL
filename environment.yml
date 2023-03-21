@@ -1,4 +1,4 @@
-name: context_distill4
+name: LLM_RL
 channels:
 - defaults
 - conda-forge
