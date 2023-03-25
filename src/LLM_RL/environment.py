@@ -2,7 +2,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections import namedtuple
 from dataclasses import dataclass
-from typing import Callable, Dict, List, NamedTuple, Optional, Tuple
+from typing import Callable, Dict, List, NamedTuple, Optional, Tuple, Union
 from transformers.tokenization_utils import PreTrainedTokenizer
 import numpy as np
 
@@ -112,72 +112,115 @@ class TokenHistory(NamedTuple):
     def __post_init__(self):
         assert len(self.tokens.shape) == 1 and len(self.is_action.shape) == 1, '(tokens, is_action) must be 1 dimensional'
         assert self.tokens.shape == self.is_action.shape, '(tokens, is_action) must have the same shape'
+    
+    @classmethod
+    def from_text_history(
+        cls, 
+        text_history: TextHistory, 
+        tokenizer: PreTrainedTokenizer, 
+        token_process: Optional[Callable[[List[int]], List[int]]]=None, 
+    ) -> TokenHistory:
+        if token_process is None:
+            token_process = lambda x: x
+
+        tokens = []
+        is_action = []
+        
+        for item in text_history:
+            
+            # tokenize
+            new_tokens = token_process(tokenizer.encode(item.text))
+            
+            tokens.extend(new_tokens)
+            is_action.extend([item.is_action]*len(new_tokens))
+        
+        return cls(
+            np.array(tokens, dtype=np.int32), 
+            np.array(is_action, dtype=np.bool_), 
+        )
 
 class TokenTrajectory(NamedTuple):
     tokens: np.ndarray # 1d int32 array
     is_action: np.ndarray # 1d bool array
     reward: np.ndarray # 1d float32 array
-    done: np.ndarray # 1d bool array
+    done: Union[bool, np.ndarray] # bool scalar
 
     def __post_init__(self):
         assert all(len(item.shape) == 1 for item in self), '(tokens, is_action, reward, done) must all be 1 dimensional'
         assert all([item.shape == self[0].shape for item in self[1:]]), '(tokens, is_action, reward, done) must all have the same shape'
         assert not np.any(((1 - self.is_action.astype(np.float32)) * self.reward) != 0.0), 'reward must be 0.0 if not an action'
-        assert not np.any(self.done[:-1]), 'done can only be true at the last token in the sequence'
+    
+    @classmethod
+    def from_text_trajectory(
+        cls, 
+        text_trajectory: TextTrajectory, 
+        tokenizer: PreTrainedTokenizer, 
+        token_process: Optional[Callable[[List[int]], List[int]]]=None, 
+    ) -> TokenTrajectory:
+        if token_process is None:
+            token_process = lambda x: x
+        
+        tokens = []
+        is_action = []
+        reward = []
+        done = []
+
+        for i, item in enumerate(text_trajectory.text_history):
+            
+            # tokenize
+            new_tokens = token_process(tokenizer.encode(item.text))
+            
+            tokens.extend(new_tokens)
+            is_action.extend([item.is_action]*len(new_tokens))
+            
+            # add reward at the last token in the text
+            reward.extend(([0.0]*(len(new_tokens)-1))+[text_trajectory.reward[i]])
+            done.extend([False]*len(new_tokens))
+        
+        # get done
+        done = text_trajectory.done
+
+        return cls(
+            np.array(tokens, dtype=np.int32), 
+            np.array(is_action, dtype=np.bool_), 
+            np.array(reward, dtype=np.float32), 
+            np.array(done, dtype=np.bool_), 
+        )
 
 class TokenTrajectoryChain(NamedTuple):
     token_trajectory: TokenTrajectory
     next: Optional[TokenTrajectoryChain]
 
-
-def text_history_to_token_history(text_history: TextHistory, tokenizer: PreTrainedTokenizer) -> TokenHistory:
-    tokens = []
-    is_action = []
+    def __post_init__(self):
+        curr, dones = self, []
+        while curr.next is not None:
+            dones.append(curr.token_trajectory.done)
+            curr = curr.next
+        assert not np.any(dones[:-1]), 'token trajectory chain can only be done at the end'
     
-    for item in text_history:
-        
-        # tokenize
-        new_tokens = tokenizer.encode(item.text)
-        
-        tokens.extend(new_tokens)
-        is_action.extend([item.is_action]*len(new_tokens))
-    
-    return TokenHistory(
-        np.array(tokens, dtype=np.int32), 
-        np.array(is_action, dtype=np.bool_), 
-    )
+    def to_list(self) -> List[TokenTrajectory]:
+        curr, l = self, []
+        while curr is not None:
+            l.append(curr.token_trajectory)
+            curr = curr.next
+        return l
 
-def text_trajectory_to_token_trajectory(text_trajectory: TextTrajectory, tokenizer: PreTrainedTokenizer) -> TokenTrajectory:
-    
-    tokens = []
-    is_action = []
-    reward = []
-    done = []
-
-    for i, item in enumerate(text_trajectory.text_history):
-        
-        # tokenize
-        new_tokens = tokenizer.encode(item.text)
-        
-        tokens.extend(new_tokens)
-        is_action.extend([item.is_action]*len(new_tokens))
-        
-        # add reward at the last token in the text
-        reward.extend(([0.0]*(len(new_tokens)-1))+[text_trajectory.reward[i]])
-        done.extend([False]*len(new_tokens))
-    
-    # add done at last token in trajectory
-    done[-1] = text_trajectory.done
-
-    return TokenTrajectory(
-        np.array(tokens, dtype=np.int32), 
-        np.array(is_action, dtype=np.bool_), 
-        np.array(reward, dtype=np.float32), 
-        np.array(done, dtype=np.bool_), 
-    )
-
-def text_trajectory_chain_to_token_trajectory_chain(text_trajectory_chain: TextTrajectoryChain, tokenizer: PreTrainedTokenizer) -> TokenTrajectoryChain:
-    return TokenTrajectoryChain(
-        text_trajectory_to_token_trajectory(text_trajectory_chain.text_trajectory, tokenizer), 
-        text_trajectory_chain_to_token_trajectory_chain(text_trajectory_chain.next, tokenizer) if text_trajectory_chain.next is not None else None, 
-    )
+    @classmethod
+    def from_text_trajectory_chain(
+        cls, 
+        text_trajectory_chain: TextTrajectoryChain, 
+        tokenizer: PreTrainedTokenizer, 
+        token_process: Optional[Callable[[List[int]], List[int]]]=None, 
+    ) -> TokenTrajectoryChain:
+        return TokenTrajectoryChain(
+            TokenTrajectory.from_text_trajectory(
+                text_trajectory_chain.text_trajectory, 
+                tokenizer, 
+                token_process=token_process, 
+            ), 
+            cls.from_text_trajectory_chain(
+                text_trajectory_chain.next, 
+                tokenizer, 
+                token_process=token_process, 
+            ) if text_trajectory_chain.next is not None else None, 
+        )
