@@ -2,7 +2,7 @@ from typing import Optional, Dict, Any, Tuple
 import tyro
 from JaxSeq.bucket_manager import open_with_bucket as open
 from transformers import AutoTokenizer
-from JaxSeq.utils import jsonl_stream, convert_path, load_mesh, get_dtype
+from JaxSeq.utils import jsonl_stream, convert_path, load_mesh, get_dtype, setup_experiment_save
 import jax
 import jax.numpy as jnp
 from JaxSeq.utils import BlockingStrategy, Padding, Truncation, uuid_name, jsonl_load, get_weight_decay_mask
@@ -17,27 +17,6 @@ from JaxSeq.generation_eval import generate_language, compute_metrics
 from transformers.generation import GenerationConfig
 from jaxtyping import PyTree
 import re
-
-def setup_experiment_save(
-    exp_name: Optional[str], 
-    outputs_path: Optional[str], 
-    input_args: Dict[str, Any], 
-) -> Tuple[Optional[str], str]:
-    save_dir = None
-    if exp_name is None:
-        exp_name = uuid_name(base_name="exp", include_uuid=False)
-    if outputs_path is not None:
-        save_dir = convert_path(os.path.join(outputs_path, exp_name))
-        if (not save_dir.startswith('gcs://')) and (not os.path.exists(save_dir)):
-            os.makedirs(save_dir)
-        
-        # copy training script to outputs as a cheap form of config logging
-        with open(__file__, 'r') as f_local:
-            with open(os.path.join(save_dir, 'config.py'), 'w') as f_save:
-                f_save.write(f_local.read())
-        with open(os.path.join(save_dir, 'input_args.pkl'), 'wb') as f:
-            pkl.dump(input_args, f)
-    return save_dir, exp_name
 
 def main(
     model_load_mode: ModelLoadMode, 
