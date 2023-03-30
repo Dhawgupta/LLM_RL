@@ -17,6 +17,26 @@ from JaxSeq.generation_eval import generate_language, compute_metrics
 from transformers.generation import GenerationConfig
 from jaxtyping import PyTree
 import re
+from LLM_RL.environment import TextEnv, TextHistory, Text, interact_environment, text_env_eval, TextTrajectory, TextTrajectoryChain
+from LLM_RL.algorithms.ppo.gptj.interface import GPTJPolicy, GPTJPPOInference, GPTJPPOTrain
+from LLM_RL.heads.linear_head import load_train_state_from_config as load_head_train_state_from_config
+from LLM_RL.heads.linear_head import LinearHeadConfig
+from flax.training.train_state import TrainState
+from LLM_RL.algorithms.ppo.data import PPODataset, PPOIterableDataset
+
+class BitsTestEnv(TextEnv):
+    def __init__(self, n: int):
+        self.n = n
+
+    def step(self, text_history: TextHistory) -> Tuple[TextHistory, float, bool]:
+        try:
+            bits = list(map(int, text_history[-1].text.strip().split(' ')))
+        except:
+            bits = []
+        return text_history, float(sum(bits) > (self.n // 2))*10.0, True
+
+    def reset(self, seed: Optional[int]=None, options: Optional[Dict]=None) -> TextHistory:
+        return (Text(text='<|endoftext|>', is_action=False),)
 
 def main(
     model_load_mode: ModelLoadMode, 
@@ -63,6 +83,12 @@ def main(
     force_pad_embeddings: bool=False, 
 
     should_restore_loop_state: bool=False, 
+
+    ppo_data_bsize: int=32, 
+    gamma: float=0.99, 
+    lam: float=0.95, 
+    kl_weight: float=1.0, # probably should change these defaults?
+
 ):
     input_args = locals()
     print(input_args)
@@ -162,6 +188,113 @@ def main(
         tokenizer=tokenizer, 
         mesh=mesh, 
     )
+
+    env = BitsTestEnv(n=10)
+    
+    policy_prng = jax.random.PRNGKey(0)
+    policy = GPTJPolicy(
+        inference=inference, 
+        prng_key=policy_prng, 
+        generation_config=GenerationConfig(
+            do_sample=True, 
+            num_beams=1, 
+            temperature=1.0, 
+            top_p=1.0, 
+            eos_token_id=tokenizer.encode('\n')[0], 
+            pad_token_id=tokenizer.pad_token_id, 
+            max_length=max_input_length+max_output_length, 
+        ), 
+        blocking_strategy=BlockingStrategy(
+            padding=Padding.LEFT, 
+            truncation=Truncation.LEFT, 
+            max_length=max_input_length, 
+        ), 
+        out_str_process=lambda x: x.removesuffix('\n')+'\n', 
+    )
+
+    def value_head_optim_getter(params: PyTree):
+        mask = get_weight_decay_mask(("bias",))(params)
+        return optax.MultiSteps(
+            optax.adamw(
+                learning_rate=lr, 
+                b1=0.9, 
+                b2=0.999, 
+                eps=1e-6, 
+                weight_decay=weight_decay, 
+                mask=mask, 
+            ), 
+            every_k_schedule=grad_accum_steps, 
+        )
+    
+    value_head_train_state, value_head = load_head_train_state_from_config(
+        model_config=LinearHeadConfig(
+            input_dim=model.config.n_embd, 
+            output_dim=1, 
+            use_bias=True, 
+            initializer_range=None, 
+        ), 
+        model_dtype=model_dtype, 
+        optim_getter=value_head_optim_getter, 
+        mesh=mesh, 
+        pad_to_output_dim=None, 
+        params_dtype=jnp.float32, 
+    )
+    
+    # need to shard params
+
+    ppo_inference = GPTJPPOInference.load_inference(
+        initial_policy_params=train_state.params, 
+        policy_params=train_state.params, 
+        value_head_params=value_head_train_state.params, 
+        initial_policy_model=model, 
+        policy_model=model, 
+        value_head_model=value_head, 
+        tokenizer=tokenizer, 
+        mesh=mesh, 
+    )
+
+    ppo_trainer = GPTJPPOTrain.load_train(
+        policy_train_state=train_state, 
+        value_head_train_state=value_head_train_state, 
+        policy_model=model, 
+        value_head_model=value_head, 
+        tokenizer=tokenizer, 
+        mesh=mesh, 
+    )
+
+    raw_results, summary_results = text_env_eval(env=env, policy=policy, n_rounds=10)
+
+    text_trajectory_chains = []
+    for raw_result in raw_results:
+        text_trajectory = TextTrajectory(
+            text_history=raw_result[-1].post_transition_history, 
+            reward=[0.0, raw_result[-1].reward], 
+            done=raw_result[-1].done, 
+        )
+        text_trajectory_chains.append(TextTrajectoryChain(text_trajectory, None))
+    
+    ppo_data, all_kls = ppo_inference.get_ppo_data_from_text_trajectory_chain(
+        text_trajectory_chains, 
+        bsize=ppo_data_bsize, 
+        max_length=max_input_length+max_output_length, 
+        gamma=gamma, 
+        lam=lam, 
+        kl_weight=kl_weight, 
+    )
+
+    ppo_dataset = PPODataset.from_ppo_data_list(
+        ppo_data, 
+        tokenizer, 
+        BlockingStrategy(Padding.RIGHT, Truncation.RIGHT, max_input_length+max_output_length), 
+    )
+
+    # ppo_dataset = PPOIterableDataset.from_ppo_data_iterable(
+    #     ppo_data, 
+    #     tokenizer, 
+    #     BlockingStrategy(Padding.RIGHT, Truncation.RIGHT, max_input_length+max_output_length), 
+    # )
+
+    import IPython; IPython.embed()
 
     # save_dir, exp_name = setup_experiment_save(
     #     exp_name=exp_name, 

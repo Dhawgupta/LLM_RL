@@ -3,16 +3,11 @@ import os
 import jax.numpy as jnp
 import jax
 import numpy as np
+from JaxSeq.utils import convert_path
+from functools import partial
 
-PROJECT_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..')
-
-def convert_path(path: Optional[str]):
-    """convert relative paths to be absolute paths from project root"""
-    if path is None:
-        return None
-    if path.startswith('/') or path.startswith('gcs://'):
-        return path
-    return os.path.join(PROJECT_ROOT, path)
+PROJECT_ROOT = os.environ.get("PROJECT_ROOT", os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
+convert_path = partial(convert_path, project_root=PROJECT_ROOT)
 
 
 def get_tensor_stats(xs: jax.Array, mask: jax.Array, n: int):
@@ -21,8 +16,8 @@ def get_tensor_stats(xs: jax.Array, mask: jax.Array, n: int):
     mask = mask.astype(jnp.bool_)
     return dict(
         mean=mean, 
-        min=jnp.min(xs, where=mask), 
-        max=jnp.max(xs, where=mask), 
+        min=jnp.min(xs, where=mask, initial=float('inf')), 
+        max=jnp.max(xs, where=mask, initial=float('-inf')), 
         std=jnp.std(xs, where=mask), 
     )
 

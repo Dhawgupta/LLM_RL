@@ -2,9 +2,11 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections import namedtuple
 from dataclasses import dataclass
-from typing import Callable, Dict, List, NamedTuple, Optional, Tuple, Union
+from typing import Callable, Dict, List, NamedTuple, Optional, Tuple, Union, Any, Iterator
 from transformers.tokenization_utils import PreTrainedTokenizer
 import numpy as np
+from LLM_RL.utils import get_tensor_stats
+from tqdm.auto import tqdm
 
 # define text objects
 
@@ -13,14 +15,14 @@ class Text:
     text: str
     is_action: bool
 
-TextHistory = List[Text]
+TextHistory = Tuple[Text]
 text_history_to_str = lambda text_history: ''.join(map(lambda x: x.text, text_history))
 
 # text trajectory should fit into a single context window, otherwise is truncated
 
 class TextTrajectory(NamedTuple):
     text_history: TextHistory
-    reward: List[float]
+    reward: Tuple[float]
     done: bool
 
     def __post_init__(self):
@@ -56,14 +58,22 @@ class TextPolicy(ABC):
 
 # interact with the environment
 
+class InteractionTransition(NamedTuple):
+    pre_action_history: TextHistory
+    post_action_history: TextHistory
+    post_transition_history: TextHistory
+    reward: float
+    done: bool
+
 def interact_environment(
     env: TextEnv, 
     policy: TextPolicy, 
-    text_history: Optional[TextHistory]=None, 
+    initial_text_history: Optional[TextHistory]=None, 
     env_seed: Optional[int]=None, 
     env_options: Optional[Dict]=None, 
-) -> List[Tuple[TextHistory, TextHistory, TextHistory, float, bool]]:
+) -> List[InteractionTransition]:
     
+    text_history = initial_text_history
     if text_history is None:
         text_history = env.reset(env_seed, env_options)
     
@@ -74,11 +84,65 @@ def interact_environment(
         text_history = policy.act(text_history)
         post_action_history = text_history
 
-        text_history, r, done = env.step(text_history)
+        text_history, reward, done = env.step(text_history)
         post_transition_history = text_history
         
-        transitions.append((pre_action_history, post_action_history, post_transition_history, r, done,))
+        transitions.append(
+            InteractionTransition(
+                pre_action_history=pre_action_history, 
+                post_action_history=post_action_history, 
+                post_transition_history=post_transition_history, 
+                reward=reward, 
+                done=done, 
+            )
+        )
     return transitions
+
+def text_env_eval(
+    env: TextEnv, 
+    policy: TextPolicy, 
+    n_rounds: int, 
+    initial_text_history: Optional[TextHistory]=None, 
+    seed_generator: Optional[Iterator[int]]=None, 
+    env_options: Optional[Dict]=None, 
+    interaction_callback: Optional[Callable[[List[Tuple[TextHistory, TextHistory, TextHistory, float, bool]]], None]]=None, 
+    verbose: bool=True, 
+) -> Tuple[List[List[InteractionTransition]], Dict[str, Any]]:
+    
+    interactions, rewards, dones = [], [], []
+    for _ in tqdm(range(n_rounds), disable=not verbose):
+        interaction = interact_environment(
+            env, 
+            policy, 
+            initial_text_history=initial_text_history, 
+            env_seed=None if seed_generator is None else next(seed_generator), 
+            env_options=env_options, 
+        )
+        
+        interactions.append(interaction)
+        rewards.append(sum(map(lambda x: x.reward, interaction)))
+        dones.append(interaction[-1].done)
+        if interaction_callback is not None:
+            interaction_callback(interaction)
+    
+    rewards = np.asarray(rewards, dtype=np.float32)
+    dones = np.asarray(dones, dtype=np.float32)
+    results_summary = dict(
+        reward=dict(
+            mean=np.mean(rewards), 
+            std=np.std(rewards), 
+            min=np.min(rewards), 
+            max=np.max(rewards), 
+        ), 
+        done=dict(
+            mean=np.mean(dones), 
+            std=np.std(dones), 
+            min=np.min(dones), 
+            max=np.max(dones), 
+        ), 
+    )
+    
+    return interactions, results_summary
 
 # user policy
 

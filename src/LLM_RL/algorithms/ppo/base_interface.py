@@ -22,6 +22,9 @@ from LLM_RL.utils import get_tensor_stats, unpad_array
 from JaxSeq.models.base_interface import initialize_attn_mask_pos_ids
 from LLM_RL.environment import TextTrajectoryChain, text_history_to_str, TokenTrajectoryChain
 from scipy.special import softmax
+from tqdm.auto import tqdm
+from LLM_RL.algorithms.ppo.data import PPOData
+from LLM_RL.environment import TextPolicy
 
 # x
 # input = x[1:]
@@ -30,11 +33,11 @@ from scipy.special import softmax
 # if ends with state, then next window should start with a state, x[0]
 
 # TODO:
-# test on some toy data
-# batched policy / environment abstractions
-# environment data conversion system
 # training loop
+# environment data conversion system
+# batched policy / environment abstractions
 # test JaxSeq/LLM_RL data parallel, make sure it doesn't break
+# test on some more toy data for multistep / multichain settings
 # clean code
 
 def ppo_loss_fn(
@@ -108,6 +111,82 @@ def ppo_loss_fn(
     )
 
     return loss, logs
+
+class PPOTrain(struct.PyTreeNode):
+    policy_train_state: TrainState
+    value_head_train_state: TrainState
+    policy_model: FlaxPreTrainedModel = struct.field(pytree_node=False)
+    value_head_model: nn.Module = struct.field(pytree_node=False)
+    tokenizer: PreTrainedTokenizerBase = struct.field(pytree_node=False)
+    _step: Callable = struct.field(pytree_node=False)
+    
+    # def _step(
+    #     policy_train_state: TrainState, 
+    #     value_head_train_state: TrainState, 
+    #     input_ids: jax.Array, 
+    #     attention_mask: jax.Array, 
+    #     position_ids: jax.Array, 
+    #     should_take_action: jax.Array, 
+    #     old_logprobs: jax.Array, 
+    #     old_values: jax.Array, 
+    #     old_advantages: jax.Array, 
+    #     old_returns: jax.Array, 
+    #     prng_key: Optional[jax.random.PRNGKeyArray], 
+    #     cliprange_value: Union[float, jax.Array], 
+    #     cliprange: Union[float, jax.Array], 
+    #     value_loss_weight: Union[float, jax.Array], 
+    #     train: bool=True, 
+    # ) -> Tuple[TrainState, TrainState, jax.Array, PyTree]:
+    #     raise NotImplementedError
+    
+    def step(
+        self, 
+        input_ids: jax.Array, # [batch, time]
+        should_take_action: jax.Array, # [batch, time-1]
+        old_logprobs: jax.Array, # [batch, time-1]
+        old_values: jax.Array, # [batch, time-1]
+        old_advantages: jax.Array, # [batch, time-1]
+        old_returns: jax.Array, # [batch, time-1]
+        prng_key: Optional[jax.random.PRNGKeyArray], 
+        attention_mask: Optional[jax.Array]=None, 
+        position_ids: Optional[jax.Array]=None, 
+        train: bool=True, 
+        *, 
+        cliprange_value: Union[float, jax.Array], 
+        cliprange: Union[float, jax.Array], 
+        value_loss_weight: Union[float, jax.Array], 
+    ) -> Tuple[PPOTrain, jax.Array, PyTree]:
+        
+        # handle attention mask and position ids shifting
+        attention_mask, position_ids = initialize_attn_mask_pos_ids(
+            input_ids, 
+            self.tokenizer.pad_token_id, 
+            attention_mask, 
+            position_ids, 
+        )
+        
+        policy_train_state, value_head_train_state, loss, logs = self._step(
+            self.policy_train_state, 
+            self.value_head_train_state, 
+            input_ids, 
+            attention_mask, 
+            position_ids, 
+            should_take_action, 
+            old_logprobs, 
+            old_values, 
+            old_advantages, 
+            old_returns, 
+            prng_key, 
+            cliprange_value, 
+            cliprange, 
+            value_loss_weight, 
+            train, 
+        )
+
+        return self.replace(
+            policy_train_state=policy_train_state, 
+            value_head_train_state=value_head_train_state, 
+        ), loss, logs
 
 def get_action_state_next_state_idxs(
     should_take_action: np.ndarray, # [t-1]
@@ -185,7 +264,7 @@ class CombinedTokenTrajectoryChain(NamedTuple):
             max_length = max([tt.tokens.shape[0] for tt in token_trajectories])+1
         
         # double check dones
-        assert not any([tt.done for tt in token_trajectories]), "done can only be true at the end of the chain"
+        assert not any([tt.done for tt in token_trajectories[:-1]]), "done can only be true at the end of the chain"
         
         # check truncation conditions
         for i in range(len(token_trajectories)):
@@ -193,7 +272,7 @@ class CombinedTokenTrajectoryChain(NamedTuple):
             # we can't calculate the advantage if the trajectory is truncated and there are later actions
             no_trunc = (token_trajectories[i].tokens.shape[0]-1) <= max_length
             ends_with_state = (not np.any(token_trajectories[i].is_action[1:][max_length:]))
-            next_starts_with_action = i == len(token_trajectories)-1 or token_trajectories[i+1].is_action[0]
+            next_starts_with_action = i < len(token_trajectories)-1 and token_trajectories[i+1].is_action[0]
 
             assert not (ends_with_state and next_starts_with_action), 'trajectory truncation error'
             assert no_trunc or ends_with_state, 'trajectory truncation error'
@@ -218,59 +297,6 @@ class PPOForwardOutput(NamedTuple):
     initial_policy_raw_output: FlaxCausalLMOutput
     policy_raw_output: FlaxCausalLMOutput
     values: jax.Array
-
-class PPOData(NamedTuple):
-    input_ids: np.ndarray # [t]
-    should_take_action: np.ndarray # [t-1]
-    old_logprobs: np.ndarray # [t-1]
-    old_values: np.ndarray # [t-1]
-    old_advantages: np.ndarray # [t-1]
-    old_returns: np.ndarray # [t-1]
-
-    @staticmethod
-    def block(
-        data: List[PPOData], 
-        blocking_strategy: BlockingStrategy, 
-        tokenizer: PreTrainedTokenizerBase, 
-    ) -> Dict[str, np.ndarray]:
-        return dict(
-            input_ids=block_sequences(
-                list(map(lambda x: x.input_ids, data)), 
-                tokenizer.pad_token_id, 
-                dtype=np.int32, 
-                blocking_strategy=blocking_strategy, 
-            ), 
-            should_take_action=block_sequences(
-                list(map(lambda x: x.should_take_action, data)), 
-                0, 
-                dtype=np.int32, 
-                blocking_strategy=blocking_strategy, 
-            ), 
-            old_logprobs=block_sequences(
-                list(map(lambda x: x.old_logprobs, data)), 
-                0.0, 
-                dtype=np.float32, 
-                blocking_strategy=blocking_strategy, 
-            ), 
-            old_values=block_sequences(
-                list(map(lambda x: x.old_values, data)), 
-                0.0, 
-                dtype=np.float32, 
-                blocking_strategy=blocking_strategy, 
-            ), 
-            old_advantages=block_sequences(
-                list(map(lambda x: x.old_advantages, data)), 
-                0.0, 
-                dtype=np.float32, 
-                blocking_strategy=blocking_strategy, 
-            ), 
-            old_returns=block_sequences(
-                list(map(lambda x: x.old_returns, data)), 
-                0.0, 
-                dtype=np.float32, 
-                blocking_strategy=blocking_strategy, 
-            ), 
-        )
 
 class PPOInference(struct.PyTreeNode):
     initial_policy_params: PyTree
@@ -380,6 +406,7 @@ class PPOInference(struct.PyTreeNode):
         max_length: Optional[int]=None, 
         train: bool=False, 
         prng_key: Optional[jax.random.PRNGKeyArray]=None, 
+        verbose: bool=True, 
         *, 
         gamma: Union[float, jax.Array], 
         lam: Union[float, jax.Array], 
@@ -413,7 +440,7 @@ class PPOInference(struct.PyTreeNode):
 
         # get values, logits from forward pass
         initial_policy_logprobs, policy_logprobs, values = [], [], []
-        for i in range(0, len(tokens), bsize):
+        for i in tqdm(range(0, len(tokens), bsize), disable=not verbose):
             tokens_batch = jnp.asarray(tokens[i:(i+bsize)], dtype=jnp.int32)
             forward_batch_output = self.forward(
                 tokens_batch, 
@@ -438,19 +465,19 @@ class PPOInference(struct.PyTreeNode):
         policy_logprobs = np.concatenate(policy_logprobs, axis=0)
         values = np.concatenate(values, axis=0)
 
-        batch_sections = list(map(len, combined_token_trajectory_chains.chunk_lens))
+        batch_sections = list(map(lambda x: len(x.chunk_lens), combined_token_trajectory_chains))
         mask_split_by_chain = np.split((tokens != self.tokenizer.pad_token_id), np.cumsum(batch_sections)[:-1], axis=0)
 
-        initial_policy_logprobs_split_by_chain = np.split(initial_policy_logprobs, batch_sections[:-1], axis=0)
-        policy_logprobs_split_by_chain = np.split(policy_logprobs, batch_sections[:-1], axis=0)
-        values_split_by_chain = np.split(values, batch_sections[:-1], axis=0)
-
+        initial_policy_logprobs_split_by_chain = np.split(initial_policy_logprobs, np.cumsum(batch_sections)[:-1], axis=0)
+        policy_logprobs_split_by_chain = np.split(policy_logprobs, np.cumsum(batch_sections)[:-1], axis=0)
+        values_split_by_chain = np.split(values, np.cumsum(batch_sections)[:-1], axis=0)
+        
         initial_policy_logprobs_chains = [
-            np.concatenate(list(map(lambda x, m: unpad_array(x, m), item, mask[1:])), axis=0) 
+            np.concatenate(list(map(lambda x, m: unpad_array(x, m), item, mask[:, 1:])), axis=0)
             for mask, item in zip(mask_split_by_chain, initial_policy_logprobs_split_by_chain)
         ]
         policy_logprobs_chains = [
-            np.concatenate(list(map(lambda x, m: unpad_array(x, m), item, mask[1:])), axis=0)
+            np.concatenate(list(map(lambda x, m: unpad_array(x, m), item, mask[:, 1:])), axis=0)
             for mask, item in zip(mask_split_by_chain, policy_logprobs_split_by_chain)
         ]
 
@@ -459,8 +486,12 @@ class PPOInference(struct.PyTreeNode):
             for mask, item in zip(mask_split_by_chain, values_split_by_chain)
         ]
         # add last value for final step bootstrapping
+        last_values_chains = [
+            unpad_array(item[-1], mask[-1])[-1]
+            for mask, item in zip(mask_split_by_chain, values_split_by_chain)
+        ]
         values_chains = [
-            np.concatenate((item, values_split_by_chain[i][-1, -1:]*(1.0-float(combined_token_trajectory_chains[i].done))), axis=0)
+            np.concatenate((item, last_values_chains[i][None]*(1.0-float(combined_token_trajectory_chains[i].done))), axis=0)
             for i, item in enumerate(values_chains)
         ]
 
@@ -470,10 +501,12 @@ class PPOInference(struct.PyTreeNode):
         ]
 
         all_log_ratio = np.concatenate(list(map(lambda x: x.reshape(-1), log_ratio)), axis=0)
-        all_kls = all_log_ratio.exp() - 1 - all_log_ratio
+        all_kls = np.exp(all_log_ratio) - 1 - all_log_ratio
         # add kl penalty to reward
         for i in range(n_chains):
-            combined_token_trajectory_chains[i].reward += kl_weight * log_ratio[i]
+            combined_token_trajectory_chains[i] = combined_token_trajectory_chains[i]._replace(
+                rewards=combined_token_trajectory_chains[i].rewards + kl_weight * log_ratio[i], 
+            )
 
         advantage_chains, return_chains = [], []
         for i in range(n_chains):
@@ -483,22 +516,22 @@ class PPOInference(struct.PyTreeNode):
 
             state_values = values_chains[i][state_idxs]
             next_state_values = values_chains[i][next_state_idxs]
-            action_rewards = combined_token_trajectory_chains[i].reward[action_idxs]
+            action_rewards = combined_token_trajectory_chains[i].rewards[action_idxs]
 
             advantages, returns = get_advantages_and_returns(
-                state_values=state_values, 
-                next_state_values=next_state_values, 
-                action_rewards=action_rewards, 
+                state_values=state_values[None], 
+                next_state_values=next_state_values[None], 
+                action_rewards=action_rewards[None], 
                 gamma=gamma, 
                 lam=lam, 
             )
 
-            advantage_chains.append(advantages)
-            return_chains.append(returns)
+            advantage_chains.append(advantages[0])
+            return_chains.append(returns[0])
         
         ppo_datas = []
         for i in range(n_chains):
-            input_ids_chunks = list(map(lambda x: x.tokens[:max_length], token_trajectory_chains[i].tolist())) # trunc to max_length
+            input_ids_chunks = list(map(lambda x: x.tokens[:max_length], token_trajectory_chains[i].to_list())) # trunc to max_length
             should_take_action_chunks = combined_token_trajectory_chains[i].unroll_arr(combined_token_trajectory_chains[i].should_take_action)
             old_logprobs_chunks = combined_token_trajectory_chains[i].unroll_arr(policy_logprobs_chains[i])
             old_values = combined_token_trajectory_chains[i].unroll_arr(values_chains[i][:-1])
@@ -525,6 +558,7 @@ class PPOInference(struct.PyTreeNode):
         train: bool=False, 
         prng_key: Optional[jax.random.PRNGKeyArray]=None, 
         token_process: Optional[Callable[[List[int]], List[int]]]=None, 
+        verbose: bool=True, 
         *, 
         gamma: Union[float, jax.Array], 
         lam: Union[float, jax.Array], 
@@ -545,6 +579,7 @@ class PPOInference(struct.PyTreeNode):
             max_length=max_length, 
             train=train, 
             prng_key=prng_key, 
+            verbose=verbose, 
             gamma=gamma, 
             lam=lam, 
             kl_weight=kl_weight, 
@@ -607,68 +642,6 @@ class PPOInference(struct.PyTreeNode):
             train=train, 
         )
 
-class PPOTrain(struct.PyTreeNode):
-    policy_train_state: TrainState
-    value_head_train_state: TrainState
-    policy_model: FlaxPreTrainedModel = struct.field(pytree_node=False)
-    value_head_model: nn.Module = struct.field(pytree_node=False)
-    tokenizer: PreTrainedTokenizerBase = struct.field(pytree_node=False)
-    _step: Callable = struct.field(pytree_node=False)
-    
-    # def _step(
-    #     policy_train_state: TrainState, 
-    #     value_head_train_state: TrainState, 
-    #     input_ids: jax.Array, 
-    #     attention_mask: jax.Array, 
-    #     position_ids: jax.Array, 
-    #     should_take_action: jax.Array, 
-    #     old_logprobs: jax.Array, 
-    #     old_values: jax.Array, 
-    #     old_advantages: jax.Array, 
-    #     old_returns: jax.Array, 
-    #     prng_key: Optional[jax.random.PRNGKeyArray], 
-    #     train: bool=True, 
-    # ) -> Tuple[TrainState, TrainState, jax.Array, PyTree]:
-    #     raise NotImplementedError
-    
-    def step(
-        self, 
-        input_ids: jax.Array, # [batch, time]
-        should_take_action: jax.Array, # [batch, time-1]
-        old_logprobs: jax.Array, # [batch, time-1]
-        old_values: jax.Array, # [batch, time-1]
-        old_advantages: jax.Array, # [batch, time-1]
-        old_returns: jax.Array, # [batch, time-1]
-        prng_key: Optional[jax.random.PRNGKeyArray], 
-        attention_mask: Optional[jax.Array]=None, 
-        position_ids: Optional[jax.Array]=None, 
-        train: bool=True, 
-    ) -> Tuple[PPOTrain, jax.Array, PyTree]:
-        
-        # handle attention mask and position ids shifting
-        attention_mask, position_ids = initialize_attn_mask_pos_ids(
-            input_ids, 
-            self.tokenizer.pad_token_id, 
-            attention_mask, 
-            position_ids, 
-        )
-        
-        policy_train_state, value_head_train_state, loss, logs = self._step(
-            self.policy_train_state, 
-            self.value_head_train_state, 
-            input_ids, 
-            attention_mask, 
-            position_ids, 
-            should_take_action, 
-            old_logprobs, 
-            old_values, 
-            old_advantages, 
-            old_returns, 
-            prng_key, 
-            train, 
-        )
-
-        return self.replace(
-            policy_train_state=policy_train_state, 
-            value_head_train_state=value_head_train_state, 
-        ), loss, logs
+class PPOPolicy(TextPolicy):
+    def set_params(self, policy_params: PyTree) -> None:
+        raise NotImplementedError

@@ -13,6 +13,13 @@ from transformers.modeling_flax_outputs import FlaxCausalLMOutput
 import flax.linen as nn
 from LLM_RL.algorithms.ppo.base_interface import PPOTrain, ppo_loss_fn, PPOInference, PPOForwardOutput
 from jax.sharding import NamedSharding
+from LLM_RL.environment import TextPolicy, TextHistory, text_history_to_str, Text
+from JaxSeq.models.base_interface import Inference
+from JaxSeq.utils import BlockingStrategy, Padding, Truncation
+from transformers.generation import GenerationConfig
+from JaxSeq.models.gptj.interface import GPTJInference
+import jax.numpy as jnp
+from LLM_RL.algorithms.ppo.base_interface import PPOPolicy
 
 class GPTJPPOTrain(PPOTrain):
     @classmethod
@@ -46,6 +53,9 @@ class GPTJPPOTrain(PPOTrain):
                 NamedSharding(mesh, PS("dp", None)), 
                 NamedSharding(mesh, PS("dp", None)), 
                 NamedSharding(mesh, PS()), 
+                NamedSharding(mesh, PS()), 
+                NamedSharding(mesh, PS()), 
+                NamedSharding(mesh, PS()), 
             ), 
             out_shardings=(
                 jax.tree_util.tree_map(lambda ps: NamedSharding(mesh, ps), policy_train_state_partition_spec), 
@@ -66,6 +76,9 @@ class GPTJPPOTrain(PPOTrain):
             old_advantages: jax.Array, 
             old_returns: jax.Array, 
             prng_key: Optional[jax.random.PRNGKeyArray], 
+            cliprange_value: Union[float, jax.Array], 
+            cliprange: Union[float, jax.Array], 
+            value_loss_weight: Union[float, jax.Array], 
             train: bool=True, 
         ) -> Tuple[TrainState, TrainState, jax.Array, PyTree]:
             # define loss function
@@ -91,15 +104,16 @@ class GPTJPPOTrain(PPOTrain):
                     {'params': value_head_params}, 
                     model_output.hidden_states[-1], 
                     train=train, 
-                    rngs={'dropout': new_key}, 
+                    rngs={'dropout': new_key} if new_key is not None else None, 
                 )[:, :-1]
+                values = jnp.squeeze(values, axis=-1)
 
                 logits = model_output.logits
                 logits = logits.at[:, :, policy_model.config.unpadded_vocab_size:].set(float('-inf'))
                 logprobs = -softmax_cross_entropy_with_integer_labels(logits[:, :-1], input_ids[:, 1:])
 
                 loss, info = loss_fn(
-                    attention_mask, 
+                    attention_mask[:, 1:], 
                     logprobs, 
                     values, 
                     should_take_action, 
@@ -107,9 +121,11 @@ class GPTJPPOTrain(PPOTrain):
                     old_values, 
                     old_advantages, 
                     old_returns, 
+                    cliprange_value=cliprange_value, 
+                    cliprange=cliprange, 
+                    value_loss_weight=value_loss_weight, 
                 )
                 return loss, info
-            train_state = train_state
             # take loss
             (loss, info), (policy_grads, value_head_grads) = jax.value_and_grad(grad_loss, has_aux=True, argnums=(0, 1))(
                 policy_train_state.params, 
@@ -172,20 +188,18 @@ class GPTJPPOInference(PPOInference):
                 NamedSharding(mesh, PS("dp", None)), 
                 NamedSharding(mesh, PS()), 
             ), 
-            out_shardings=(
-                PPOForwardOutput(
-                    initial_policy_raw_output=FlaxCausalLMOutput(
-                        logits=NamedSharding(mesh, PS("dp", None, None)), 
-                        hidden_states=NamedSharding(mesh, PS()), # assume no sharding for hidden states
-                        attentions=NamedSharding(mesh, PS()), # assume no sharding for attentions
-                    ), 
-                    policy_raw_output=FlaxCausalLMOutput(
-                        logits=NamedSharding(mesh, PS("dp", None, None)), 
-                        hidden_states=NamedSharding(mesh, PS()), # assume no sharding for hidden states
-                        attentions=NamedSharding(mesh, PS()), # assume no sharding for attentions
-                    ), 
-                    values=NamedSharding(mesh, PS("dp", None)), 
+            out_shardings=PPOForwardOutput(
+                initial_policy_raw_output=FlaxCausalLMOutput(
+                    logits=NamedSharding(mesh, PS("dp", None, None)), 
+                    hidden_states=NamedSharding(mesh, PS()), # assume no sharding for hidden states
+                    attentions=NamedSharding(mesh, PS()), # assume no sharding for attentions
                 ), 
+                policy_raw_output=FlaxCausalLMOutput(
+                    logits=NamedSharding(mesh, PS("dp", None, None)), 
+                    hidden_states=NamedSharding(mesh, PS()), # assume no sharding for hidden states
+                    attentions=NamedSharding(mesh, PS()), # assume no sharding for attentions
+                ), 
+                values=NamedSharding(mesh, PS("dp", None)), 
             ), 
         )
         def _forward(
@@ -233,8 +247,9 @@ class GPTJPPOInference(PPOInference):
                 {'params': value_head_params}, 
                 model_output.hidden_states[-1], 
                 train=train, 
-                rngs={'dropout': new_key}, 
+                rngs={'dropout': new_key} if new_key is not None else None, 
             )
+            values = jnp.squeeze(values, axis=-1)
 
             return PPOForwardOutput(
                 initial_policy_raw_output=initial_model_output, 
@@ -298,8 +313,9 @@ class GPTJPPOInference(PPOInference):
                 {'params': value_head_params}, 
                 model_output.hidden_states[-1], 
                 train=train, 
-                rngs={'dropout': new_key}, 
+                rngs={'dropout': new_key} if new_key is not None else None, 
             )[:, :-1]
+            values = jnp.squeeze(values, axis=-1)
 
             logits = model_output.logits
             logits = logits.at[:, :, policy_model.config.unpadded_vocab_size:].set(float('-inf'))
@@ -328,3 +344,53 @@ class GPTJPPOInference(PPOInference):
             _forward=_forward, 
             _eval_loss=_eval_loss, 
         )
+
+class GPTJPolicy(PPOPolicy):
+    def __init__(
+        self, 
+        inference: GPTJInference, 
+        prng_key: Optional[jax.random.KeyArray], 
+        generation_config: Optional[GenerationConfig]=None, 
+        blocking_strategy: BlockingStrategy=BlockingStrategy(padding=Padding.LEFT, truncation=Truncation.LEFT, max_length=None), 
+        in_str_process: Optional[Callable[[str], str]]=None, 
+        out_str_process: Optional[Callable[[str], str]]=None, 
+        input_token_process: Optional[Callable[[List[int]], List[int]]]=None, 
+        target_token_process: Optional[Callable[[List[int]], List[int]]]=None, 
+    ):
+        self.inference = inference
+        self.prng_key = prng_key
+        self.generation_config = generation_config
+        self.blocking_strategy = blocking_strategy
+        self.in_str_process = in_str_process
+        self.out_str_process = out_str_process
+        self.input_token_process = input_token_process
+        self.target_token_process = target_token_process
+        if self.in_str_process is None:
+            self.in_str_process = lambda x: x
+        if self.out_str_process is None:
+            self.out_str_process = lambda x: x
+    
+    def act(self, text_history: TextHistory) -> TextHistory:
+        
+        raw_input_str = self.in_str_process(text_history_to_str(text_history))
+
+        new_key = None
+        if self.prng_key is not None:
+            self.prng_key, new_key = jax.random.split(self.prng_key)
+        model_outputs = self.inference.generate_from_str(
+            input_strs=[raw_input_str], 
+            prng_key=new_key, 
+            blocking_strategy=self.blocking_strategy, 
+            generation_config=self.generation_config, 
+            input_token_process=self.input_token_process, 
+            target_token_process=self.target_token_process, 
+        )
+
+        raw_output_str = model_outputs.output_strs[0]
+        output_str = raw_output_str.removeprefix(raw_input_str)
+        output_str = self.out_str_process(output_str)
+
+        return text_history+(Text(output_str, True),)
+    
+    def set_params(self, policy_params: PyTree) -> None:
+        self.inference = self.inference.replace(params=policy_params)
