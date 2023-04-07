@@ -12,7 +12,8 @@ from JaxSeq.models.gptj.interface import GPTJTrain, GPTJInference
 from JaxSeq.models.gptj.load import load_train_state, ModelLoadMode
 import pickle as pkl
 from JaxSeq.data import Seq2SeqDataset
-from JaxSeq.train import eval_loss, train_loop
+from LLM_RL.algorithms.ppo.train import train_loop
+from LLM_RL.algorithms.ppo.base_interface import ppo_loss_fn
 from JaxSeq.generation_eval import generate_language, compute_metrics
 from transformers.generation import GenerationConfig
 from jaxtyping import PyTree
@@ -23,6 +24,7 @@ from LLM_RL.heads.linear_head import load_train_state_from_config as load_head_t
 from LLM_RL.heads.linear_head import LinearHeadConfig
 from flax.training.train_state import TrainState
 from LLM_RL.algorithms.ppo.data import PPODataset, PPOIterableDataset
+from functools import partial
 
 class BitsTestEnv(TextEnv):
     def __init__(self, n: int):
@@ -41,8 +43,6 @@ class BitsTestEnv(TextEnv):
 def main(
     model_load_mode: ModelLoadMode, 
     model_load_path: str, 
-    train_data_path: str, 
-    eval_data_path: str, 
 
     /,  # Mark the end of positional arguments.
 
@@ -99,43 +99,7 @@ def main(
     mesh = load_mesh(data_mesh_shape, model_mesh_shape)
     print(f"Mesh: {mesh}")
 
-    # load data
-    # with open(convert_path(train_data_path), 'r') as f:
-    #     train_json_data = jsonl_load(f)
-    # with open(convert_path(eval_data_path), 'r') as f:
-    #     eval_json_data = jsonl_load(f)
-
-    # train_data = Seq2SeqDataset.from_str_list(
-    #     list(map(lambda x: (x['in_text'], x['out_text']), train_json_data)), 
-    #     tokenizer, 
-    #     in_blocking_strategy=BlockingStrategy(
-    #         padding=Padding.LEFT, 
-    #         truncation=Truncation.LEFT, 
-    #         max_length=max_input_length
-    #     ), 
-    #     out_blocking_strategy=BlockingStrategy(
-    #         padding=Padding.RIGHT, 
-    #         truncation=Truncation.RIGHT, 
-    #         max_length=max_output_length
-    #     ), 
-    # )
-
-    # eval_data = Seq2SeqDataset.from_str_list(
-    #     list(map(lambda x: (x['in_text'], x['out_text']), eval_json_data)), 
-    #     tokenizer, 
-    #     in_blocking_strategy=BlockingStrategy(
-    #         padding=Padding.LEFT, 
-    #         truncation=Truncation.LEFT,
-    #         max_length=max_input_length
-    #     ), 
-    #     out_blocking_strategy=BlockingStrategy(
-    #         padding=Padding.RIGHT, 
-    #         truncation=Truncation.RIGHT, 
-    #         max_length=max_output_length
-    #     ), 
-    # )
-
-    def optim_getter(params: PyTree):
+    def policy_optim_getter(params: PyTree):
         mask = get_weight_decay_mask((
             "".join([r"\['ln_[0-9]+'\]", re.escape("['bias']")]), 
             "".join([r"\['ln_[0-9]+'\]", re.escape("['scale']")]), 
@@ -156,11 +120,11 @@ def main(
         )
 
     model_dtype = get_dtype(use_fp16=jax.default_backend() == 'tpu')
-    train_state, model = load_train_state(
+    policy_train_state, policy_model = load_train_state(
         model_load_mode=model_load_mode, 
         model_load_path=convert_path(model_load_path) if model_load_mode != ModelLoadMode.HF else model_load_path, 
         model_dtype=model_dtype, 
-        optim_getter=optim_getter, 
+        optim_getter=policy_optim_getter, 
         tokenizer=tokenizer, 
         mesh=mesh, 
         force_pad_embeddings=force_pad_embeddings, 
@@ -174,17 +138,10 @@ def main(
                                                           ModelLoadMode.PARAMS}):
         with open(os.path.join(convert_path(model_load_path), 'loop_state.pkl'), 'rb') as f:
             loop_state = pkl.load(f)
-    
-    trainer = GPTJTrain.load_train(
-        train_state=train_state, 
-        model=model, 
-        tokenizer=tokenizer, 
-        mesh=mesh, 
-    )
 
-    inference = GPTJInference.load_inference(
-        params=train_state.params, 
-        model=model, 
+    policy_inference = GPTJInference.load_inference(
+        params=policy_train_state.params, 
+        model=policy_model, 
         tokenizer=tokenizer, 
         mesh=mesh, 
     )
@@ -193,7 +150,7 @@ def main(
     
     policy_prng = jax.random.PRNGKey(0)
     policy = GPTJPolicy(
-        inference=inference, 
+        inference=policy_inference, 
         prng_key=policy_prng, 
         generation_config=GenerationConfig(
             do_sample=True, 
@@ -226,9 +183,10 @@ def main(
             every_k_schedule=grad_accum_steps, 
         )
     
+    model_dtype = get_dtype(use_fp16=jax.default_backend() == 'tpu')
     value_head_train_state, value_head = load_head_train_state_from_config(
         model_config=LinearHeadConfig(
-            input_dim=model.config.n_embd, 
+            input_dim=policy_model.config.n_embd, 
             output_dim=1, 
             use_bias=True, 
             initializer_range=None, 
@@ -239,27 +197,29 @@ def main(
         pad_to_output_dim=None, 
         params_dtype=jnp.float32, 
     )
-    
-    # need to shard params
+
+    loss_f = partial(ppo_loss_fn, cliprange_value=0.2, cliprange=0.2, value_loss_weight=1.0)
 
     ppo_inference = GPTJPPOInference.load_inference(
-        initial_policy_params=train_state.params, 
-        policy_params=train_state.params, 
+        initial_policy_params=policy_train_state.params, # possible that we have to copy this due to donation
+        policy_params=policy_train_state.params, 
         value_head_params=value_head_train_state.params, 
-        initial_policy_model=model, 
-        policy_model=model, 
+        initial_policy_model=policy_model, 
+        policy_model=policy_model, 
         value_head_model=value_head, 
         tokenizer=tokenizer, 
         mesh=mesh, 
+        loss_fn=loss_f, 
     )
 
     ppo_trainer = GPTJPPOTrain.load_train(
-        policy_train_state=train_state, 
+        policy_train_state=policy_train_state, 
         value_head_train_state=value_head_train_state, 
-        policy_model=model, 
+        policy_model=policy_model, 
         value_head_model=value_head, 
         tokenizer=tokenizer, 
         mesh=mesh, 
+        loss_fn=loss_f, 
     )
 
     raw_results, summary_results = text_env_eval(env=env, policy=policy, n_rounds=10)
@@ -288,19 +248,11 @@ def main(
         BlockingStrategy(Padding.RIGHT, Truncation.RIGHT, max_input_length+max_output_length), 
     )
 
-    # ppo_dataset = PPOIterableDataset.from_ppo_data_iterable(
-    #     ppo_data, 
-    #     tokenizer, 
-    #     BlockingStrategy(Padding.RIGHT, Truncation.RIGHT, max_input_length+max_output_length), 
-    # )
-
-    import IPython; IPython.embed()
-
-    # save_dir, exp_name = setup_experiment_save(
-    #     exp_name=exp_name, 
-    #     outputs_path=outputs_path, 
-    #     input_args=input_args, 
-    # )
+    save_dir, exp_name = setup_experiment_save(
+        exp_name=exp_name, 
+        outputs_path=outputs_path, 
+        input_args=input_args, 
+    )
 
     # eval_prng = jax.random.PRNGKey(0)
     # def evaluator(inference: GPTJInference):
@@ -350,29 +302,31 @@ def main(
 
     #     return loss_metrics['loss'], {'loss_metrics': loss_metrics, 'reference_metrics': reference_metrics}
     
-    # train_prng = jax.random.PRNGKey(1)
-    # trainer, inference = train_loop(
-    #     trainer=trainer, 
-    #     inference=inference, 
-    #     evaluator=evaluator, 
-    #     dataset=train_data, 
-    #     prng_key=train_prng, 
-    #     save_dir=save_dir, 
-    #     epochs=epochs, 
-    #     max_steps=max_steps, 
-    #     bsize=train_bsize, 
-    #     log_every=log_every, 
-    #     eval_every=eval_every, 
-    #     save_every=None, 
-    #     save_at_end=False, 
-    #     save_best=True, 
-    #     max_checkpoints=None, 
-    #     use_wandb=use_wandb, 
-    #     wandb_project=wandb_project, 
-    #     wandb_run_name=exp_name, 
-    #     wandb_config=None, 
-    #     **loop_state, 
-    # )
+    train_prng = jax.random.PRNGKey(1)
+    ppo_trainer, ppo_inference, policy = train_loop(
+        trainer=ppo_trainer, 
+        inference=ppo_inference, 
+        policy=policy, 
+        # evaluator=evaluator, 
+        evaluator=None, 
+        dataset=ppo_dataset, 
+        prng_key=train_prng, 
+        save_dir=save_dir, 
+        epochs=epochs, 
+        max_steps=max_steps, 
+        bsize=train_bsize, 
+        log_every=log_every, 
+        eval_every=eval_every, 
+        save_every=None, 
+        save_at_end=False, 
+        save_best=True, 
+        max_checkpoints=None, 
+        use_wandb=use_wandb, 
+        wandb_project=wandb_project, 
+        wandb_run_name=exp_name, 
+        wandb_config=None, 
+        **loop_state, 
+    )
 
 if __name__ == "__main__":
     tyro.cli(main)

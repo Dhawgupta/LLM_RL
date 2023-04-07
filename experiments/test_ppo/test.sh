@@ -2,7 +2,7 @@
 
 export XLA_PYTHON_CLIENT_ALLOCATOR=platform
 export JAX_DISABLE_JIT=0
-export CUDA_VISIBLE_DEVICES=0,1,2,3
+export CUDA_VISIBLE_DEVICES=1
 export TOKENIZERS_PARALLELISM=false
 export GCLOUD_PROJECT="civic-boulder-204700"
 export GCLOUD_TOKEN_PATH="/home/csnell/.config/gcloud/civic-boulder-204700-V2.json"
@@ -43,3 +43,4 @@ python -m PPO_scripts.ppo_test \
     gcs://charlie-bucket2/LLM_RL_outputs/ppo_test/exp.2023-03-25-02-33-00.401/best \
     data/test_ppo/10bit_data.jsonl \
     data/test_ppo/10bit_data.jsonl \
+    --train-bsize 1 \

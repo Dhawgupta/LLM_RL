@@ -32,7 +32,7 @@ class GPTJPPOTrain(PPOTrain):
 
         tokenizer: PreTrainedTokenizerBase, 
         mesh: jax.sharding.Mesh, # mesh should have shape ('dp', 'mp')
-        loss_fn: Callable=ppo_loss_fn, 
+        loss_fn: Callable, 
     ) -> GPTJPPOTrain:
         policy_train_state_partition_spec = match_partition_rules(policy_model.config.get_partition_rules(), policy_train_state)
         value_head_train_state_partition_spec = match_partition_rules(value_head_model.config.get_partition_rules(), value_head_train_state)
@@ -76,9 +76,6 @@ class GPTJPPOTrain(PPOTrain):
             old_advantages: jax.Array, 
             old_returns: jax.Array, 
             prng_key: Optional[jax.random.PRNGKeyArray], 
-            cliprange_value: Union[float, jax.Array], 
-            cliprange: Union[float, jax.Array], 
-            value_loss_weight: Union[float, jax.Array], 
             train: bool=True, 
         ) -> Tuple[TrainState, TrainState, jax.Array, PyTree]:
             # define loss function
@@ -111,6 +108,7 @@ class GPTJPPOTrain(PPOTrain):
                 logits = model_output.logits
                 logits = logits.at[:, :, policy_model.config.unpadded_vocab_size:].set(float('-inf'))
                 logprobs = -softmax_cross_entropy_with_integer_labels(logits[:, :-1], input_ids[:, 1:])
+                logprobs = jnp.where(attention_mask[:, 1:] == 1, logprobs, 0.0)
 
                 loss, info = loss_fn(
                     attention_mask[:, 1:], 
@@ -121,9 +119,6 @@ class GPTJPPOTrain(PPOTrain):
                     old_values, 
                     old_advantages, 
                     old_returns, 
-                    cliprange_value=cliprange_value, 
-                    cliprange=cliprange, 
-                    value_loss_weight=value_loss_weight, 
                 )
                 return loss, info
             # take loss
@@ -170,7 +165,7 @@ class GPTJPPOInference(PPOInference):
         value_head_model: nn.Module, 
         tokenizer: PreTrainedTokenizerBase, 
         mesh: jax.sharding.Mesh, # mesh should have shape ('dp', 'mp')
-        loss_fn: Optional[Callable]=ppo_loss_fn, 
+        loss_fn: Optional[Callable], 
     ) -> GPTJPPOInference:
         initial_policy_params_partition_spec = match_partition_rules(initial_policy_model.config.get_partition_rules(), initial_policy_params)
         policy_params_partition_spec = match_partition_rules(initial_policy_model.config.get_partition_rules(), policy_params)
@@ -292,6 +287,7 @@ class GPTJPPOInference(PPOInference):
             prng_key: Optional[jax.random.PRNGKeyArray], 
             train: bool=False, 
         ) -> Tuple[jax.Array, PyTree]:
+            assert loss_fn is not None, "loss_fn must be set to use eval_loss"
             
             new_key = None
             if prng_key is not None:
@@ -320,6 +316,7 @@ class GPTJPPOInference(PPOInference):
             logits = model_output.logits
             logits = logits.at[:, :, policy_model.config.unpadded_vocab_size:].set(float('-inf'))
             logprobs = -softmax_cross_entropy_with_integer_labels(logits[:, :-1], input_ids[:, 1:])
+            logprobs = jnp.where(attention_mask[:, 1:] == 1, logprobs, 0.0)
 
             loss, info = loss_fn(
                 attention_mask, 
