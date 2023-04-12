@@ -65,12 +65,23 @@ def main(
     grad_accum_steps: int=1, 
 
     gradient_checkpoint: bool=False, 
+    fsdp: bool=False, 
 
     max_input_length: int=512, 
     max_output_length: int=512, 
 
     log_every: int=256, 
-    eval_every: int=256, 
+    eval_every_steps: Optional[int]=256, 
+    eval_every_epochs: Optional[int]=None, 
+    eval_every_rounds: Optional[int]=None, 
+
+    save_every_steps: Optional[int]=None, 
+    save_every_epochs: Optional[int]=None, 
+    save_every_rounds: Optional[int]=None, 
+    save_at_end: bool=False, 
+    save_best: bool=True, 
+    max_checkpoints: Optional[int]=None, 
+    save_train_state: bool=True, 
 
     eval_loss_bsize: int=32, 
     eval_loss_batches: Optional[int]=None, 
@@ -97,7 +108,9 @@ def main(
     tokenizer.add_special_tokens({'pad_token': '<|pad|>'})
 
     mesh = load_mesh(data_mesh_shape, model_mesh_shape)
+    is_main_process = jax.process_index() == 0
     print(f"Mesh: {mesh}")
+    print(f"Is main process: {is_main_process}")
 
     def policy_optim_getter(params: PyTree):
         mask = get_weight_decay_mask((
@@ -119,16 +132,16 @@ def main(
             every_k_schedule=grad_accum_steps, 
         )
 
-    model_dtype = get_dtype(use_fp16=jax.default_backend() == 'tpu')
     policy_train_state, policy_model = load_train_state(
         model_load_mode=model_load_mode, 
         model_load_path=convert_path(model_load_path) if model_load_mode != ModelLoadMode.HF else model_load_path, 
-        model_dtype=model_dtype, 
+        model_dtype=jnp.float32, 
         optim_getter=policy_optim_getter, 
         tokenizer=tokenizer, 
         mesh=mesh, 
         force_pad_embeddings=force_pad_embeddings, 
         gradient_checkpoint=gradient_checkpoint, 
+        fsdp=fsdp, 
         params_dtype=jnp.float32, 
     )
 
@@ -143,7 +156,6 @@ def main(
         params=policy_train_state.params, 
         model=policy_model, 
         tokenizer=tokenizer, 
-        mesh=mesh, 
     )
 
     env = BitsTestEnv(n=10)
@@ -183,7 +195,6 @@ def main(
             every_k_schedule=grad_accum_steps, 
         )
     
-    model_dtype = get_dtype(use_fp16=jax.default_backend() == 'tpu')
     value_head_train_state, value_head = load_head_train_state_from_config(
         model_config=LinearHeadConfig(
             input_dim=policy_model.config.n_embd, 
@@ -191,10 +202,11 @@ def main(
             use_bias=True, 
             initializer_range=None, 
         ), 
-        model_dtype=model_dtype, 
+        model_dtype=jnp.float32, 
         optim_getter=value_head_optim_getter, 
         mesh=mesh, 
         pad_to_output_dim=None, 
+        fsdp=fsdp, 
         params_dtype=jnp.float32, 
     )
 
@@ -208,7 +220,6 @@ def main(
         policy_model=policy_model, 
         value_head_model=value_head, 
         tokenizer=tokenizer, 
-        mesh=mesh, 
         loss_fn=loss_f, 
     )
 
@@ -218,7 +229,6 @@ def main(
         policy_model=policy_model, 
         value_head_model=value_head, 
         tokenizer=tokenizer, 
-        mesh=mesh, 
         loss_fn=loss_f, 
     )
 
@@ -250,8 +260,10 @@ def main(
 
     save_dir, exp_name = setup_experiment_save(
         exp_name=exp_name, 
-        outputs_path=outputs_path, 
+        outputs_path=convert_path(outputs_path), 
         input_args=input_args, 
+        script__file__=__file__, 
+        is_main_process=is_main_process, 
     )
 
     # eval_prng = jax.random.PRNGKey(0)
@@ -316,11 +328,15 @@ def main(
         max_steps=max_steps, 
         bsize=train_bsize, 
         log_every=log_every, 
-        eval_every=eval_every, 
-        save_every=None, 
-        save_at_end=False, 
-        save_best=True, 
-        max_checkpoints=None, 
+        eval_every_steps=eval_every_steps, 
+        eval_every_epochs=eval_every_epochs, 
+        eval_every_rounds=eval_every_rounds, 
+        save_every_steps=save_every_steps, 
+        save_every_epochs=save_every_epochs, 
+        save_every_rounds=save_every_rounds, 
+        save_at_end=save_at_end, 
+        save_best=save_best, 
+        max_checkpoints=max_checkpoints, 
         use_wandb=use_wandb, 
         wandb_project=wandb_project, 
         wandb_run_name=exp_name, 

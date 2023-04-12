@@ -7,7 +7,7 @@
 ``` bash
 git clone --recurse-submodules https://github.com/Sea-Snell/LLM_RL.git
 cd LLM_RL
-export PYTHONPATH=${PWD}/src/:${PWD}/scripts/:${PWD}/JaxSeq2/src/
+export PYTHONPATH=${PWD}:${PWD}/JaxSeq2/
 ```
 
 ### **2. install dependencies**
@@ -32,7 +32,7 @@ conda install jaxlib=*=*cuda* jax==0.4.6 cuda-nvcc -c conda-forge -c nvidia
 conda env create -f environment.yml
 conda activate LLM_RL
 python -m pip install --upgrade pip
-python -m pip install "jax[tpu]==0.3.21" -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
+python -m pip install jax[tpu]==0.4.8 -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
 ```
 
 ## Update JaxSeq2

@@ -1,9 +1,9 @@
 {
     "python.envFile": "${workspaceFolder}/.vscode/.env", 
     "terminal.integrated.env.linux": {
-        "PYTHONPATH": "${workspaceFolder}/src/:${workspaceFolder}/JaxSeq2/src/:${workspaceFolder}/scripts/"
+        "PYTHONPATH": "${workspaceFolder}:${workspaceFolder}/JaxSeq2/"
     }, 
     "terminal.integrated.env.osx": {
-        "PYTHONPATH": "${workspaceFolder}/src/:${workspaceFolder}/JaxSeq2/src/:${workspaceFolder}/scripts/"
+        "PYTHONPATH": "${workspaceFolder}:${workspaceFolder}/JaxSeq2/"
     },
 }

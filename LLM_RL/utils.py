@@ -3,12 +3,13 @@ import os
 import jax.numpy as jnp
 import jax
 import numpy as np
-from JaxSeq.utils import convert_path
+from JaxSeq.utils import ConvertPath
 from functools import partial
 
-PROJECT_ROOT = os.environ.get("PROJECT_ROOT", os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
-convert_path = partial(convert_path, project_root=PROJECT_ROOT)
-
+# override projct root for convert_path
+class LLMConvertPath(ConvertPath):
+    DEFAULT_PROJECT_ROOT = os.environ.get("PROJECT_ROOT", os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
+convert_path = LLMConvertPath().convert # set convert_path function
 
 def get_tensor_stats(xs: jax.Array, mask: jax.Array, n: int):
     """get stats about a tensor, used for logging"""

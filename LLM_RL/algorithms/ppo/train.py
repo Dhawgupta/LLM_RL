@@ -4,10 +4,12 @@ from jax.random import KeyArray
 from collections import deque
 import jax
 from tqdm.auto import tqdm
-from JaxSeq.utils import Dataset, dataloader
+from JaxSeq.utils import Dataset, dataloader, get_enabled_save_path, create_path
 from LLM_RL.algorithms.ppo.data import PPODataset, PPOIterableDataset
 from LLM_RL.algorithms.ppo.base_interface import PPOTrain, PPOInference
 from JaxSeq.logs import combine_logs, label_logs, log, pull_logs
+from JaxSeq.shard_model import get_sharding_from_model as get_sharding_from_model_policy
+from LLM_RL.heads.shard_heads import get_sharding_from_model as get_sharding_from_model_head
 import os
 import wandb
 from JaxSeq.bucket_manager import open_with_bucket as open
@@ -27,36 +29,52 @@ def dump_state(
     value_head_model: nn.Module, 
     value_head_train_state: TrainState, 
     save_dir: str, 
+    save_train_state: bool, 
     enable_save: bool, 
     **loop_state: Dict[Hashable, Any], 
 ):
+    # dump loop_state
+    with open(get_enabled_save_path(os.path.join(save_dir, 'loop_state.pkl'), enabled=enable_save), 'wb') as f:
+        pkl.dump(loop_state, f)
+    
+    # save policy
     if enable_save:
-        # dump loop_state
-        with open(os.path.join(save_dir, 'loop_state.pkl'), 'wb') as f:
-            pkl.dump(loop_state, f)
-        
-        # save policy
-        if not os.path.exists(os.path.join(save_dir, 'policy')):
-            os.makedirs(os.path.join(save_dir, 'policy'))
-        # dump policy config
-        with open(os.path.join(save_dir, 'policy', 'config.json'), 'w') as f:
-            f.write(policy_model.config.to_json_string())
-        # dump policy_train_state
+        create_path(os.path.join(save_dir, 'policy'))
+    # dump policy config
+    with open(get_enabled_save_path(os.path.join(save_dir, 'policy', 'config.json'), enabled=enable_save), 'w') as f:
+        f.write(policy_model.config.to_json_string())
+    # dump policy_train_state
+    if save_train_state:
         save_pytree(
             tree=policy_train_state, 
-            path=os.path.join(save_dir, 'policy', 'train_state.msgpack'), 
+            path=get_enabled_save_path(os.path.join(save_dir, 'policy', 'train_state.msgpack'), enabled=enable_save), 
+            sharding=get_sharding_from_model_policy(policy_model, policy_train_state), 
+        )
+    else:
+        save_pytree(
+            tree=policy_train_state.params, 
+            path=get_enabled_save_path(os.path.join(save_dir, 'policy', 'params.msgpack'), enabled=enable_save), 
+            sharding=get_sharding_from_model_policy(policy_model, policy_train_state.params), 
         )
 
-        # save value head
-        if not os.path.exists(os.path.join(save_dir, 'value_head')):
-            os.makedirs(os.path.join(save_dir, 'value_head'))
-        # dump value_head config
-        with open(os.path.join(save_dir, 'value_head', 'config.json'), 'w') as f:
-            f.write(value_head_model.config.to_json_string())
-        # dump value_head_train_state
+    # save value head
+    if enable_save:
+        create_path(os.path.join(save_dir, 'value_head'))
+    # dump value_head config
+    with open(get_enabled_save_path(os.path.join(save_dir, 'value_head', 'config.json'), enabled=enable_save), 'w') as f:
+        f.write(value_head_model.config.to_json_string())
+    # dump value_head_train_state
+    if save_train_state:
         save_pytree(
             tree=value_head_train_state, 
-            path=os.path.join(save_dir, 'value_head', 'train_state.msgpack'), 
+            path=get_enabled_save_path(os.path.join(save_dir, 'value_head', 'train_state.msgpack'), enabled=enable_save), 
+            sharding=get_sharding_from_model_head(value_head_model, value_head_train_state), 
+        )
+    else:
+        save_pytree(
+            tree=value_head_train_state.params, 
+            path=get_enabled_save_path(os.path.join(save_dir, 'value_head', 'params.msgpack'), enabled=enable_save), 
+            sharding=get_sharding_from_model_head(value_head_model, value_head_train_state.params), 
         )
 
 def eval_loss(
@@ -99,19 +117,25 @@ def train_loop(
     bsize: int, 
     log_every: int, 
     eval_every_steps: Optional[int], 
+    eval_every_epochs: Optional[int], 
     eval_every_rounds: Optional[int], 
     save_every_steps: Optional[int], 
+    save_every_epochs: Optional[int], 
     save_every_rounds: Optional[int], 
     save_at_end: bool, 
     save_best: bool, 
     max_checkpoints: Optional[int], 
+    save_train_state: bool, 
     use_wandb: bool, 
     wandb_project: Optional[str], 
     wandb_run_name: Optional[str], 
     wandb_config: Optional[Dict[str, Any]], 
+    is_main_process: Optional[bool]=None, 
     **loop_state: Dict[Hashable, Any], 
 ) -> Tuple[PPOTrain, PPOInference, PPOPolicy]:
     assert (not use_wandb) or (use_wandb and wandb_project is not None)
+    if is_main_process is None:
+        is_main_process = jax.process_index() == 0
     
     # initalize wandb
     wandb_id = loop_state.get('wandb_id', None)
@@ -141,22 +165,23 @@ def train_loop(
         nonlocal saved_checkpoints
         print(f'saving checkpoint {name} ...')
         # conditionally delete old checkpoints
-        if add_to_queue:
+        if add_to_queue and is_main_process:
             if (max_checkpoints is not None) and (len(saved_checkpoints) >= max_checkpoints):
                 delete(saved_checkpoints.popleft(), recursive=True)
         curr_save_dir = os.path.join(save_dir, name)
-        if (not save_dir.startswith('gcs://')) and (not os.path.exists(save_dir)):
-            os.makedirs(curr_save_dir)
+        if is_main_process:
+            create_path(curr_save_dir)
         dump_state(
             policy_model=trainer.policy_model, 
             policy_train_state=trainer.policy_train_state, 
             value_head_model=trainer.value_head_model, 
             value_head_train_state=trainer.value_head_train_state, 
             save_dir=curr_save_dir, 
-            enable_save=jax.process_index() == 0, 
+            save_train_state=save_train_state, 
+            enable_save=is_main_process, 
             **loop_state, 
         )
-        if add_to_queue:
+        if add_to_queue and is_main_process:
             saved_checkpoints.append(curr_save_dir)
         print('saved.')
     
@@ -181,12 +206,12 @@ def train_loop(
         # conditionally save best model and optimizer state
         if save_dir is not None and save_best and eval_perf < best_perf:
             print('new best model!')
+            best_perf = eval_perf
             _save(
                 name='best', 
                 add_to_queue=False, 
-                **loop_state, 
+                **{**loop_state, 'best_perf': best_perf}, 
             )
-            best_perf = eval_perf# TODO: fix best_perf
 
     # begin training loop
     for round in tqdm(range(n_rounds)):
@@ -223,10 +248,10 @@ def train_loop(
                     train_logs = []
                 
                 # begin evaluation
-                if (evaluator is not None) and (eval_every_steps is not None) and (step + 1) % eval_every_steps == 0:
+                if evaluator is not None and eval_every_steps is not None and (step + 1) % eval_every_steps == 0:
                     _eval(
                         # loop state metadata
-                        best_perf=eval_perf, 
+                        best_perf=best_perf, 
                         step=step+1, 
                         epoch=epoch, 
                         round=round, 
@@ -236,7 +261,7 @@ def train_loop(
                     )
                 
                 # periodically save checkpoint
-                if (save_dir is not None) and (save_every_steps is not None) and (step + 1) % save_every_steps == 0:
+                if save_dir is not None and save_every_steps is not None and (step + 1) % save_every_steps == 0:
                     _save(
                         name='step_%d' % (step+1), 
                         add_to_queue=True, 
@@ -250,17 +275,49 @@ def train_loop(
                         wandb_id=wandb_id, 
                     )
                 
-                # conditionally terminate
-                if max_steps is not None and (step + 1) >= max_steps:
-                    break
-
                 step += 1
+                
+                # conditionally terminate
+                if max_steps is not None and step >= max_steps:
+                    break
+        
+            # begin evaluation
+            if evaluator is not None and eval_every_epochs is not None and (epoch + 1) % eval_every_epochs == 0:
+                _eval(
+                    # loop state metadata
+                    best_perf=best_perf, 
+                    step=step, 
+                    epoch=epoch, 
+                    round=round, 
+                    saved_checkpoints=saved_checkpoints, 
+                    steps_per_epoch=steps_per_epoch, 
+                    wandb_id=wandb_id, 
+                )
+            
+            # periodically save checkpoint
+            if save_dir is not None and save_every_epochs is not None and (epoch + 1) % save_every_epochs == 0:
+                _save(
+                    name=f'epoch_{epoch}', 
+                    add_to_queue=True, 
+                    # loop state metadata
+                    best_perf=best_perf, 
+                    step=step, 
+                    epoch=epoch, 
+                    round=round, 
+                    saved_checkpoints=saved_checkpoints, 
+                    steps_per_epoch=steps_per_epoch, 
+                    wandb_id=wandb_id, 
+                )
+            
+            # conditionally terminate
+            if max_steps is not None and step >= max_steps:
+                break
         
         # begin evaluation
-        if (evaluator is not None) and (eval_every_rounds is not None) and (round + 1) % eval_every_rounds == 0:
+        if evaluator is not None and eval_every_rounds is not None and (round + 1) % eval_every_rounds == 0:
             _eval(
                 # loop state metadata
-                best_perf=eval_perf, 
+                best_perf=best_perf, 
                 step=step, 
                 epoch=epoch, 
                 round=round, 
@@ -270,7 +327,7 @@ def train_loop(
             )
         
         # periodically save checkpoint
-        if (save_dir is not None) and (save_every_rounds is not None) and (round + 1) % save_every_rounds == 0:
+        if save_dir is not None and save_every_rounds is not None and (round + 1) % save_every_rounds == 0:
             _save(
                 name='round_%d' % (round), 
                 add_to_queue=True, 

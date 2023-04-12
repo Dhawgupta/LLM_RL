@@ -20,6 +20,7 @@ from transformers.generation import GenerationConfig
 from JaxSeq.models.gptj.interface import GPTJInference
 import jax.numpy as jnp
 from LLM_RL.algorithms.ppo.base_interface import PPOPolicy
+from jax.experimental.pjit import pjit
 
 class GPTJPPOTrain(PPOTrain):
     @classmethod
@@ -29,29 +30,27 @@ class GPTJPPOTrain(PPOTrain):
         value_head_train_state: TrainState, 
         policy_model: FlaxPreTrainedModel, 
         value_head_model: nn.Module, 
-
         tokenizer: PreTrainedTokenizerBase, 
-        mesh: jax.sharding.Mesh, # mesh should have shape ('dp', 'mp')
         loss_fn: Callable, 
     ) -> GPTJPPOTrain:
+        mesh = policy_model.config.mesh
+        assert mesh is not None
+        assert mesh == value_head_model.config.mesh
         policy_train_state_partition_spec = match_partition_rules(policy_model.config.get_partition_rules(), policy_train_state)
         value_head_train_state_partition_spec = match_partition_rules(value_head_model.config.get_partition_rules(), value_head_train_state)
 
         @partial(
-            jax.jit, 
+            pjit, 
             donate_argnums=(0, 1), 
             static_argnames=('train',), 
             in_shardings=(
                 jax.tree_util.tree_map(lambda ps: NamedSharding(mesh, ps), policy_train_state_partition_spec), 
                 jax.tree_util.tree_map(lambda ps: NamedSharding(mesh, ps), value_head_train_state_partition_spec), 
-                NamedSharding(mesh, PS("dp", None)), 
-                NamedSharding(mesh, PS("dp", None)), 
-                NamedSharding(mesh, PS("dp", None)), 
-                NamedSharding(mesh, PS("dp", None)), 
-                NamedSharding(mesh, PS("dp", None)), 
-                NamedSharding(mesh, PS("dp", None)), 
-                NamedSharding(mesh, PS("dp", None)), 
-                NamedSharding(mesh, PS("dp", None)), 
+                NamedSharding(mesh, PS()), 
+                NamedSharding(mesh, PS()), 
+                NamedSharding(mesh, PS()), 
+                NamedSharding(mesh, PS()), 
+                NamedSharding(mesh, PS()), 
                 NamedSharding(mesh, PS()), 
                 NamedSharding(mesh, PS()), 
                 NamedSharding(mesh, PS()), 
@@ -78,6 +77,16 @@ class GPTJPPOTrain(PPOTrain):
             prng_key: Optional[jax.random.PRNGKeyArray], 
             train: bool=True, 
         ) -> Tuple[TrainState, TrainState, jax.Array, PyTree]:
+            # data parallel shard inputs
+            input_ids = with_named_sharding_constraint(input_ids, mesh, PS('dp', None))
+            attention_mask = with_named_sharding_constraint(attention_mask, mesh, PS('dp', None))
+            position_ids = with_named_sharding_constraint(position_ids, mesh, PS('dp', None))
+            should_take_action = with_named_sharding_constraint(should_take_action, mesh, PS('dp', None))
+            old_logprobs = with_named_sharding_constraint(old_logprobs, mesh, PS('dp', None))
+            old_values = with_named_sharding_constraint(old_values, mesh, PS('dp', None))
+            old_advantages = with_named_sharding_constraint(old_advantages, mesh, PS('dp', None))
+            old_returns = with_named_sharding_constraint(old_returns, mesh, PS('dp', None))
+            
             # define loss function
             def grad_loss(policy_params: PyTree, value_head_params: PyTree, prng_key: jax.random.PRNGKeyArray):
                 
@@ -157,17 +166,25 @@ class GPTJPPOInference(PPOInference):
     @classmethod
     def load_inference(
         cls, 
-        initial_policy_params: PyTree, 
+        initial_policy_params: Optional[PyTree], 
         policy_params: PyTree, 
         value_head_params: PyTree, 
-        initial_policy_model: FlaxPreTrainedModel, 
+        initial_policy_model: Optional[FlaxPreTrainedModel], 
         policy_model: FlaxPreTrainedModel, 
         value_head_model: nn.Module, 
         tokenizer: PreTrainedTokenizerBase, 
         mesh: jax.sharding.Mesh, # mesh should have shape ('dp', 'mp')
         loss_fn: Optional[Callable], 
+        dp_shard_logits: bool=True, 
     ) -> GPTJPPOInference:
-        initial_policy_params_partition_spec = match_partition_rules(initial_policy_model.config.get_partition_rules(), initial_policy_params)
+        mesh = policy_model.config.mesh
+        assert mesh is not None
+        assert mesh == value_head_model.config.mesh
+        assert (initial_policy_params is None and initial_policy_model) is None or (initial_policy_params is not None and initial_policy_model is not None)
+        has_initial_policy = initial_policy_params is not None
+        initial_policy_params_partition_spec = None
+        if has_initial_policy:
+            initial_policy_params_partition_spec = match_partition_rules(initial_policy_model.config.get_partition_rules(), initial_policy_params)
         policy_params_partition_spec = match_partition_rules(initial_policy_model.config.get_partition_rules(), policy_params)
         value_head_params_partition_spec = match_partition_rules(value_head_model.config.get_partition_rules(), value_head_params)
 
@@ -175,30 +192,30 @@ class GPTJPPOInference(PPOInference):
             jax.jit, 
             static_argnames=('initial_policy_output_attentions', 'initial_policy_output_hidden_states', 'policy_output_attentions', 'train'), 
             in_shardings=(
-                jax.tree_util.tree_map(lambda ps: NamedSharding(mesh, ps), initial_policy_params_partition_spec), 
+                jax.tree_util.tree_map(lambda ps: NamedSharding(mesh, ps), initial_policy_params_partition_spec) if has_initial_policy is None else NamedSharding(mesh, PS()), 
                 jax.tree_util.tree_map(lambda ps: NamedSharding(mesh, ps), policy_params_partition_spec), 
                 jax.tree_util.tree_map(lambda ps: NamedSharding(mesh, ps), value_head_params_partition_spec), 
-                NamedSharding(mesh, PS("dp", None)), 
-                NamedSharding(mesh, PS("dp", None)), 
-                NamedSharding(mesh, PS("dp", None)), 
+                NamedSharding(mesh, PS()), 
+                NamedSharding(mesh, PS()), 
+                NamedSharding(mesh, PS()), 
                 NamedSharding(mesh, PS()), 
             ), 
             out_shardings=PPOForwardOutput(
                 initial_policy_raw_output=FlaxCausalLMOutput(
-                    logits=NamedSharding(mesh, PS("dp", None, None)), 
+                    logits=NamedSharding(mesh, PS("dp", None, None)) if dp_shard_logits else NamedSharding(mesh, PS()), 
                     hidden_states=NamedSharding(mesh, PS()), # assume no sharding for hidden states
                     attentions=NamedSharding(mesh, PS()), # assume no sharding for attentions
-                ), 
+                ) if has_initial_policy else NamedSharding(mesh, PS()), 
                 policy_raw_output=FlaxCausalLMOutput(
-                    logits=NamedSharding(mesh, PS("dp", None, None)), 
+                    logits=NamedSharding(mesh, PS("dp", None, None)) if dp_shard_logits else NamedSharding(mesh, PS()), 
                     hidden_states=NamedSharding(mesh, PS()), # assume no sharding for hidden states
                     attentions=NamedSharding(mesh, PS()), # assume no sharding for attentions
                 ), 
-                values=NamedSharding(mesh, PS("dp", None)), 
+                values=NamedSharding(mesh, PS()), 
             ), 
         )
         def _forward(
-            initial_policy_params: PyTree, 
+            initial_policy_params: Optional[PyTree], 
             policy_params: PyTree, 
             value_head_params: PyTree, 
             input_ids: jax.Array, 
@@ -210,20 +227,26 @@ class GPTJPPOInference(PPOInference):
             policy_output_attentions: Optional[bool]=None, # no policy_output_hidden_states option because this is required
             train: bool=False, 
         ) -> PPOForwardOutput:
+            # data parallel shard inputs
+            input_ids = with_named_sharding_constraint(input_ids, mesh, PS("dp", None))
+            attention_mask = with_named_sharding_constraint(attention_mask, mesh, PS("dp", None))
+            position_ids = with_named_sharding_constraint(position_ids, mesh, PS("dp", None))
             
             new_key = None
             if prng_key is not None:
                 prng_key, new_key = jax.random.split(prng_key)
-            initial_model_output = initial_policy_model(
-                input_ids=input_ids, 
-                attention_mask=attention_mask, 
-                position_ids=position_ids, 
-                params=initial_policy_params, 
-                dropout_rng=new_key, 
-                train=train, 
-                output_hidden_states=initial_policy_output_hidden_states, 
-                output_attentions=initial_policy_output_attentions, 
-            )
+            initial_model_output = None
+            if has_initial_policy:
+                initial_model_output = initial_policy_model(
+                    input_ids=input_ids, 
+                    attention_mask=attention_mask, 
+                    position_ids=position_ids, 
+                    params=initial_policy_params, 
+                    dropout_rng=new_key, 
+                    train=train, 
+                    output_hidden_states=initial_policy_output_hidden_states, 
+                    output_attentions=initial_policy_output_attentions, 
+                )
             model_output = policy_model(
                 input_ids=input_ids, 
                 attention_mask=attention_mask, 
@@ -246,6 +269,11 @@ class GPTJPPOInference(PPOInference):
             )
             values = jnp.squeeze(values, axis=-1)
 
+            # assert sharding on outputs
+            if dp_shard_logits:
+                if has_initial_policy:
+                    initial_model_output = initial_model_output.replace(logits=with_named_sharding_constraint(initial_model_output.logits, mesh, PS("dp", None, None)))
+                model_output = model_output.replace(logits=with_named_sharding_constraint(model_output.logits, mesh, PS("dp", None, None)))
             return PPOForwardOutput(
                 initial_policy_raw_output=initial_model_output, 
                 policy_raw_output=model_output, 
@@ -258,14 +286,14 @@ class GPTJPPOInference(PPOInference):
             in_shardings=(
                 jax.tree_util.tree_map(lambda ps: NamedSharding(mesh, ps), policy_params_partition_spec), 
                 jax.tree_util.tree_map(lambda ps: NamedSharding(mesh, ps), value_head_params_partition_spec), 
-                NamedSharding(mesh, PS("dp", None)), 
-                NamedSharding(mesh, PS("dp", None)), 
-                NamedSharding(mesh, PS("dp", None)), 
-                NamedSharding(mesh, PS("dp", None)), 
-                NamedSharding(mesh, PS("dp", None)), 
-                NamedSharding(mesh, PS("dp", None)), 
-                NamedSharding(mesh, PS("dp", None)), 
-                NamedSharding(mesh, PS("dp", None)), 
+                NamedSharding(mesh, PS()), 
+                NamedSharding(mesh, PS()), 
+                NamedSharding(mesh, PS()), 
+                NamedSharding(mesh, PS()), 
+                NamedSharding(mesh, PS()), 
+                NamedSharding(mesh, PS()), 
+                NamedSharding(mesh, PS()), 
+                NamedSharding(mesh, PS()), 
                 NamedSharding(mesh, PS()), 
             ), 
             out_shardings=(
@@ -288,6 +316,15 @@ class GPTJPPOInference(PPOInference):
             train: bool=False, 
         ) -> Tuple[jax.Array, PyTree]:
             assert loss_fn is not None, "loss_fn must be set to use eval_loss"
+            # data parallel shard inputs
+            input_ids = with_named_sharding_constraint(input_ids, mesh, PS("dp", None))
+            attention_mask = with_named_sharding_constraint(attention_mask, mesh, PS("dp", None))
+            position_ids = with_named_sharding_constraint(position_ids, mesh, PS("dp", None))
+            should_take_action = with_named_sharding_constraint(should_take_action, mesh, PS("dp", None))
+            old_logprobs = with_named_sharding_constraint(old_logprobs, mesh, PS("dp", None))
+            old_values = with_named_sharding_constraint(old_values, mesh, PS("dp", None))
+            old_advantages = with_named_sharding_constraint(old_advantages, mesh, PS("dp", None))
+            old_returns = with_named_sharding_constraint(old_returns, mesh, PS("dp", None))
             
             new_key = None
             if prng_key is not None:
@@ -353,6 +390,7 @@ class GPTJPolicy(PPOPolicy):
         out_str_process: Optional[Callable[[str], str]]=None, 
         input_token_process: Optional[Callable[[List[int]], List[int]]]=None, 
         target_token_process: Optional[Callable[[List[int]], List[int]]]=None, 
+        trace: bool=True, 
     ):
         self.inference = inference
         self.prng_key = prng_key
@@ -366,6 +404,7 @@ class GPTJPolicy(PPOPolicy):
             self.in_str_process = lambda x: x
         if self.out_str_process is None:
             self.out_str_process = lambda x: x
+        self.trace = trace
     
     def act(self, text_history: TextHistory) -> TextHistory:
         
@@ -381,6 +420,7 @@ class GPTJPolicy(PPOPolicy):
             generation_config=self.generation_config, 
             input_token_process=self.input_token_process, 
             target_token_process=self.target_token_process, 
+            trace=self.trace, 
         )
 
         raw_output_str = model_outputs.output_strs[0]

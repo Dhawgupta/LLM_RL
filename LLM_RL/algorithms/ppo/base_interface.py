@@ -299,10 +299,10 @@ class PPOForwardOutput(NamedTuple):
     values: jax.Array
 
 class PPOInference(struct.PyTreeNode):
-    initial_policy_params: PyTree
+    initial_policy_params: Optional[PyTree]
     policy_params: PyTree
     value_head_params: PyTree
-    initial_policy_model: FlaxPreTrainedModel = struct.field(pytree_node=False) # corresponds to initial_policy_params
+    initial_policy_model: Optional[FlaxPreTrainedModel] = struct.field(pytree_node=False) # corresponds to initial_policy_params
     policy_model: FlaxPreTrainedModel = struct.field(pytree_node=False) # corresponds to policy_params
     value_head_model: nn.Module = struct.field(pytree_node=False)
     tokenizer: PreTrainedTokenizerBase = struct.field(pytree_node=False)
@@ -412,6 +412,7 @@ class PPOInference(struct.PyTreeNode):
         lam: Union[float, jax.Array], 
         kl_weight: Union[float, jax.Array], 
     ) -> Tuple[List[PPOData], np.ndarray]:
+        assert self.initial_policy_model is not None and self.initial_policy_params is not None
         n_chains = len(token_trajectory_chains)
 
         tokens = []
