@@ -119,6 +119,7 @@ def train_loop(
     eval_every_steps: Optional[int], 
     eval_every_epochs: Optional[int], 
     eval_every_rounds: Optional[int], 
+    eval_at_end: bool, 
     save_every_steps: Optional[int], 
     save_every_epochs: Optional[int], 
     save_every_rounds: Optional[int], 
@@ -346,6 +347,19 @@ def train_loop(
             value_head_params=trainer.value_head_train_state.params, 
         )
         policy.set_params(trainer.policy_train_state.params)
+    
+    # begin evaluation
+    if evaluator is not None and eval_at_end:
+        _eval(
+            # loop state metadata
+            best_perf=best_perf, 
+            step=step, 
+            epoch=epoch, 
+            round=round, 
+            saved_checkpoints=saved_checkpoints, 
+            steps_per_epoch=steps_per_epoch, 
+            wandb_id=wandb_id, 
+        )
     
     # save final checkpoint
     if save_dir is not None and save_at_end:

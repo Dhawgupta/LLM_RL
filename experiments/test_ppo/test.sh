@@ -26,6 +26,7 @@ CUDA_VISIBLE_DEVICES=3 python -m llm_rl_scripts.ppo.ppo_test \
     --use-wandb \
     --wandb-project "rlhf_binary_test" \
     --save-every-rounds 1 \
+    --init-kl-coef 0.0 \
 
 # older
 
