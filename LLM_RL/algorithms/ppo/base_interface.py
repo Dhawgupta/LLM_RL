@@ -35,12 +35,6 @@ from jax.experimental.pjit import pjit
 
 # TODO:
 
-# To check:
-# clip_range_reward ???
-# is advantage whitening happending ???
-# scale_reward ???
-
-
 # batched policy / environment abstractions
 # test on some more toy data for multistep / multichain settings
 # clean code
@@ -239,6 +233,14 @@ def get_action_state_next_state_idxs(
 
     return action_idxs, state_idxs, next_state_idxs
 
+def whiten(xs: jax.Array, shift_mean=True) -> jax.Array:
+    """Whitens values"""
+    mean, var = jnp.mean(xs), jnp.var(xs)
+    whitened = (xs - mean) * jnp.reciprocal(jnp.sqrt(var+1e-8))
+    if not shift_mean:
+        whitened += mean
+    return whitened
+
 def get_advantages_and_returns(
     state_values: np.ndarray, # [b, t-1]
     next_state_values: np.ndarray, # [b, t-1]
@@ -246,6 +248,7 @@ def get_advantages_and_returns(
     *, 
     gamma: Union[float, np.ndarray], 
     lam: Union[float, np.ndarray], 
+    use_whitening: bool = True, 
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Function that computes advantages and returns from rewards and values.
     Calculated as in the original PPO paper: https://arxiv.org/abs/1707.06347
@@ -276,7 +279,8 @@ def get_advantages_and_returns(
         advantages_reversed.append(lastgaelam)
     advantages = np.stack(advantages_reversed[::-1], axis=1)
     returns = advantages + state_values
-
+    if use_whitening:
+        advantages = whiten(advantages)
     return advantages, returns
 
 class CombinedTokenTrajectoryChain(NamedTuple):
@@ -456,6 +460,7 @@ class PPOInference(struct.PyTreeNode):
         gamma: Union[float, jax.Array], 
         lam: Union[float, jax.Array], 
         kl_weight: Union[float, jax.Array], 
+        use_advantage_whitening: bool=True, 
     ) -> Tuple[List[PPOData], np.ndarray]:
         assert self.initial_policy_model is not None and self.initial_policy_params is not None
         n_chains = len(token_trajectory_chains)
@@ -575,6 +580,7 @@ class PPOInference(struct.PyTreeNode):
                 action_rewards=action_rewards[None], 
                 gamma=gamma, 
                 lam=lam, 
+                use_whitening=use_advantage_whitening, 
             )
 
             advantage_chains.append(advantages[0])
@@ -614,6 +620,7 @@ class PPOInference(struct.PyTreeNode):
         gamma: Union[float, jax.Array], 
         lam: Union[float, jax.Array], 
         kl_weight: Union[float, jax.Array], 
+        use_advantage_whitening: bool=True, 
     ) -> Tuple[List[PPOData], np.ndarray]:
         
         token_trajectory_chains = [
@@ -634,6 +641,7 @@ class PPOInference(struct.PyTreeNode):
             gamma=gamma, 
             lam=lam, 
             kl_weight=kl_weight, 
+            use_advantage_whitening=use_advantage_whitening, 
         )
     
     def eval_loss(

@@ -107,6 +107,7 @@ def main(
     ppo_data_bsize: int=32, 
     gamma: float=1.0, 
     lam: float=0.95, 
+    use_advantage_whitening: bool=True, 
 
     init_kl_coef: float=0.001, 
     kl_target: Optional[float]=None, 
@@ -291,6 +292,7 @@ def main(
             gamma=gamma, 
             lam=lam, 
             kl_weight=kl_controller.value, 
+            use_advantage_whitening=use_advantage_whitening, 
         )
         mean_kl = all_kls.mean().item()
         kl_controller.update(mean_kl, train_bsize)
