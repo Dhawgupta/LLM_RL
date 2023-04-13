@@ -274,6 +274,7 @@ def main(
             n_rollouts=n_rollouts, 
             bsize=rollout_bsize, 
         )
+        summary_results = pull_logs(summary_results)
 
         text_trajectory_chains = []
         for raw_result in raw_results:
