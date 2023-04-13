@@ -83,6 +83,7 @@ def main(
     eval_every_steps: Optional[int]=None, 
     eval_every_epochs: Optional[int]=None, 
     eval_every_rounds: Optional[int]=None, 
+    eval_at_end: bool=True, 
 
     save_every_steps: Optional[int]=None, 
     save_every_epochs: Optional[int]=None, 
@@ -375,6 +376,7 @@ def main(
         eval_every_steps=eval_every_steps, 
         eval_every_epochs=eval_every_epochs, 
         eval_every_rounds=eval_every_rounds, 
+        eval_at_end=eval_at_end, 
         save_every_steps=save_every_steps, 
         save_every_epochs=save_every_epochs, 
         save_every_rounds=save_every_rounds, 
