@@ -11,7 +11,7 @@ from functools import partial
 from typing import List, Optional, Union, Tuple, Callable, NamedTuple, Dict, Any
 from transformers.modeling_flax_utils import FlaxPreTrainedModel
 from transformers.tokenization_utils import PreTrainedTokenizerBase
-from JaxSeq.utils import with_named_sharding_constraint, match_partition_rules, BlockingStrategy, block_sequences, Padding, Truncation
+from JaxSeq.utils import with_named_sharding_constraint, match_partition_rules, BlockingStrategy, block_sequences, Padding, Truncation, multihost_device_get
 from optax import softmax_cross_entropy_with_integer_labels
 from flax.training.train_state import TrainState
 from transformers.modeling_flax_outputs import FlaxCausalLMOutput
@@ -25,6 +25,7 @@ from scipy.special import softmax
 from tqdm.auto import tqdm
 from LLM_RL.algorithms.ppo.data import PPOData
 from LLM_RL.environment import TextPolicy
+from jax.experimental.pjit import pjit
 
 # x
 # input = x[1:]
@@ -33,12 +34,54 @@ from LLM_RL.environment import TextPolicy
 # if ends with state, then next window should start with a state, x[0]
 
 # TODO:
-# training loop
-# environment data conversion system
+
+# To check:
+# clip_range_reward ???
+# is advantage whitening happending ???
+# scale_reward ???
+
+
 # batched policy / environment abstractions
-# test JaxSeq/LLM_RL data parallel, make sure it doesn't break
 # test on some more toy data for multistep / multichain settings
 # clean code
+
+
+# KL Controllers
+# adapted from: https://github.com/CarperAI/trlx/blob/main/trlx/models/modeling_ppo.py
+
+class AdaptiveKLController:
+    """Adaptive KL Controller as described in Ziegler et al. "Fine-Tuning Language Models from Human Preferences"
+    Reference: Section 2.2 https://arxiv.org/pdf/1909.08593.pdf#page=2
+    Source: https://github.com/openai/lm-human-preferences/blob/master/lm_human_preferences/train_policy.py
+    """
+
+    def __init__(self, init_kl_coef: float, target: float, horizon: int):
+        self.value = init_kl_coef
+        self.target = target
+        self.horizon = horizon
+
+    def update(self, current: float, n_steps: int):
+        """Returns adaptively updated KL coefficient, βₜ₊₁.
+        Arguments:
+            current: The current KL value between the newest policy and the initial policy.
+        """
+        proportional_error = np.clip(current / self.target - 1, -0.2, 0.2)  # ϵₜ
+        mult = 1 + proportional_error * n_steps / self.horizon
+        self.value *= mult  # βₜ₊₁
+
+class FixedKLController:
+    """Fixed KL controller."""
+
+    def __init__(self, kl_coef):
+        self.value = kl_coef
+
+    def update(self, current: float, n_steps: int):
+        """Returns updated KL coefficient, βₜ₊₁.
+        Arguments:
+            current: The current KL value between the newest policy and the initial policy.
+        """
+        pass
+
 
 def ppo_loss_fn(
     attention_mask: jax.Array, # [batch, time-1] – output is masked; shift x[1:]
@@ -52,7 +95,7 @@ def ppo_loss_fn(
     *, 
     cliprange_value: Union[float, jax.Array], 
     cliprange: Union[float, jax.Array], 
-    value_loss_weight: Union[float, jax.Array], 
+    value_loss_coef: Union[float, jax.Array], 
 ) -> Tuple[jax.Array, Dict[str, Any]]:
     """PPO objective function.
     References:
@@ -87,7 +130,7 @@ def ppo_loss_fn(
     pg_loss = jnp.sum(jnp.maximum(pg_loss1, pg_loss2) * mask) / n
     pg_clipfrac = jnp.sum((pg_loss2 > pg_loss1).astype(jnp.float32) * mask) / n
 
-    loss = pg_loss + value_loss_weight * vf_loss
+    loss = pg_loss + value_loss_coef * vf_loss
 
     logs = dict(
         losses=dict(
@@ -134,7 +177,7 @@ class PPOTrain(struct.PyTreeNode):
     #     prng_key: Optional[jax.random.PRNGKeyArray], 
     #     cliprange_value: Union[float, jax.Array], 
     #     cliprange: Union[float, jax.Array], 
-    #     value_loss_weight: Union[float, jax.Array], 
+    #     value_loss_coef: Union[float, jax.Array], 
     #     train: bool=True, 
     # ) -> Tuple[TrainState, TrainState, jax.Array, PyTree]:
     #     raise NotImplementedError
@@ -151,10 +194,6 @@ class PPOTrain(struct.PyTreeNode):
         attention_mask: Optional[jax.Array]=None, 
         position_ids: Optional[jax.Array]=None, 
         train: bool=True, 
-        *, 
-        cliprange_value: Union[float, jax.Array], 
-        cliprange: Union[float, jax.Array], 
-        value_loss_weight: Union[float, jax.Array], 
     ) -> Tuple[PPOTrain, jax.Array, PyTree]:
         
         # handle attention mask and position ids shifting
@@ -177,9 +216,6 @@ class PPOTrain(struct.PyTreeNode):
             old_advantages, 
             old_returns, 
             prng_key, 
-            cliprange_value, 
-            cliprange, 
-            value_loss_weight, 
             train, 
         )
 
@@ -339,6 +375,15 @@ class PPOInference(struct.PyTreeNode):
     #     train: bool=False, 
     # ) -> Tuple[jax.Array, PyTree]:
     #     raise NotImplementedError
+
+    @staticmethod
+    @pjit
+    def token_logprobs_from_logits(
+        logits: jax.Array, 
+        input_ids: jax.Array, 
+    ) -> jax.Array:
+        token_log_probs = -softmax_cross_entropy_with_integer_labels(logits[:, :-1], input_ids[:, 1:])
+        return token_log_probs
     
     def forward(
         self, 
@@ -450,16 +495,21 @@ class PPOInference(struct.PyTreeNode):
             )
 
             initial_policy_logits = forward_batch_output.initial_policy_raw_output.logits
+            initial_policy_logprob = self.token_logprobs_from_logits(initial_policy_logits, tokens_batch)
+            initial_policy_logprob = np.asarray(multihost_device_get(
+                initial_policy_logprob, 
+                mesh=self.initial_policy_model.config.mesh, 
+            ))
+
             policy_logits = forward_batch_output.policy_raw_output.logits
+            policy_logprob = self.token_logprobs_from_logits(policy_logits, tokens_batch)
+            policy_logprob = np.asarray(multihost_device_get(
+                policy_logprob, 
+                mesh=self.policy_model.config.mesh, 
+            ))
 
-            initial_policy_logits = initial_policy_logits.at[:, :, self.initial_policy_model.config.unpadded_vocab_size:].set(float('-inf'))
-            policy_logits = policy_logits.at[:, :, self.policy_model.config.unpadded_vocab_size:].set(float('-inf'))
-
-            initial_policy_logprob = -softmax_cross_entropy_with_integer_labels(initial_policy_logits[:, :-1], tokens_batch[:, 1:])
-            policy_logprob = -softmax_cross_entropy_with_integer_labels(policy_logits[:, :-1], tokens_batch[:, 1:])
-
-            initial_policy_logprobs.append(np.asarray(initial_policy_logprob))
-            policy_logprobs.append(np.asarray(policy_logprob))
+            initial_policy_logprobs.append(initial_policy_logprob)
+            policy_logprobs.append(policy_logprob)
             values.append(np.asarray(forward_batch_output.values))
         
         initial_policy_logprobs = np.concatenate(initial_policy_logprobs, axis=0)

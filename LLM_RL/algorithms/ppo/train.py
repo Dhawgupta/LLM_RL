@@ -135,11 +135,11 @@ def train_loop(
 ) -> Tuple[PPOTrain, PPOInference, PPOPolicy]:
     assert (not use_wandb) or (use_wandb and wandb_project is not None)
     if is_main_process is None:
-        is_main_process = jax.process_index() == 0
+        is_main_process = is_main_process
     
     # initalize wandb
     wandb_id = loop_state.get('wandb_id', None)
-    if use_wandb and jax.process_index() == 0:
+    if use_wandb and is_main_process:
         if wandb_id is None:
             wandb_id = wandb.util.generate_id()
         wandb.init(
@@ -201,7 +201,7 @@ def train_loop(
 
         # publish eval logs
         eval_logs = pull_logs(label_logs(eval_logs, 'eval', {'step': step+1, 'epoch': epoch, 'round': round}))
-        log(eval_logs, use_wandb and jax.process_index() == 0)
+        log(eval_logs, use_wandb and is_main_process)
 
         # conditionally save best model and optimizer state
         if save_dir is not None and save_best and eval_perf < best_perf:
@@ -244,7 +244,7 @@ def train_loop(
                 if (step + 1) % log_every == 0:
                     logs = combine_logs(train_logs)
                     logs = pull_logs(label_logs(logs, 'train', {'step': step+1, 'epoch': epoch, 'round': round}))
-                    log(logs, use_wandb and jax.process_index() == 0)
+                    log(logs, use_wandb and is_main_process)
                     train_logs = []
                 
                 # begin evaluation
@@ -363,7 +363,7 @@ def train_loop(
         )
 
     # stop wandb
-    if use_wandb and jax.process_index() == 0:
+    if use_wandb and is_main_process:
         wandb.finish()
     
     inference = inference.replace(

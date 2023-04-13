@@ -173,7 +173,6 @@ class GPTJPPOInference(PPOInference):
         policy_model: FlaxPreTrainedModel, 
         value_head_model: nn.Module, 
         tokenizer: PreTrainedTokenizerBase, 
-        mesh: jax.sharding.Mesh, # mesh should have shape ('dp', 'mp')
         loss_fn: Optional[Callable], 
         dp_shard_logits: bool=True, 
     ) -> GPTJPPOInference:
@@ -247,6 +246,8 @@ class GPTJPPOInference(PPOInference):
                     output_hidden_states=initial_policy_output_hidden_states, 
                     output_attentions=initial_policy_output_attentions, 
                 )
+                # trunc padded logits
+                initial_model_output = initial_model_output.replace(logits=initial_model_output.logits.at[:, :, initial_policy_model.config.unpadded_vocab_size:].set(-float('inf')))
             model_output = policy_model(
                 input_ids=input_ids, 
                 attention_mask=attention_mask, 
@@ -257,6 +258,8 @@ class GPTJPPOInference(PPOInference):
                 output_hidden_states=True, 
                 output_attentions=policy_output_attentions, 
             )
+            # trunc padded logits
+            model_output = model_output.replace(logits=model_output.logits.at[:, :, policy_model.config.unpadded_vocab_size:].set(-float('inf')))
 
             new_key = None
             if prng_key is not None:

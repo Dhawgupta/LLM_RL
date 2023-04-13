@@ -13,7 +13,7 @@ from JaxSeq.models.gptj.load import load_train_state, ModelLoadMode
 import pickle as pkl
 from JaxSeq.data import Seq2SeqDataset
 from LLM_RL.algorithms.ppo.train import train_loop
-from LLM_RL.algorithms.ppo.base_interface import ppo_loss_fn
+from LLM_RL.algorithms.ppo.base_interface import ppo_loss_fn, FixedKLController, AdaptiveKLController
 from JaxSeq.generation_eval import generate_language, compute_metrics
 from transformers.generation import GenerationConfig
 from jaxtyping import PyTree
@@ -22,9 +22,13 @@ from LLM_RL.environment import TextEnv, TextHistory, Text, interact_environment,
 from LLM_RL.algorithms.ppo.gptj.interface import GPTJPolicy, GPTJPPOInference, GPTJPPOTrain
 from LLM_RL.heads.linear_head import load_train_state_from_config as load_head_train_state_from_config
 from LLM_RL.heads.linear_head import LinearHeadConfig
+from JaxSeq.shard_model import shard_params_from_params
 from flax.training.train_state import TrainState
 from LLM_RL.algorithms.ppo.data import PPODataset, PPOIterableDataset
+from LLM_RL.utils import get_tensor_stats_np
 from functools import partial
+import numpy as np
+from JaxSeq.logs import combine_logs, label_logs, log, pull_logs
 
 class BitsTestEnv(TextEnv):
     def __init__(self, n: int):
@@ -55,6 +59,7 @@ def main(
     use_wandb: bool=False, 
     wandb_project: Optional[str]=None, 
 
+    n_rounds: int=1, 
     epochs: int=1, 
     max_steps: Optional[int]=None, 
     
@@ -63,6 +68,7 @@ def main(
 
     train_bsize: int=16, 
     grad_accum_steps: int=1, 
+    n_rollouts_per_round: int=128, 
 
     gradient_checkpoint: bool=False, 
     fsdp: bool=False, 
@@ -83,31 +89,44 @@ def main(
     max_checkpoints: Optional[int]=None, 
     save_train_state: bool=True, 
 
-    eval_loss_bsize: int=32, 
-    eval_loss_batches: Optional[int]=None, 
+    # eval_loss_bsize: int=32, 
+    # eval_loss_batches: Optional[int]=None, 
 
-    generation_bsize: int=32, 
-    generation_batches: Optional[int]=None, 
-    generation_do_sample: bool=True, 
-    generation_num_beams: int=1, 
+    # generation_bsize: int=32, 
+    # generation_batches: Optional[int]=None, 
+    policy_do_sample: bool=True, 
+    policy_num_beams: int=1, 
+    policy_temperature: Optional[float]=None, 
+    policy_top_p: Optional[float]=None, 
+    policy_top_k: Optional[int]=None, 
 
     force_pad_embeddings: bool=False, 
 
     should_restore_loop_state: bool=False, 
 
     ppo_data_bsize: int=32, 
-    gamma: float=0.99, 
+    gamma: float=1.0, 
     lam: float=0.95, 
-    kl_weight: float=1.0, # probably should change these defaults?
 
+    init_kl_coef: float=0.001, 
+    kl_target: Optional[float]=None, 
+    kl_horizon: Optional[int]=None, 
+
+    cliprange_value: float=0.2, 
+    cliprange: float=0.2, 
+    value_loss_coef: float=1.0, 
 ):
     input_args = locals()
     print(input_args)
 
+    use_adaptive_kl = (kl_target is not None and kl_horizon is not None)
+    if not use_adaptive_kl:
+        assert kl_target is None and kl_horizon is None
+
     tokenizer = AutoTokenizer.from_pretrained('EleutherAI/gpt-j-6B')
     tokenizer.add_special_tokens({'pad_token': '<|pad|>'})
 
-    mesh = load_mesh(data_mesh_shape, model_mesh_shape)
+    mesh = load_mesh((data_mesh_shape, model_mesh_shape), ('dp', 'mp'))
     is_main_process = jax.process_index() == 0
     print(f"Mesh: {mesh}")
     print(f"Is main process: {is_main_process}")
@@ -144,6 +163,15 @@ def main(
         fsdp=fsdp, 
         params_dtype=jnp.float32, 
     )
+    with jax.default_device(jax.devices('cpu')[0]):
+        initital_policy_params = jax.tree_util.tree_map(
+            lambda x: x.copy(), 
+            policy_train_state.params, 
+        )
+    initital_policy_params = shard_params_from_params(
+        model=policy_model, 
+        params=initital_policy_params, 
+    )
 
     loop_state = dict()
     if should_restore_loop_state and (model_load_mode in {ModelLoadMode.TRAIN_STATE, 
@@ -165,13 +193,14 @@ def main(
         inference=policy_inference, 
         prng_key=policy_prng, 
         generation_config=GenerationConfig(
-            do_sample=True, 
-            num_beams=1, 
-            temperature=1.0, 
-            top_p=1.0, 
+            do_sample=policy_do_sample, 
+            num_beams=policy_num_beams, 
+            temperature=policy_temperature, 
+            top_p=policy_top_p, 
+            top_k=policy_top_k, 
             eos_token_id=tokenizer.encode('\n')[0], 
             pad_token_id=tokenizer.pad_token_id, 
-            max_length=max_input_length+max_output_length, 
+            max_new_tokens=max_output_length, 
         ), 
         blocking_strategy=BlockingStrategy(
             padding=Padding.LEFT, 
@@ -210,10 +239,10 @@ def main(
         params_dtype=jnp.float32, 
     )
 
-    loss_f = partial(ppo_loss_fn, cliprange_value=0.2, cliprange=0.2, value_loss_weight=1.0)
+    loss_f = partial(ppo_loss_fn, cliprange_value=cliprange_value, cliprange=cliprange, value_loss_coef=value_loss_coef)
 
     ppo_inference = GPTJPPOInference.load_inference(
-        initial_policy_params=policy_train_state.params, # possible that we have to copy this due to donation
+        initial_policy_params=initital_policy_params, 
         policy_params=policy_train_state.params, 
         value_head_params=value_head_train_state.params, 
         initial_policy_model=policy_model, 
@@ -232,31 +261,60 @@ def main(
         loss_fn=loss_f, 
     )
 
-    raw_results, summary_results = text_env_eval(env=env, policy=policy, n_rounds=10)
+    if use_adaptive_kl:
+        kl_controller = AdaptiveKLController(init_kl_coef=init_kl_coef, target=kl_target, horizon=kl_horizon)
+    else:
+        kl_controller = FixedKLController(kl_coef=init_kl_coef)
 
-    text_trajectory_chains = []
-    for raw_result in raw_results:
-        text_trajectory = TextTrajectory(
-            text_history=raw_result[-1].post_transition_history, 
-            reward=[0.0, raw_result[-1].reward], 
-            done=raw_result[-1].done, 
+    data_round = 0
+    def ppo_dataset_loader(ppo_inference: GPTJPPOInference, policy: GPTJPolicy) -> PPODataset:
+        nonlocal data_round
+        raw_results, summary_results = text_env_eval(
+            env=env, 
+            policy=policy, 
+            n_rollouts=n_rollouts_per_round, 
         )
-        text_trajectory_chains.append(TextTrajectoryChain(text_trajectory, None))
-    
-    ppo_data, all_kls = ppo_inference.get_ppo_data_from_text_trajectory_chain(
-        text_trajectory_chains, 
-        bsize=ppo_data_bsize, 
-        max_length=max_input_length+max_output_length, 
-        gamma=gamma, 
-        lam=lam, 
-        kl_weight=kl_weight, 
-    )
 
-    ppo_dataset = PPODataset.from_ppo_data_list(
-        ppo_data, 
-        tokenizer, 
-        BlockingStrategy(Padding.RIGHT, Truncation.RIGHT, max_input_length+max_output_length), 
-    )
+        text_trajectory_chains = []
+        for raw_result in raw_results:
+            text_trajectory = TextTrajectory(
+                text_history=raw_result[-1].post_transition_history, 
+                reward=[0.0, raw_result[-1].reward], 
+                done=raw_result[-1].done, 
+            )
+            text_trajectory_chains.append(TextTrajectoryChain(text_trajectory, None))
+        
+        ppo_data, all_kls = ppo_inference.get_ppo_data_from_text_trajectory_chain(
+            text_trajectory_chains, 
+            bsize=ppo_data_bsize, 
+            max_length=max_input_length+max_output_length, 
+            gamma=gamma, 
+            lam=lam, 
+            kl_weight=kl_controller.value, 
+        )
+        mean_kl = all_kls.mean().item()
+        kl_controller.update(mean_kl, train_bsize)
+
+        ppo_dataset = PPODataset.from_ppo_data_list(
+            ppo_data, 
+            tokenizer, 
+            BlockingStrategy(Padding.RIGHT, Truncation.RIGHT, max_input_length+max_output_length), 
+        )
+
+        logs = dict(
+            policy=dict(
+                initial_policy_kl=get_tensor_stats_np(all_kls, np.ones(all_kls.shape), all_kls.size), 
+                sqrt_initial_policy_kl=np.sqrt(mean_kl), 
+                kl_ctrl_value=kl_controller.value, 
+            ), 
+            env_interaction=summary_results, 
+        )
+
+        logs = pull_logs(label_logs(logs, 'data_collection', {'round': data_round}))
+        log(logs, use_wandb and is_main_process)
+        data_round += 1
+
+        return ppo_dataset
 
     save_dir, exp_name = setup_experiment_save(
         exp_name=exp_name, 
@@ -265,65 +323,17 @@ def main(
         script__file__=__file__, 
         is_main_process=is_main_process, 
     )
-
-    # eval_prng = jax.random.PRNGKey(0)
-    # def evaluator(inference: GPTJInference):
-    #     nonlocal eval_prng
-
-    #     eval_prng, new_prng = jax.random.split(eval_prng)
-    #     loss_metrics = eval_loss(
-    #         inference=inference, 
-    #         dataset=eval_data, 
-    #         prng_key=new_prng, 
-    #         bsize=eval_loss_bsize, 
-    #         eval_batches=eval_loss_batches, 
-    #     )
-
-    #     eval_prng, new_prng = jax.random.split(eval_prng)
-    #     generation_prompts = [
-    #         eval_json_data[i] for i in jax.random.permutation(
-    #             new_prng, 
-    #             jnp.arange(len(eval_json_data)), 
-    #         ).tolist()
-    #     ]
-    #     eval_prng, new_prng = jax.random.split(eval_prng)
-    #     generation_data = generate_language(
-    #         inference=inference, 
-    #         prompts=list(map(lambda x: x['in_text'], generation_prompts)), 
-    #         references=list(map(lambda x: [x['out_text']], generation_prompts)), 
-    #         prng_key=new_prng, 
-    #         bsize=generation_bsize, 
-    #         generation_batches=generation_batches, 
-    #         blocking_strategy=BlockingStrategy(
-    #             padding=Padding.LEFT, 
-    #             truncation=Truncation.LEFT, 
-    #             max_length=max_input_length
-    #         ), 
-    #         generation_config=GenerationConfig(
-    #             max_length=max_input_length+max_output_length, 
-    #             do_sample=generation_do_sample, 
-    #             num_beams=generation_num_beams, 
-    #             pad_token_id=tokenizer.pad_token_id, 
-    #             eos_token_id=tokenizer.eos_token_id, 
-    #             temperature=1.0, 
-    #             top_k=None, 
-    #             top_p=None, 
-    #         ), 
-    #     )
-    #     reference_metrics = compute_metrics(generation_data)
-
-    #     return loss_metrics['loss'], {'loss_metrics': loss_metrics, 'reference_metrics': reference_metrics}
     
     train_prng = jax.random.PRNGKey(1)
     ppo_trainer, ppo_inference, policy = train_loop(
         trainer=ppo_trainer, 
         inference=ppo_inference, 
         policy=policy, 
-        # evaluator=evaluator, 
+        load_dataset=ppo_dataset_loader, 
         evaluator=None, 
-        dataset=ppo_dataset, 
         prng_key=train_prng, 
         save_dir=save_dir, 
+        n_rounds=n_rounds, 
         epochs=epochs, 
         max_steps=max_steps, 
         bsize=train_bsize, 
@@ -337,6 +347,7 @@ def main(
         save_at_end=save_at_end, 
         save_best=save_best, 
         max_checkpoints=max_checkpoints, 
+        save_train_state=save_train_state, 
         use_wandb=use_wandb, 
         wandb_project=wandb_project, 
         wandb_run_name=exp_name, 

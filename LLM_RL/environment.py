@@ -101,7 +101,7 @@ def interact_environment(
 def text_env_eval(
     env: TextEnv, 
     policy: TextPolicy, 
-    n_rounds: int, 
+    n_rollouts: int, 
     initial_text_history: Optional[TextHistory]=None, 
     seed_generator: Optional[Iterator[int]]=None, 
     env_options: Optional[Dict]=None, 
@@ -110,7 +110,7 @@ def text_env_eval(
 ) -> Tuple[List[List[InteractionTransition]], Dict[str, Any]]:
     
     interactions, rewards, dones = [], [], []
-    for _ in tqdm(range(n_rounds), disable=not verbose):
+    for _ in tqdm(range(n_rollouts), disable=not verbose):
         interaction = interact_environment(
             env, 
             policy, 

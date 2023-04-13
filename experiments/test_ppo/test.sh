@@ -2,13 +2,25 @@
 
 export XLA_PYTHON_CLIENT_ALLOCATOR=platform
 export JAX_DISABLE_JIT=0
-export CUDA_VISIBLE_DEVICES=1
+export CUDA_VISIBLE_DEVICES=""
 export TOKENIZERS_PARALLELISM=false
 export GCLOUD_PROJECT="civic-boulder-204700"
 export GCLOUD_TOKEN_PATH="/home/csnell/.config/gcloud/civic-boulder-204700-V2.json"
 export WANDB_API_KEY="6342624bbf30593fb0350a9198db14934332a574"
-export PROJECT_ROOT="$HOME/LLM_RL/"
-export PYTHONPATH=${HOME}/LLM_RL/src/:${HOME}/LLM_RL/scripts/:${HOME}/LLM_RL/JaxSeq2/src/:${HOME}/LLM_RL/JaxSeq2/examples/
+# export PROJECT_ROOT="$HOME/LLM_RL/"
+export PYTHONPATH=${PWD}:${PWD}/JaxSeq2/
+
+# 4/12/2023
+
+CUDA_VISIBLE_DEVICES=3 python -m llm_rl_scripts.ppo.ppo_test \
+    PARAMS \
+    gcs://charlie-bucket2/LLM_RL_outputs/ppo_test/exp.2023-03-25-02-33-00.401/best \
+    --train-bsize 32 \
+    --n-rounds 100 \
+    --epochs 4 \
+    --log-every 4 \
+
+# older
 
 # python -m PPO_scripts.generate_test_data \
 #     --n 10 \
@@ -38,9 +50,9 @@ export PYTHONPATH=${HOME}/LLM_RL/src/:${HOME}/LLM_RL/scripts/:${HOME}/LLM_RL/Jax
 #     --host 0.0.0.0 \
 #     --port 8000 \
 
-python -m PPO_scripts.ppo_test \
-    PARAMS \
-    gcs://charlie-bucket2/LLM_RL_outputs/ppo_test/exp.2023-03-25-02-33-00.401/best \
-    data/test_ppo/10bit_data.jsonl \
-    data/test_ppo/10bit_data.jsonl \
-    --train-bsize 1 \
+# CUDA_VISIBLE_DEVICES=3 python -m llm_rl_scripts.ppo.ppo_test \
+#     PARAMS \
+#     gcs://charlie-bucket2/LLM_RL_outputs/ppo_test/exp.2023-03-25-02-33-00.401/best \
+#     data/test_ppo/10bit_data.jsonl \
+#     data/test_ppo/10bit_data.jsonl \
+#     --train-bsize 1 \
