@@ -49,12 +49,76 @@ class TextEnv(ABC):
     def close(self) -> None:
         pass
 
+class BatchedTextEnv(ABC):
+    @abstractmethod
+    def step(self, text_history: List[TextHistory]) -> List[Tuple[TextHistory, float, bool]]:
+        pass
+
+    @abstractmethod
+    def reset(self, seed: Optional[List[Optional[int]]]=None, options: Optional[List[Optional[Dict]]]=None) -> List[TextHistory]:
+        pass
+
+    def close(self) -> None:
+        pass
+
+class TextEnvToBatchedTextEnv(BatchedTextEnv):
+    def __init__(self, env: TextEnv):
+        self.env = env
+
+    def step(self, text_history: List[TextHistory]) -> List[Tuple[TextHistory, float, bool]]:
+        return [self.env.step(item) for item in text_history]
+    
+    def reset(self, seed: Optional[List[Optional[int]]]=None, options: Optional[List[Optional[Dict]]]=None) -> List[TextHistory]:
+        if seed is None and options is None:
+            seed, options = [None], [None]
+        elif seed is None:
+            seed = [None] * len(options)
+        elif options is None:
+            options = [None] * len(seed)
+        assert len(seed) == len(options)
+        return [self.env.reset(seed=s, options=o) for s, o in zip(seed, options)]
+    
+    def close(self) -> None:
+        return self.env.close()
+
+class BatchedTextEnvToTextEnv(TextEnv):
+    def __init__(self, env: BatchedTextEnv):
+        self.env = env
+
+    def step(self, text_history: TextHistory) -> Tuple[TextHistory, float, bool]:
+        return self.env.step([text_history])[0]
+    
+    def reset(self, seed: Optional[int]=None, options: Optional[Dict]=None) -> TextHistory:
+        return self.env.reset(seed=[seed], options=[options])[0]
+    
+    def close(self) -> None:
+        return self.env.close()
+
 # text policy
 
 class TextPolicy(ABC):
     @abstractmethod
     def act(self, text_history: TextHistory) -> TextHistory:
         pass
+
+class BatchedTextPolicy(ABC):
+    @abstractmethod
+    def act(self, text_history: List[TextHistory]) -> List[TextHistory]:
+        pass
+
+class TextPolicyToBatchedTextPolicy(BatchedTextPolicy):
+    def __init__(self, policy: TextPolicy):
+        self.policy = policy
+    
+    def act(self, text_history: List[TextHistory]) -> List[TextHistory]:
+        return [self.policy.act(item) for item in text_history]
+
+class BatchedTextPolicyToTextPolicy(TextPolicy):
+    def __init__(self, policy: BatchedTextPolicy):
+        self.policy = policy
+    
+    def act(self, text_history: TextHistory) -> TextHistory:
+        return self.policy.act([text_history])[0]
 
 # interact with the environment
 
@@ -66,64 +130,81 @@ class InteractionTransition(NamedTuple):
     done: bool
 
 def interact_environment(
-    env: TextEnv, 
-    policy: TextPolicy, 
-    initial_text_history: Optional[TextHistory]=None, 
-    env_seed: Optional[int]=None, 
-    env_options: Optional[Dict]=None, 
-) -> List[InteractionTransition]:
+    env: Union[TextEnv, BatchedTextEnv], 
+    policy: Union[TextPolicy, BatchedTextPolicy], 
+    initial_text_history: Optional[Union[TextHistory, List[TextHistory]]]=None, 
+    env_seed: Union[Optional[int], Optional[List[Optional[int]]]]=None, 
+    env_options: Union[Optional[Dict], Optional[List[Optional[int]]]]=None, 
+    bsize: int=1, 
+) -> List[List[InteractionTransition]]:
+    assert bsize > 0
+    if isinstance(env, TextEnv):
+        env = TextEnvToBatchedTextEnv(env)
+    if isinstance(policy, TextPolicy):
+        policy = TextPolicyToBatchedTextPolicy(policy)
+    if env_seed is not None and isinstance(env_seed, int):
+        env_seed = [env_seed] * bsize
+    if env_options is not None and isinstance(env_options, dict):
+        env_options = [env_options] * bsize
+    if initial_text_history is not None and isinstance(initial_text_history, TextHistory):
+        initial_text_history = [initial_text_history] * bsize
     
     text_history = initial_text_history
     if text_history is None:
         text_history = env.reset(env_seed, env_options)
     
-    transitions = []
+    transitions_batch = [[] for _ in range(bsize)]
     done = False
     while not done:
         pre_action_history = text_history
         text_history = policy.act(text_history)
         post_action_history = text_history
 
-        text_history, reward, done = env.step(text_history)
+        step_results = env.step(text_history)
+        text_history, reward, done = list(zip(*step_results))
         post_transition_history = text_history
         
-        transitions.append(
-            InteractionTransition(
-                pre_action_history=pre_action_history, 
-                post_action_history=post_action_history, 
-                post_transition_history=post_transition_history, 
-                reward=reward, 
-                done=done, 
+        for batch_idx in range(bsize):
+            transitions_batch[batch_idx].append(
+                InteractionTransition(
+                    pre_action_history=pre_action_history[batch_idx], 
+                    post_action_history=post_action_history[batch_idx], 
+                    post_transition_history=post_transition_history[batch_idx], 
+                    reward=reward[batch_idx], 
+                    done=done[batch_idx], 
+                )
             )
-        )
-    return transitions
+    return transitions_batch
 
 def text_env_eval(
-    env: TextEnv, 
-    policy: TextPolicy, 
+    env: Union[TextEnv, BatchedTextEnv], 
+    policy: Union[TextPolicy, BatchedTextPolicy], 
     n_rollouts: int, 
-    initial_text_history: Optional[TextHistory]=None, 
+    initial_text_history: Optional[TextHistory]=None, # only allow one initial_text_history here
     seed_generator: Optional[Iterator[int]]=None, 
-    env_options: Optional[Dict]=None, 
+    env_options: Optional[Dict]=None, # only allow one env_options here
     interaction_callback: Optional[Callable[[List[Tuple[TextHistory, TextHistory, TextHistory, float, bool]]], None]]=None, 
+    bsize: int=1, 
     verbose: bool=True, 
 ) -> Tuple[List[List[InteractionTransition]], Dict[str, Any]]:
     
     interactions, rewards, dones = [], [], []
-    for _ in tqdm(range(n_rollouts), disable=not verbose):
-        interaction = interact_environment(
+    for _ in tqdm(range((n_rollouts+(bsize-1))//bsize), disable=not verbose):
+        interaction_batch = interact_environment(
             env, 
             policy, 
             initial_text_history=initial_text_history, 
-            env_seed=None if seed_generator is None else next(seed_generator), 
-            env_options=env_options, 
+            env_seed=[None]*bsize if seed_generator is None else [next(seed_generator) for _ in range(bsize)], 
+            env_options=[env_options]*bsize, 
+            bsize=min(n_rollouts-len(interactions), bsize), 
         )
         
-        interactions.append(interaction)
-        rewards.append(sum(map(lambda x: x.reward, interaction)))
-        dones.append(interaction[-1].done)
-        if interaction_callback is not None:
-            interaction_callback(interaction)
+        for interaction in interaction_batch:
+            interactions.append(interaction)
+            rewards.append(sum(map(lambda x: x.reward, interaction)))
+            dones.append(interaction[-1].done)
+            if interaction_callback is not None:
+                interaction_callback(interaction)
     
     rewards = np.asarray(rewards, dtype=np.float32)
     dones = np.asarray(dones, dtype=np.float32)

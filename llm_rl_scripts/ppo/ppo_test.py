@@ -5,7 +5,7 @@ from transformers import AutoTokenizer
 from JaxSeq.utils import jsonl_stream, convert_path, load_mesh, get_dtype, setup_experiment_save
 import jax
 import jax.numpy as jnp
-from JaxSeq.utils import BlockingStrategy, Padding, Truncation, uuid_name, jsonl_load, get_weight_decay_mask
+from JaxSeq.utils import BlockingStrategy, Padding, Truncation, uuid_name, jsonl_load, get_weight_decay_mask, create_path, get_enabled_save_path
 import os
 import optax
 from JaxSeq.models.gptj.interface import GPTJTrain, GPTJInference
@@ -28,7 +28,8 @@ from LLM_RL.algorithms.ppo.data import PPODataset, PPOIterableDataset
 from LLM_RL.utils import get_tensor_stats_np
 from functools import partial
 import numpy as np
-from JaxSeq.logs import combine_logs, label_logs, log, pull_logs
+from JaxSeq.logs import label_logs, log, pull_logs
+import json
 
 class BitsTestEnv(TextEnv):
     def __init__(self, n: int):
@@ -66,9 +67,11 @@ def main(
     lr: float=1e-5, 
     weight_decay: float=0.0, 
 
-    train_bsize: int=16, 
+    train_bsize: int=32, 
     grad_accum_steps: int=1, 
-    n_rollouts_per_round: int=128, 
+    rollout_bsize: int=32, 
+    n_rollouts: int=128, 
+    ppo_data_bsize: int=32, 
 
     gradient_checkpoint: bool=False, 
     fsdp: bool=False, 
@@ -77,7 +80,7 @@ def main(
     max_output_length: int=512, 
 
     log_every: int=256, 
-    eval_every_steps: Optional[int]=256, 
+    eval_every_steps: Optional[int]=None, 
     eval_every_epochs: Optional[int]=None, 
     eval_every_rounds: Optional[int]=None, 
 
@@ -88,23 +91,14 @@ def main(
     save_best: bool=True, 
     max_checkpoints: Optional[int]=None, 
     save_train_state: bool=True, 
+    save_ppo_dataset: bool=True, 
 
-    # eval_loss_bsize: int=32, 
-    # eval_loss_batches: Optional[int]=None, 
-
-    # generation_bsize: int=32, 
-    # generation_batches: Optional[int]=None, 
     policy_do_sample: bool=True, 
     policy_num_beams: int=1, 
     policy_temperature: Optional[float]=None, 
     policy_top_p: Optional[float]=None, 
     policy_top_k: Optional[int]=None, 
 
-    force_pad_embeddings: bool=False, 
-
-    should_restore_loop_state: bool=False, 
-
-    ppo_data_bsize: int=32, 
     gamma: float=1.0, 
     lam: float=0.95, 
     use_advantage_whitening: bool=True, 
@@ -116,6 +110,10 @@ def main(
     cliprange_value: float=0.2, 
     cliprange: float=0.2, 
     value_loss_coef: float=1.0, 
+
+    force_pad_embeddings: bool=False, 
+
+    should_restore_loop_state: bool=False, 
 ):
     input_args = locals()
     print(input_args)
@@ -144,8 +142,8 @@ def main(
             optax.adamw(
                 learning_rate=lr, 
                 b1=0.9, 
-                b2=0.999, 
-                eps=1e-6, 
+                b2=0.95, 
+                eps=1e-8, 
                 weight_decay=weight_decay, 
                 mask=mask, 
             ), 
@@ -217,8 +215,8 @@ def main(
             optax.adamw(
                 learning_rate=lr, 
                 b1=0.9, 
-                b2=0.999, 
-                eps=1e-6, 
+                b2=0.95, 
+                eps=1e-8, 
                 weight_decay=weight_decay, 
                 mask=mask, 
             ), 
@@ -230,7 +228,7 @@ def main(
             input_dim=policy_model.config.n_embd, 
             output_dim=1, 
             use_bias=True, 
-            initializer_range=None, 
+            initializer_range=0.0, 
         ), 
         model_dtype=jnp.float32, 
         optim_getter=value_head_optim_getter, 
@@ -273,7 +271,8 @@ def main(
         raw_results, summary_results = text_env_eval(
             env=env, 
             policy=policy, 
-            n_rollouts=n_rollouts_per_round, 
+            n_rollouts=n_rollouts, 
+            bsize=rollout_bsize, 
         )
 
         text_trajectory_chains = []
@@ -314,6 +313,38 @@ def main(
 
         logs = pull_logs(label_logs(logs, 'data_collection', {'round': data_round}))
         log(logs, use_wandb and is_main_process)
+
+        if save_dir is not None and save_ppo_dataset:
+            print('saving ppo dataset ...')
+            data_save_path = os.path.join(save_dir, 'data_saves', f'{data_round}')
+            if is_main_process:
+                create_path(data_save_path)
+            # save ppo_dataset
+            with open(get_enabled_save_path(
+                os.path.join(data_save_path, 'ppo_dataset.pkl'), 
+                enabled=is_main_process, 
+            ), 'wb') as f:
+                pkl.dump(ppo_dataset, f)
+            # save text_trajectory_chains
+            with open(get_enabled_save_path(
+                os.path.join(data_save_path, 'text_trajectory_chains.pkl'), 
+                enabled=is_main_process, 
+            ), 'wb') as f:
+                pkl.dump(text_trajectory_chains, f)
+            # save raw_results
+            with open(get_enabled_save_path(
+                os.path.join(data_save_path, 'raw_results.pkl'), 
+                enabled=is_main_process, 
+            ), 'wb') as f:
+                pkl.dump(raw_results, f)
+            # save summary_results
+            with open(get_enabled_save_path(
+                os.path.join(data_save_path, 'summary_results.json'), 
+                enabled=is_main_process, 
+            ), 'wb') as f:
+                json.dump(summary_results, f)
+            print('done saving ppo dataset.')
+        
         data_round += 1
 
         return ppo_dataset
@@ -354,6 +385,7 @@ def main(
         wandb_project=wandb_project, 
         wandb_run_name=exp_name, 
         wandb_config=None, 
+        is_main_process=is_main_process, 
         **loop_state, 
     )
 

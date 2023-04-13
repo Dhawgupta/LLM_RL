@@ -409,15 +409,14 @@ class GPTJPolicy(PPOPolicy):
             self.out_str_process = lambda x: x
         self.trace = trace
     
-    def act(self, text_history: TextHistory) -> TextHistory:
-        
-        raw_input_str = self.in_str_process(text_history_to_str(text_history))
+    def act(self, text_history: List[TextHistory]) -> List[TextHistory]:
+        raw_input_strs = [self.in_str_process(text_history_to_str(item)) for item in text_history]
 
         new_key = None
         if self.prng_key is not None:
             self.prng_key, new_key = jax.random.split(self.prng_key)
         model_outputs = self.inference.generate_from_str(
-            input_strs=[raw_input_str], 
+            input_strs=raw_input_strs, 
             prng_key=new_key, 
             blocking_strategy=self.blocking_strategy, 
             generation_config=self.generation_config, 
@@ -426,11 +425,16 @@ class GPTJPolicy(PPOPolicy):
             trace=self.trace, 
         )
 
-        raw_output_str = model_outputs.output_strs[0]
-        output_str = raw_output_str.removeprefix(raw_input_str)
-        output_str = self.out_str_process(output_str)
+        raw_output_strs = model_outputs.output_strs
+        output_strs = [
+            self.out_str_process(raw_output_str.removeprefix(raw_input_str)) \
+                for raw_input_str, raw_output_str in zip(raw_input_strs, raw_output_strs)
+        ]
 
-        return text_history+(Text(output_str, True),)
+        return [
+            text_history_item+(Text(output_str, True),) \
+                for text_history_item, output_str in zip(text_history, output_strs)
+        ]
     
     def set_params(self, policy_params: PyTree) -> None:
         self.inference = self.inference.replace(params=policy_params)

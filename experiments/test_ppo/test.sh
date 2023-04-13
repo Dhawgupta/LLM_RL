@@ -15,10 +15,17 @@ export PYTHONPATH=${PWD}:${PWD}/JaxSeq2/
 CUDA_VISIBLE_DEVICES=3 python -m llm_rl_scripts.ppo.ppo_test \
     PARAMS \
     gcs://charlie-bucket2/LLM_RL_outputs/ppo_test/exp.2023-03-25-02-33-00.401/best \
+    --exp-name None \
+    --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/ppo_test/ \
     --train-bsize 32 \
     --n-rounds 100 \
     --epochs 4 \
     --log-every 4 \
+    --weight-decay 1e-6 \
+    --lr 3e-5 \
+    --use-wandb \
+    --wandb-project "rlhf_binary_test" \
+    --save-every-rounds 1 \
 
 # older
 

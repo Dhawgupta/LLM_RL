@@ -24,7 +24,7 @@ from LLM_RL.environment import TextTrajectoryChain, text_history_to_str, TokenTr
 from scipy.special import softmax
 from tqdm.auto import tqdm
 from LLM_RL.algorithms.ppo.data import PPOData
-from LLM_RL.environment import TextPolicy
+from LLM_RL.environment import BatchedTextPolicy
 from jax.experimental.pjit import pjit
 
 # x
@@ -35,10 +35,9 @@ from jax.experimental.pjit import pjit
 
 # TODO:
 
-# batched policy / environment abstractions
 # test on some more toy data for multistep / multichain settings
+# add in ILQL / others
 # clean code
-
 
 # KL Controllers
 # adapted from: https://github.com/CarperAI/trlx/blob/main/trlx/models/modeling_ppo.py
@@ -701,6 +700,6 @@ class PPOInference(struct.PyTreeNode):
             train=train, 
         )
 
-class PPOPolicy(TextPolicy):
+class PPOPolicy(BatchedTextPolicy):
     def set_params(self, policy_params: PyTree) -> None:
         raise NotImplementedError
