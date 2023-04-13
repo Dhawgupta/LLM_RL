@@ -341,7 +341,7 @@ def main(
             with open(get_enabled_save_path(
                 os.path.join(data_save_path, 'summary_results.json'), 
                 enabled=is_main_process, 
-            ), 'wb') as f:
+            ), 'w') as f:
                 json.dump(summary_results, f)
             print('done saving ppo dataset.')
         
