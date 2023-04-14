@@ -232,8 +232,8 @@ def train_loop(
                 # loop state metadata
                 best_perf=best_perf, 
                 step=step, 
-                epoch=epoch, 
-                round=round, 
+                epoch=-1, 
+                round=-1, 
                 saved_checkpoints=saved_checkpoints, 
                 steps_per_epoch=steps_per_epoch, 
                 wandb_id=wandb_id, 
@@ -247,8 +247,8 @@ def train_loop(
                 # loop state metadata
                 best_perf=best_perf, 
                 step=step, 
-                epoch=epoch, 
-                round=round, 
+                epoch=-1, 
+                round=-1, 
                 saved_checkpoints=saved_checkpoints, 
                 steps_per_epoch=steps_per_epoch, 
                 wandb_id=wandb_id, 
