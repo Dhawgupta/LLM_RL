@@ -159,6 +159,8 @@ def train_loop(
     best_perf = loop_state.get('best_perf', float('inf'))
     saved_checkpoints = loop_state.get('saved_checkpoints', deque([]))
     step = 0
+    epoch = -1
+    round = -1
 
     def _save(
         name: str, 
@@ -232,8 +234,8 @@ def train_loop(
                 # loop state metadata
                 best_perf=best_perf, 
                 step=step, 
-                epoch=-1, 
-                round=-1, 
+                epoch=epoch, 
+                round=round, 
                 saved_checkpoints=saved_checkpoints, 
                 steps_per_epoch=steps_per_epoch, 
                 wandb_id=wandb_id, 
@@ -247,8 +249,8 @@ def train_loop(
                 # loop state metadata
                 best_perf=best_perf, 
                 step=step, 
-                epoch=-1, 
-                round=-1, 
+                epoch=epoch, 
+                round=round, 
                 saved_checkpoints=saved_checkpoints, 
                 steps_per_epoch=steps_per_epoch, 
                 wandb_id=wandb_id, 
