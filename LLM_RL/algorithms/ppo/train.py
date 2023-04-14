@@ -119,10 +119,12 @@ def train_loop(
     eval_every_steps: Optional[int], 
     eval_every_epochs: Optional[int], 
     eval_every_rounds: Optional[int], 
+    eval_at_beginning: bool, 
     eval_at_end: bool, 
     save_every_steps: Optional[int], 
     save_every_epochs: Optional[int], 
     save_every_rounds: Optional[int], 
+    save_at_beginning: bool, 
     save_at_end: bool, 
     save_best: bool, 
     max_checkpoints: Optional[int], 
@@ -224,6 +226,34 @@ def train_loop(
         if 'steps_per_epoch' in loop_state:
             assert steps_per_epoch == loop_state['steps_per_epoch'], 'loop_state steps_per_epoch does not match dataset steps_per_epoch'
 
+        # begin evaluation
+        if evaluator is not None and eval_at_beginning:
+            _eval(
+                # loop state metadata
+                best_perf=best_perf, 
+                step=step, 
+                epoch=epoch, 
+                round=round, 
+                saved_checkpoints=saved_checkpoints, 
+                steps_per_epoch=steps_per_epoch, 
+                wandb_id=wandb_id, 
+            )
+        
+        # save initial checkpoint
+        if save_dir is not None and save_at_beginning:
+            _save(
+                name='initial', 
+                add_to_queue=False, 
+                # loop state metadata
+                best_perf=best_perf, 
+                step=step, 
+                epoch=epoch, 
+                round=round, 
+                saved_checkpoints=saved_checkpoints, 
+                steps_per_epoch=steps_per_epoch, 
+                wandb_id=wandb_id, 
+            )
+        
         for epoch in tqdm(range(epochs)):
             prng_key, new_prng = jax.random.split(prng_key)
             d = dataloader(new_prng, dataset, bsize, truncate=True)
