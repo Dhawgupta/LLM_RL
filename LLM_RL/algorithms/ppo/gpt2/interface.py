@@ -17,12 +17,12 @@ from LLM_RL.environment import TextPolicy, TextHistory, text_history_to_str, Tex
 from JaxSeq.models.base_interface import Inference
 from JaxSeq.utils import BlockingStrategy, Padding, Truncation
 from transformers.generation import GenerationConfig
-from JaxSeq.models.gptj.interface import GPTJInference
+from JaxSeq.models.gpt2.interface import GPT2Inference
 import jax.numpy as jnp
 from LLM_RL.algorithms.ppo.base_interface import PPOPolicy
 from jax.experimental.pjit import pjit
 
-class GPTJPPOTrain(PPOTrain):
+class GPT2PPOTrain(PPOTrain):
     @classmethod
     def load_train(
         cls, 
@@ -32,7 +32,7 @@ class GPTJPPOTrain(PPOTrain):
         value_head_model: nn.Module, 
         tokenizer: PreTrainedTokenizerBase, 
         loss_fn: Callable, 
-    ) -> GPTJPPOTrain:
+    ) -> GPT2PPOTrain:
         mesh = policy_model.config.mesh
         assert mesh is not None
         assert mesh == value_head_model.config.mesh
@@ -162,7 +162,7 @@ class GPTJPPOTrain(PPOTrain):
             _step=_step, 
         )
 
-class GPTJPPOInference(PPOInference):
+class GPT2PPOInference(PPOInference):
     @classmethod
     def load_inference(
         cls, 
@@ -175,7 +175,7 @@ class GPTJPPOInference(PPOInference):
         tokenizer: PreTrainedTokenizerBase, 
         loss_fn: Optional[Callable], 
         dp_shard_logits: bool=True, 
-    ) -> GPTJPPOInference:
+    ) -> GPT2PPOInference:
         mesh = policy_model.config.mesh
         assert mesh is not None
         assert mesh == value_head_model.config.mesh
@@ -382,10 +382,10 @@ class GPTJPPOInference(PPOInference):
             _eval_loss=_eval_loss, 
         )
 
-class GPTJPolicy(PPOPolicy):
+class GPT2Policy(PPOPolicy):
     def __init__(
         self, 
-        inference: GPTJInference, 
+        inference: GPT2Inference, 
         prng_key: Optional[jax.random.KeyArray], 
         generation_config: Optional[GenerationConfig]=None, 
         blocking_strategy: BlockingStrategy=BlockingStrategy(padding=Padding.LEFT, truncation=Truncation.LEFT, max_length=None), 

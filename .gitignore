@@ -7,3 +7,4 @@ data/
 *.pyc
 *jsonl
 dump.rdb
+secrets.sh

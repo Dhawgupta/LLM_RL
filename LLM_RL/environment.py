@@ -7,6 +7,7 @@ from transformers.tokenization_utils import PreTrainedTokenizer
 import numpy as np
 from LLM_RL.utils import get_tensor_stats
 from tqdm.auto import tqdm
+from copy import deepcopy
 
 # define text objects
 
@@ -49,9 +50,12 @@ class TextEnv(ABC):
     def close(self) -> None:
         pass
 
+    def copy(self) -> TextEnv:
+        return deepcopy(self)
+
 class BatchedTextEnv(ABC):
     @abstractmethod
-    def step(self, text_history: List[TextHistory]) -> List[Tuple[TextHistory, float, bool]]:
+    def step(self, text_history: List[Optional[TextHistory]], done: Optional[List[bool]]=None) -> List[Optional[Tuple[TextHistory, float, bool]]]:
         pass
 
     @abstractmethod
@@ -61,12 +65,21 @@ class BatchedTextEnv(ABC):
     def close(self) -> None:
         pass
 
+    def copy(self) -> BatchedTextEnv:
+        return deepcopy(self)
+
 class TextEnvToBatchedTextEnv(BatchedTextEnv):
     def __init__(self, env: TextEnv):
         self.env = env
+        self.batch_env_copies = None
 
-    def step(self, text_history: List[TextHistory]) -> List[Tuple[TextHistory, float, bool]]:
-        return [self.env.step(item) for item in text_history]
+    def step(self, text_history: List[Optional[TextHistory]], done: Optional[List[bool]]=None) -> List[Optional[Tuple[TextHistory, float, bool]]]:
+        assert self.batch_env_copies is not None, 'reset must be called before step'
+        assert len(text_history) == len(self.batch_env_copies), 'batch size must be the same as the number of environments initalized'
+        if done is None:
+            done = [False]*len(text_history)
+        assert len(text_history) == len(done)
+        return [None if d else env.step(item) for env, item, d in zip(self.batch_env_copies, text_history, done)]
     
     def reset(self, seed: Optional[List[Optional[int]]]=None, options: Optional[List[Optional[Dict]]]=None) -> List[TextHistory]:
         if seed is None and options is None:
@@ -76,10 +89,13 @@ class TextEnvToBatchedTextEnv(BatchedTextEnv):
         elif options is None:
             options = [None] * len(seed)
         assert len(seed) == len(options)
-        return [self.env.reset(seed=s, options=o) for s, o in zip(seed, options)]
+        self.batch_env_copies = [self.env.copy() for _ in range(len(seed))]
+        return [env.reset(seed=s, options=o) for env, s, o in zip(self.batch_env_copies, seed, options)]
     
     def close(self) -> None:
-        return self.env.close()
+        for env in self.batch_env_copies:
+            env.close()
+        self.env.close()
 
 class BatchedTextEnvToTextEnv(TextEnv):
     def __init__(self, env: BatchedTextEnv):
@@ -92,7 +108,7 @@ class BatchedTextEnvToTextEnv(TextEnv):
         return self.env.reset(seed=[seed], options=[options])[0]
     
     def close(self) -> None:
-        return self.env.close()
+        self.env.close()
 
 # text policy
 
@@ -103,15 +119,18 @@ class TextPolicy(ABC):
 
 class BatchedTextPolicy(ABC):
     @abstractmethod
-    def act(self, text_history: List[TextHistory]) -> List[TextHistory]:
+    def act(self, text_history: List[Optional[TextHistory]], done: Optional[List[bool]]=None) -> List[Optional[TextHistory]]:
         pass
 
 class TextPolicyToBatchedTextPolicy(BatchedTextPolicy):
     def __init__(self, policy: TextPolicy):
         self.policy = policy
     
-    def act(self, text_history: List[TextHistory]) -> List[TextHistory]:
-        return [self.policy.act(item) for item in text_history]
+    def act(self, text_history: List[Optional[TextHistory]], done: Optional[List[bool]]=None) -> List[Optional[TextHistory]]:
+        if done is None:
+            done = [False]*len(text_history)
+        assert len(text_history) == len(done)
+        return [None if d else self.policy.act(item) for item, d in zip(text_history, done)]
 
 class BatchedTextPolicyToTextPolicy(TextPolicy):
     def __init__(self, policy: BatchedTextPolicy):
@@ -154,17 +173,24 @@ def interact_environment(
         text_history = env.reset(env_seed, env_options)
     
     transitions_batch = [[] for _ in range(bsize)]
-    done = False
-    while not done:
+    done = [False]*bsize
+    while not all(done):
         pre_action_history = text_history
-        text_history = policy.act(text_history)
+        text_history = policy.act(text_history, done=done)
         post_action_history = text_history
 
-        step_results = env.step(text_history)
+        step_results = env.step(text_history, done=done)
+        step_results = list(map(lambda x: (None, None, True) if x is None else x, step_results))
         text_history, reward, done = list(zip(*step_results))
         post_transition_history = text_history
         
         for batch_idx in range(bsize):
+            if done[batch_idx] and \
+                (pre_action_history[batch_idx] is None or \
+                 post_action_history[batch_idx] is None or \
+                 post_transition_history[batch_idx] is None or \
+                 reward[batch_idx] is None):
+                continue
             transitions_batch[batch_idx].append(
                 InteractionTransition(
                     pre_action_history=pre_action_history[batch_idx], 

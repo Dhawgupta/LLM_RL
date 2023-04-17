@@ -25,8 +25,6 @@ dependencies:
   - google-cloud-storage==2.5.0
   - Flask==2.2.1
   - Flask-Cors==3.0.10
-  - redis==4.3.4
-  - jax==0.4.6
   - jax==0.4.6
   - h5py==3.7.0
   - sklearn==0.0
