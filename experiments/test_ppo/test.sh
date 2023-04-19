@@ -5,14 +5,14 @@ export JAX_DISABLE_JIT=0
 export CUDA_VISIBLE_DEVICES=""
 export TOKENIZERS_PARALLELISM=false
 export GCLOUD_PROJECT="civic-boulder-204700"
-export GCLOUD_TOKEN_PATH="/home/csnell/.config/gcloud/civic-boulder-204700-V2.json"
+export GCLOUD_TOKEN_PATH="${HOME}/.config/gcloud/civic-boulder-204700-V2.json"
 export PROJECT_ROOT=${PWD}
 source ${PWD}/secrets.sh
 
 source ~/miniconda3/bin/activate
 conda activate LLM_RL
 
-# 4/17/2024
+# 4/17/2023
 
 CUDA_VISIBLE_DEVICES=4 python -m examples_jaxseq.gpt2.gpt2_train \
     CONFIG \
