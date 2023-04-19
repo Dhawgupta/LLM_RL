@@ -16,10 +16,10 @@ conda activate JaxSeq2
 
 CUDA_VISIBLE_DEVICES=3,4 python -m llm_rl_scripts.chess.train_bc_gpt2 \
     HF \
-    gpt2 \
+    gpt2-xl \
     gcs://charlie-bucket2/datasets/chess_data/chess_data/train.jsonl \
     gcs://charlie-bucket2/datasets/chess_data/chess_data/val.jsonl \
-    --exp-name "gpt2_small_test1" \
+    --exp-name "gpt2_xl_test1" \
     --outputs-path gcs://charlie-bucket2/JaxSeq2_outputs/chess_bc/ \
     --use-wandb \
     --wandb-project "chess_bc" \
@@ -44,3 +44,34 @@ CUDA_VISIBLE_DEVICES=3,4 python -m llm_rl_scripts.chess.train_bc_gpt2 \
     --model-mesh-shape 1 \
     --fsdp \
     --gradient-checkpoint \
+
+# CUDA_VISIBLE_DEVICES=3,4 python -m llm_rl_scripts.chess.train_bc_gpt2 \
+#     HF \
+#     gpt2 \
+#     gcs://charlie-bucket2/datasets/chess_data/chess_data/train.jsonl \
+#     gcs://charlie-bucket2/datasets/chess_data/chess_data/val.jsonl \
+#     --exp-name "gpt2_small_test1" \
+#     --outputs-path gcs://charlie-bucket2/JaxSeq2_outputs/chess_bc/ \
+#     --use-wandb \
+#     --wandb-project "chess_bc" \
+#     \
+#     --epochs 1 \
+#     --train-bsize 32 \
+#     --grad-accum-steps 1 \
+#     --eval-loss-bsize 32 \
+#     --eval-loss-batches 256 \
+#     --generation-bsize 4 \
+#     --generation-batches 2048 \
+#     --max-input-length 128 \
+#     --max-output-length 16 \
+#     \
+#     --log-every 256 \
+#     --eval-every-steps 1024 \
+#     --save-every-steps 1024 \
+#     --save-at-end \
+#     --no-save-train-state \
+#     \
+#     --data-mesh-shape -1 \
+#     --model-mesh-shape 1 \
+#     --fsdp \
+#     --gradient-checkpoint \
