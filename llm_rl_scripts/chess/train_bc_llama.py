@@ -249,9 +249,11 @@ def main(
         )
 
         for item in generation_data:
-            generation = item['generation'].replace(" ", "").strip()
+            generation = item['generation'].split('\n', 1)[1].replace(" ", "").strip()
             refs = list(map(lambda x: x.replace(" ", "").strip(), item['reference']))
-            item['move_match'] = float(generation in refs)
+            item['parsed_generation'] = generation
+            item['refs'] = refs
+            item['move_match'] = float(item['parsed_generation'] in item['refs'])
 
         if save_dir is not None:
             generations_save_dir = os.path.join(save_dir, 'generations', str(eval_round))
