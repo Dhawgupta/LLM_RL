@@ -17,7 +17,7 @@ conda activate LLM_RL
 
 # 4/18/2023
 
-# tpu nlp-pod cl charlie-pod "source experiments/test_chess/test.sh"
+# tpu nlp-pod cl charlie-pod "source experiments/test_chess/train_tpu.sh"
 
 python -m llm_rl_scripts.chess.train_bc_llama \
     PARAMS \
@@ -31,17 +31,18 @@ python -m llm_rl_scripts.chess.train_bc_llama \
     --wandb-project "chess_bc" \
     \
     --epochs 1 \
-    --train-bsize 8 \
-    --grad-accum-steps 4 \
-    --eval-loss-bsize 8 \
-    --eval-loss-batches None \
+    --train-bsize 32 \
+    --grad-accum-steps 1 \
+    --eval-loss-bsize 32 \
+    --eval-loss-batches 256 \
+    --generation-bsize 4 \
+    --generation-batches 2048 \
     --max-input-length 128 \
     --max-output-length 16 \
     \
     --log-every 256 \
     --eval-every-steps 1024 \
     --save-every-steps 1024 \
-    --no-save-best \
     --save-at-end \
     --no-save-train-state \
     \
