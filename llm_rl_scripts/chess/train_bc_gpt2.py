@@ -9,7 +9,7 @@ from JaxSeq.generation_eval import generate_language
 import os
 import optax
 from JaxSeq.models.gpt2.interface import GPT2Train, GPT2Inference
-from JaxSeq.models.gpt2.load import load_train_state, ModelLoadMode, load_tokenizer
+from JaxSeq.models.gpt2.load import load_train_state, ModelLoadMode
 import pickle as pkl
 from JaxSeq.data import Seq2SeqDataset, Seq2SeqIterableDataset
 from JaxSeq.train import eval_loss, train_loop
