@@ -24,7 +24,7 @@ conda activate LLM_RL
 ``` shell
 conda env create -f environment.yml
 conda activate LLM_RL
-conda install jaxlib=*=*cuda* jax==0.4.6 cuda-nvcc -c conda-forge -c nvidia
+conda install jaxlib=*=*cuda* jax cuda-nvcc -c conda-forge -c nvidia
 ```
 
 **install with conda (tpu):**
@@ -32,7 +32,7 @@ conda install jaxlib=*=*cuda* jax==0.4.6 cuda-nvcc -c conda-forge -c nvidia
 conda env create -f environment.yml
 conda activate LLM_RL
 python -m pip install --upgrade pip
-python -m pip install jax[tpu]==0.4.8 -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
+python -m pip install jax[tpu] -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
 ```
 
 ## Update JaxSeq2
