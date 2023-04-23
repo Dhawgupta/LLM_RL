@@ -5,15 +5,19 @@ import json
 from collections import defaultdict
 from tqdm.auto import tqdm
 
+initial_state = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'
+
 if __name__ == "__main__":
     states = np.load(open(os.path.join('elo-2800-dataset', 'states.npy'), 'rb'))
     actions = np.load(open(os.path.join('elo-2800-dataset', 'actions.npy'), 'rb'))
     
+    states = np.concatenate((np.full((states.shape[0], 1), initial_state), states), axis=1)
+
     data = []
     for i in tqdm(range(actions.shape[0])):
         for x in range(actions.shape[1]):
             if actions[i, x] == '':
-                assert states[i, x] == ''
+                assert states[i, x+1] == ''
                 continue
             data.append({
                 "in_text": " ".join(states[i, x])+"\n", 

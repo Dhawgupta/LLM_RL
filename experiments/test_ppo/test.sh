@@ -12,22 +12,89 @@ source ${PWD}/secrets.sh
 source ~/miniconda3/bin/activate
 conda activate LLM_RL
 
+# 4/22/2023
+
+# CUDA_VISIBLE_DEVICES=1 python -m examples_jaxseq.gptj.gptj_train \
+#     CONFIG \
+#     experiments/test_ppo/base_config.json \
+#     data/test_ppo/10bit_data_multistep2.jsonl \
+#     data/test_ppo/10bit_data_multistep2.jsonl \
+#     --epochs 1 \
+#     --train_bsize 64 \
+#     --eval-loss-bsize 64 \
+#     --log-every 256 \
+#     --eval-every-steps 1024 \
+#     --eval-batches 64 \
+#     --lr 3e-4 \
+#     --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/ppo_test_multistep2/ \
+#     --use-wandb \
+#     --wandb-project "ppo_test_multistep_initial_finetune" \
+
+# python -m llm_rl_scripts.ppo.generate_test_data_multistep \
+#     --n 10 \
+#     --output_path data/test_ppo/10bit_data_multistep2.jsonl \
+
+# python -m examples_jaxseq.gptj.gptj_serve \
+#     PARAMS \
+#     gcs://charlie-bucket2/LLM_RL_outputs/ppo_test_multistep/exp.2023-04-22-01-11-54.651.ab9b9eb8e0aa11ed8df5000000acfe80/best \
+#     --host 0.0.0.0 \
+#     --port 8099 \
+
+# python -m examples_jaxseq.misc.export_checkpoint \
+#     gcs://charlie-bucket2/LLM_RL_outputs/ppo_test_multistep/exp.2023-04-22-01-11-54.651.ab9b9eb8e0aa11ed8df5000000acfe80/best \
+
+# CUDA_VISIBLE_DEVICES=1 python -m examples_jaxseq.gptj.gptj_train \
+#     CONFIG \
+#     experiments/test_ppo/base_config.json \
+#     data/test_ppo/10bit_data_multistep.jsonl \
+#     data/test_ppo/10bit_data_multistep.jsonl \
+#     --epochs 1 \
+#     --train_bsize 64 \
+#     --eval-loss-bsize 64 \
+#     --log-every 256 \
+#     --eval-every-steps 1024 \
+#     --lr 3e-4 \
+#     --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/ppo_test_multistep/ \
+#     --use-wandb \
+#     --wandb-project "ppo_test_multistep_initial_finetune" \
+
+# 4/21/2023
+
+# python -m llm_rl_scripts.ppo.generate_test_data_multistep \
+#     --n 10 \
+#     --output_path data/test_ppo/10bit_data_multistep.jsonl \
+
+# CUDA_VISIBLE_DEVICES=1 python -m examples_jaxseq.gptj.gptj_train \
+#     CONFIG \
+#     experiments/test_ppo/base_config.json \
+#     data/test_ppo/10bit_data_multistep.jsonl \
+#     data/test_ppo/10bit_data_multistep.jsonl \
+#     --epochs 1 \
+#     --train_bsize 64 \
+#     --eval-loss-bsize 64 \
+#     --log-every 256 \
+#     --eval-every-steps 1024 \
+#     --lr 3e-4 \
+#     --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/ppo_test_multistep/ \
+#     --use-wandb \
+#     --wandb-project "ppo_test_multistep_initial_finetune" \
+
 # 4/17/2023
 
-CUDA_VISIBLE_DEVICES=4 python -m examples_jaxseq.gpt2.gpt2_train \
-    CONFIG \
-    experiments/test_ppo/gpt2_base_config.json \
-    data/test_ppo/10bit_data.jsonl \
-    data/test_ppo/10bit_data.jsonl \
-    --epochs 1000 \
-    --train-bsize 64 \
-    --eval-loss-bsize 64 \
-    --log-every 256 \
-    --eval-every-steps 1024 \
-    --lr 3e-4 \
-    --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/ppo_test_gpt2/ \
-    --use-wandb \
-    --wandb-project "gpt2_ppo_test_initial_finetune" \
+# CUDA_VISIBLE_DEVICES=4 python -m examples_jaxseq.gpt2.gpt2_train \
+#     CONFIG \
+#     experiments/test_ppo/gpt2_base_config.json \
+#     data/test_ppo/10bit_data.jsonl \
+#     data/test_ppo/10bit_data.jsonl \
+#     --epochs 1000 \
+#     --train-bsize 64 \
+#     --eval-loss-bsize 64 \
+#     --log-every 256 \
+#     --eval-every-steps 1024 \
+#     --lr 3e-4 \
+#     --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/ppo_test_gpt2/ \
+#     --use-wandb \
+#     --wandb-project "gpt2_ppo_test_initial_finetune" \
 
 # CUDA_VISIBLE_DEVICES=4 python -m llm_rl_scripts.ppo.ppo_test_gpt2 \
 #     PARAMS \
