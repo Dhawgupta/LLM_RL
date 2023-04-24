@@ -309,8 +309,8 @@ def main(
     
     train_prng = jax.random.PRNGKey(1)
     ppo_trainer, ppo_inference, policy = train_loop(
-        trainer=ppo_trainer, 
-        inference=ppo_inference, 
+        trainer=train, 
+        inference=None, 
         evaluator=None, 
         dataset=dataset, 
         prng_key=train_prng, 
