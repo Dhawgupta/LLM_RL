@@ -313,8 +313,11 @@ class CombinedTokenTrajectoryChain(NamedTuple):
             ends_with_state = (not np.any(token_trajectories[i].is_action[1:][max_length:]))
             next_starts_with_action = i < len(token_trajectories)-1 and token_trajectories[i+1].is_action[0]
 
-            assert not (ends_with_state and next_starts_with_action), 'trajectory truncation error'
-            assert no_trunc or ends_with_state, 'trajectory truncation error'
+            try:
+                assert not (ends_with_state and next_starts_with_action), 'trajectory truncation error'
+                assert no_trunc or ends_with_state, 'trajectory truncation error'
+            except Exception as e:
+                import IPython; IPython.embed(); raise e # TODO: remove this
 
         return cls(
             input_tokens=np.concatenate([tt.tokens[:-1][:max_length] for tt in token_trajectories], axis=0), 
@@ -582,8 +585,14 @@ class PPOInference(struct.PyTreeNode):
                 use_whitening=use_advantage_whitening, 
             )
 
-            advantage_chains.append(advantages[0])
-            return_chains.append(returns[0])
+            advantage_chain = np.zeros((values_chains[i].shape[0]-1,), dtype=np.float32)
+            advantage_chain[action_idxs] = advantages[0]
+
+            return_chain = np.zeros((values_chains[i].shape[0]-1,), dtype=np.float32)
+            return_chain[action_idxs] = returns[0]
+
+            advantage_chains.append(advantage_chain)
+            return_chains.append(return_chain)
         
         ppo_datas = []
         for i in range(n_chains):

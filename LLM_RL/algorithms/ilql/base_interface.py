@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Union, Tuple, Any, Callable, Optional
+from typing import Union, Tuple, Any, Callable, Optional, NamedTuple, List
 import jax
 import jax.numpy as jnp
 from jax.random import PRNGKeyArray
@@ -12,6 +12,13 @@ from transformers.tokenization_utils import PreTrainedTokenizerBase
 import flax.linen as nn
 from jaxtyping import PyTree
 from JaxSeq.models.base_interface import initialize_attn_mask_pos_ids
+from transformers.modeling_flax_outputs import FlaxCausalLMOutput
+from flax.core import freeze
+from transformers.generation import GenerationConfig
+import numpy as np
+from JaxSeq.utils import block_sequences, BlockingStrategy, Padding, Truncation
+from transformers.generation import FlaxBeamSearchOutput, FlaxGreedySearchOutput, FlaxSampleOutput
+from JaxSeq.models.base_interface import GenerationFromStrOutput, Inference
 
 # loss function
 
@@ -55,6 +62,7 @@ def ilql_loss(
     is_next_state = jnp.concatenate((is_next_state, (should_take_action.sum(axis=1) > 0)[..., None]), axis=1)
 
     vns_query_indicators = get_query_indicators(is_next_state.reshape(-1))
+    # should be the same number of vns as qv, so we can clip the extra padding to match shape
     vns_query_indicators = vns_query_indicators[:qv_query_indicators.shape[0], :] # TODO: check this
     
     q1sa_selected = (qv_query_indicators * q1sa_flat).sum(axis=1)
@@ -139,17 +147,12 @@ class ILQLTrain(struct.PyTreeNode):
     #     rewards: jax.Array, 
     #     dones: jax.Array, 
 
-    #     next_token_ids: jax.Array, 
-    #     next_tokens_attention_mask: jax.Array, 
-    #     next_tokens_position_ids: jax.Array, 
-    #     next_dones: jax.Array, 
+    #     next_token_ids: Optional[jax.Array], 
+    #     next_tokens_attention_mask: Optional[jax.Array], 
+    #     next_tokens_position_ids: Optional[jax.Array], 
+    #     next_dones: Optional[jax.Array], 
 
     #     prng_key: Optional[jax.random.PRNGKeyArray], 
-
-    #     detach_q1: bool, 
-    #     detach_q2: bool, 
-    #     detach_v: bool, 
-
     #     train: bool=True, 
     # ) -> Tuple[TrainState, Optional[PyTree], TrainState, TrainState, TrainState, PyTree, PyTree, jax.Array, PyTree]:
     #     raise NotImplementedError
@@ -160,17 +163,14 @@ class ILQLTrain(struct.PyTreeNode):
         should_take_action: jax.Array, # [batch, time-1]
         rewards: jax.Array, # [batch, time-1]
         dones: jax.Array, # [batch]
-        next_token_ids: jax.Array, # [batch, n_time]
-        next_dones: jax.Array, # [batch]
+        next_token_ids: Optional[jax.Array], # [batch, n_time]
+        next_dones: Optional[jax.Array], # [batch]
         prng_key: Optional[jax.random.PRNGKeyArray], 
         attention_mask: Optional[jax.Array]=None, 
         position_ids: Optional[jax.Array]=None, 
         next_tokens_attention_mask: Optional[jax.Array]=None, 
         next_tokens_position_ids: Optional[jax.Array]=None, 
         train: bool=True, 
-        detach_q1: bool=False, 
-        detach_q2: bool=False, 
-        detach_v: bool=False, 
     ) -> Tuple[ILQLTrain, jax.Array, PyTree]:
         
         # handle attention mask and position ids shifting
@@ -180,6 +180,17 @@ class ILQLTrain(struct.PyTreeNode):
             attention_mask, 
             position_ids, 
         )
+
+        if next_token_ids is not None:
+            next_tokens_attention_mask, next_tokens_position_ids = initialize_attn_mask_pos_ids(
+                next_token_ids, 
+                self.tokenizer.pad_token_id, 
+                next_tokens_attention_mask, 
+                next_tokens_position_ids, 
+            )
+        else:
+            assert next_tokens_attention_mask is None
+            assert next_tokens_position_ids is None
         
         base_train_state, \
         target_base_params, \
@@ -207,9 +218,6 @@ class ILQLTrain(struct.PyTreeNode):
             next_tokens_position_ids, 
             next_dones, 
             prng_key, 
-            detach_q1=detach_q1, 
-            detach_q2=detach_q2, 
-            detach_v=detach_v, 
             train=train, 
         )
 
@@ -223,3 +231,323 @@ class ILQLTrain(struct.PyTreeNode):
             q2_target_head_params=q2_target_head_params, 
         ), loss, logs
 
+class ILQLSimpleForwardOutput(NamedTuple):
+    base_raw_output: FlaxCausalLMOutput
+    q1: jax.Array
+    q2: jax.Array
+    v: jax.Array
+
+class ILQLInferenceSimple(Inference):
+    pi_beta_params: Optional[PyTree]
+    base_params: PyTree
+    q1_head_params: PyTree
+    q2_head_params: PyTree
+    v_head_params: PyTree
+    pi_beta_model: Optional[FlaxPreTrainedModel] = struct.field(pytree_node=False)
+    base_model: FlaxPreTrainedModel = struct.field(pytree_node=False)
+    q_head_model: nn.Module = struct.field(pytree_node=False)
+    v_head_model: nn.Module = struct.field(pytree_node=False)
+    tokenizer: PreTrainedTokenizerBase = struct.field(pytree_node=False)
+    _generate: Callable = struct.field(pytree_node=False)
+    _forward: Callable = struct.field(pytree_node=False)
+
+    # def _generate(
+    #     pi_beta_params: PyTree, 
+    #     base_params: PyTree, 
+    #     q1_head_params: PyTree, 
+    #     q2_head_params: PyTree, 
+    #     v_head_params: PyTree, 
+    #     input_ids: jax.Array, 
+    #     attention_mask: jax.Array, 
+    #     position_ids: jax.Array, 
+    #     prng_key: Optional[jax.random.PRNGKeyArray]=None, 
+    #     generation_config: Optional[FrozenDict]=None, 
+    #     trace: bool=True, 
+    # ) -> Union[FlaxSampleOutput, FlaxGreedySearchOutput, FlaxBeamSearchOutput]
+    
+    # def _forward(
+    #     base_params: PyTree, 
+    #     q1_head_params: PyTree, 
+    #     q2_head_params: PyTree, 
+    #     v_head_params: PyTree, 
+    #     input_ids: jax.Array, 
+    #     attention_mask: jax.Array, 
+    #     position_ids: jax.Array, 
+    #     prng_key: Optional[jax.random.PRNGKeyArray]=None, 
+    #     output_attentions: Optional[bool]=None, 
+    #     train: bool=False, 
+    # ) -> ILQLSimpleForwardOutput:
+    #     raise NotImplementedError
+
+    def generate(
+        self, 
+        input_ids: jax.Array, 
+        prng_key: Optional[jax.random.PRNGKeyArray], 
+        generation_config: Optional[GenerationConfig]=None, 
+        attention_mask: Optional[jax.Array]=None, 
+        position_ids: Optional[jax.Array]=None, 
+        trace: bool=True, 
+    ) -> Union[FlaxSampleOutput, FlaxGreedySearchOutput, FlaxBeamSearchOutput]:
+        if self.pi_beta_params is None:
+            raise NotImplementedError
+        
+        attention_mask, position_ids = initialize_attn_mask_pos_ids(
+            input_ids, 
+            self.tokenizer.pad_token_id, 
+            attention_mask, 
+            position_ids, 
+        )
+
+        return self._generate(
+            self.pi_beta_params, 
+            self.base_params, 
+            self.q1_head_params, 
+            self.q2_head_params, 
+            self.v_head_params, 
+            input_ids, 
+            attention_mask, 
+            position_ids, 
+            prng_key, 
+            freeze(generation_config.to_dict()) if generation_config is not None else None, 
+            trace, 
+        )
+    
+    def forward(
+        self, 
+        input_ids: jax.Array, 
+        attention_mask: Optional[jax.Array]=None, 
+        position_ids: Optional[jax.Array]=None, 
+        output_attentions: Optional[bool]=None, 
+        train: bool=False, 
+        prng_key: Optional[jax.random.PRNGKeyArray]=None, 
+    ) -> ILQLSimpleForwardOutput:
+        attention_mask, position_ids = initialize_attn_mask_pos_ids(
+            input_ids, 
+            self.tokenizer.pad_token_id, 
+            attention_mask, 
+            position_ids, 
+        )
+
+        return self._forward(
+            self.base_params, 
+            self.q1_head_params, 
+            self.q2_head_params, 
+            self.v_head_params, 
+            input_ids, 
+            attention_mask, 
+            position_ids, 
+            prng_key, 
+            output_attentions, 
+            train, 
+        )
+
+class ILQLFullForwardOutput(NamedTuple):
+    base_raw_output: FlaxCausalLMOutput
+    target_base_raw_output: Optional[FlaxCausalLMOutput]
+    q1: jax.Array
+    q2: jax.Array
+    v: jax.Array
+    q1_target: jax.Array
+    q2_target: jax.Array
+
+class ILQLInferenceFull(Inference):
+    pi_beta_params: Optional[PyTree]
+    base_params: PyTree
+    target_base_params: Optional[PyTree]
+    q1_head_params: PyTree
+    q2_head_params: PyTree
+    v_head_params: PyTree
+    q1_target_head_params: PyTree
+    q2_target_head_params: PyTree
+    pi_beta_model: Optional[FlaxPreTrainedModel] = struct.field(pytree_node=False)
+    base_model: FlaxPreTrainedModel = struct.field(pytree_node=False)
+    q_head_model: nn.Module = struct.field(pytree_node=False)
+    v_head_model: nn.Module = struct.field(pytree_node=False)
+    tokenizer: PreTrainedTokenizerBase = struct.field(pytree_node=False)
+    _generate: Callable = struct.field(pytree_node=False)
+    _forward: Callable = struct.field(pytree_node=False)
+    _eval_loss: Callable = struct.field(pytree_node=False)
+
+    # def _generate(
+    #     pi_beta_params: PyTree, 
+    #     base_params: PyTree, 
+    #     target_base_params: Optional[PyTree], 
+    #     v_head_params: PyTree, 
+    #     q1_target_head_params: PyTree, 
+    #     q2_target_head_params: PyTree, 
+    #     input_ids: jax.Array, 
+    #     attention_mask: jax.Array, 
+    #     position_ids: jax.Array, 
+    #     prng_key: Optional[jax.random.PRNGKeyArray]=None, 
+    #     generation_config: Optional[FrozenDict]=None, 
+    #     trace: bool=True, 
+    # )
+    
+    # def _forward(
+    #     base_params: PyTree, 
+    #     target_base_params: Optional[PyTree], 
+    #     q1_head_params: PyTree, 
+    #     q2_head_params: PyTree, 
+    #     v_head_params: PyTree, 
+    #     q1_target_head_params: PyTree, 
+    #     q2_target_head_params: PyTree, 
+    #     input_ids: jax.Array, 
+    #     attention_mask: jax.Array, 
+    #     position_ids: jax.Array, 
+    #     prng_key: Optional[jax.random.PRNGKeyArray]=None, 
+    #     output_attentions: Optional[bool]=None, 
+    #     train: bool=False, 
+    # ) -> ILQLForwardOutput:
+    #     raise NotImplementedError
+
+    # def _eval_loss(
+    #     base_params: PyTree, 
+    #     target_base_params: Optional[PyTree], 
+    #     q1_head_params: PyTree, 
+    #     q2_head_params: PyTree, 
+    #     v_head_params: PyTree, 
+    #     q1_target_head_params: PyTree, 
+    #     q2_target_head_params: PyTree, 
+
+    #     input_ids: jax.Array, 
+    #     attention_mask: jax.Array, 
+    #     position_ids: jax.Array, 
+    #     should_take_action: jax.Array, 
+    #     rewards: jax.Array, 
+    #     dones: jax.Array, 
+
+    #     next_token_ids: Optional[jax.Array], 
+    #     next_tokens_attention_mask: Optional[jax.Array], 
+    #     next_tokens_position_ids: Optional[jax.Array], 
+    #     next_dones: Optional[jax.Array], 
+
+    #     prng_key: Optional[jax.random.PRNGKeyArray]=None, 
+    #     train: bool=False, 
+    # ) -> Tuple[jax.Array, PyTree]:
+    #     raise NotImplementedError
+
+    def generate(
+        self, 
+        input_ids: jax.Array, 
+        prng_key: Optional[jax.random.PRNGKeyArray], 
+        generation_config: Optional[GenerationConfig]=None, 
+        attention_mask: Optional[jax.Array]=None, 
+        position_ids: Optional[jax.Array]=None, 
+        trace: bool=True, 
+    ) -> Union[FlaxSampleOutput, FlaxGreedySearchOutput, FlaxBeamSearchOutput]:
+        if self.pi_beta_params is None:
+            raise NotImplementedError
+        
+        attention_mask, position_ids = initialize_attn_mask_pos_ids(
+            input_ids, 
+            self.tokenizer.pad_token_id, 
+            attention_mask, 
+            position_ids, 
+        )
+
+        return self._generate(
+            self.pi_beta_params, 
+            self.base_params, 
+            self.target_base_params, 
+            self.v_head_params, 
+            self.q1_target_head_params, 
+            self.q2_target_head_params, 
+            input_ids, 
+            attention_mask, 
+            position_ids, 
+            prng_key, 
+            freeze(generation_config.to_dict()) if generation_config is not None else None, 
+            trace, 
+        )
+    
+    def forward(
+        self, 
+        input_ids: jax.Array, 
+        attention_mask: Optional[jax.Array]=None, 
+        position_ids: Optional[jax.Array]=None, 
+        output_attentions: Optional[bool]=None, 
+        train: bool=False, 
+        prng_key: Optional[jax.random.PRNGKeyArray]=None, 
+    ) -> ILQLFullForwardOutput:
+        attention_mask, position_ids = initialize_attn_mask_pos_ids(
+            input_ids, 
+            self.tokenizer.pad_token_id, 
+            attention_mask, 
+            position_ids, 
+        )
+
+        return self._forward(
+            self.base_params, 
+            self.target_base_params, 
+            self.q1_head_params, 
+            self.q2_head_params, 
+            self.v_head_params, 
+            self.q1_target_head_params, 
+            self.q2_target_head_params, 
+            input_ids, 
+            attention_mask, 
+            position_ids, 
+            prng_key, 
+            output_attentions, 
+            train, 
+        )
+    
+    def eval_loss(
+        self, 
+        input_ids: jax.Array, # [batch, time]
+        should_take_action: jax.Array, # [batch, time-1]
+        rewards: jax.Array, # [batch, time-1]
+        dones: jax.Array, # [batch]
+        next_token_ids: Optional[jax.Array], # [batch, n_time]
+        next_dones: Optional[jax.Array], # [batch]
+        prng_key: Optional[jax.random.PRNGKeyArray], 
+        attention_mask: Optional[jax.Array]=None, 
+        position_ids: Optional[jax.Array]=None, 
+        next_tokens_attention_mask: Optional[jax.Array]=None, 
+        next_tokens_position_ids: Optional[jax.Array]=None, 
+        train: bool=True, 
+    ) -> Tuple[jax.Array, PyTree]:
+        input_attention_mask, input_position_ids = initialize_attn_mask_pos_ids(
+            input_ids, 
+            self.tokenizer.pad_token_id, 
+            input_attention_mask, 
+            input_position_ids, 
+        )
+
+        if next_token_ids is not None:
+            next_tokens_attention_mask, next_tokens_position_ids = initialize_attn_mask_pos_ids(
+                next_token_ids, 
+                self.tokenizer.pad_token_id, 
+                next_tokens_attention_mask, 
+                next_tokens_position_ids, 
+            )
+        else:
+            assert next_tokens_attention_mask is None
+            assert next_tokens_position_ids is None
+        
+        loss, logs = self._eval_loss(
+            self.base_params, 
+            self.target_base_params, 
+            self.q1_head_params, 
+            self.q2_head_params, 
+            self.v_head_params, 
+            self.q1_target_head_params, 
+            self.q2_target_head_params, 
+            input_ids, 
+            attention_mask, 
+            position_ids, 
+            should_take_action, 
+            rewards, 
+            dones, 
+            next_token_ids, 
+            next_tokens_attention_mask, 
+            next_tokens_position_ids, 
+            next_dones, 
+            prng_key, 
+            train=train, 
+        )
+
+        return loss, logs
+    
+    def eval_loss_from_str(self, *args, **kwargs):
+        raise NotImplementedError

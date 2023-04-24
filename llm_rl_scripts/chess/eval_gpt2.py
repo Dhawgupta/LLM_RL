@@ -9,12 +9,13 @@ import json
 from tqdm.auto import tqdm
 
 class HostPolicy(TextPolicy):
-    def __init__(self, host: Union[str, List[str]], n_retries: int=3, move: Optional[str]=None):
+    def __init__(self, host: Union[str, List[str]], n_retries: int=3, move: Optional[str]=None, eos_token_id: Optional[int]=None):
         if isinstance(host, str):
             host = [host]
         self.client = Client(host)
         self.n_retries = n_retries
         self.move = move
+        self.eos_token_id = eos_token_id
 
     def act(self, text_history: TextHistory) -> TextHistory:
         if self.move is not None:
@@ -31,7 +32,7 @@ class HostPolicy(TextPolicy):
                 temperature=None, 
                 top_p=None, 
                 top_k=None, 
-                eos_token_id=198, 
+                eos_token_id=self.eos_token_id, 
             )
             if response['status'] != 'error':
                 break
@@ -45,6 +46,7 @@ def main(
     data_file: str, 
     max_iters: Optional[int], 
     n_retries: int=3, 
+    eos_token_id: Optional[int]=None, 
 ):
     # policy = HostPolicy(host, n_retries=n_retries)
 
@@ -58,7 +60,7 @@ def main(
     for i, d in tqdm(enumerate(data), total=max_iters):
         if i >= max_iters:
             break
-        policy = HostPolicy(host, n_retries=n_retries)
+        policy = HostPolicy(host, n_retries=n_retries, eos_token_id=eos_token_id)
         env = FenChessHistoryEnvSingleTurn(initial_history=(Text('', False),), from_position=postprocess_state(d['in_text']))
         all_data, summary = text_env_eval(
             env=env, 

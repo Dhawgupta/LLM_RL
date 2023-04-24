@@ -21,6 +21,7 @@ from JaxSeq.models.gptj.interface import GPTJInference
 import jax.numpy as jnp
 from LLM_RL.algorithms.ppo.base_interface import PPOPolicy
 from jax.experimental.pjit import pjit
+from examples_jaxseq.misc.commandline_server_client import strip_prompt_from_completion
 
 class GPTJPPOTrain(PPOTrain):
     @classmethod
@@ -441,7 +442,7 @@ class GPTJPolicy(PPOPolicy):
 
         raw_output_strs = model_outputs.output_strs
         output_strs = [
-            "" if d else self.out_str_process(raw_output_str.removeprefix(raw_input_str)) \
+            "" if d else self.out_str_process(strip_prompt_from_completion(raw_input_str, raw_output_str)) \
                 for raw_input_str, raw_output_str, d in zip(raw_input_strs, raw_output_strs, done)
         ]
 

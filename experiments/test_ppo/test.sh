@@ -6,13 +6,57 @@ export CUDA_VISIBLE_DEVICES=""
 export TOKENIZERS_PARALLELISM=false
 export GCLOUD_PROJECT="civic-boulder-204700"
 export GCLOUD_TOKEN_PATH="${HOME}/.config/gcloud/civic-boulder-204700-V2.json"
+# export GCLOUD_PROJECT="rail-tpus"
+# export GCLOUD_TOKEN_PATH=${HOME}/.config/gcloud/rail-tpus.json
 export PROJECT_ROOT=${PWD}
 source ${PWD}/secrets.sh
 
 source ~/miniconda3/bin/activate
 conda activate LLM_RL
 
+# 4/23/2023
+
+export GCLOUD_PROJECT="rail-tpus"
+export GCLOUD_TOKEN_PATH=${HOME}/.config/gcloud/rail-tpus.json
+
+python -m llm_rl_scripts.ppo.generate_test_data_multichain \
+    --n 10 \
+    --output_path data/test_ppo/10bit_data_multichain.jsonl \
+
+# python -m examples_jaxseq.misc.export_checkpoint \
+#     gcs://rail-tpus-csnell-us/LLM_RL_outputs/ppo_test_multistep2/exp.2023-04-22-21-52-41.254.015006f2e15811ed89e155792b4c6f0d/best/ \
+
+# CUDA_VISIBLE_DEVICES=1 python -m examples_jaxseq.gptj.gptj_serve \
+#     PARAMS \
+#     gcs://rail-tpus-csnell-us/LLM_RL_outputs/ppo_test_multistep2/exp.2023-04-22-21-52-41.254.015006f2e15811ed89e155792b4c6f0d/best/ \
+#     --host 0.0.0.0 \
+#     --port 8099 \
+
+CUDA_VISIBLE_DEVICES=1 python -m llm_rl_scripts.ppo.ppo_test_multistep \
+    PARAMS \
+    gcs://rail-tpus-csnell-us/LLM_RL_outputs/ppo_test_multistep2/exp.2023-04-22-21-52-41.254.015006f2e15811ed89e155792b4c6f0d/best \
+    --exp-name None \
+    --outputs-path gcs://rail-tpus-csnell-us/LLM_RL_outputs/ppo_test_multistep/ \
+    --train-bsize 32 \
+    --n-rounds 100 \
+    --epochs 4 \
+    --log-every 4 \
+    --weight-decay 1e-6 \
+    --lr 3e-5 \
+    --use-wandb \
+    --wandb-project "rlhf_multistep_binary_test" \
+    --save-every-rounds 1 \
+    --init-kl-coef 0.001 \
+    --kl-target 0.1 \
+    --kl-horizon 10000 \
+
 # 4/22/2023
+
+# python -m examples_jaxseq.gptj.gptj_serve \
+#     PARAMS \
+#     gcs://charlie-bucket2/LLM_RL_outputs/ppo_test_multistep/exp.2023-04-22-01-11-54.651.ab9b9eb8e0aa11ed8df5000000acfe80/best \
+#     --host 0.0.0.0 \
+#     --port 8099 \
 
 # CUDA_VISIBLE_DEVICES=1 python -m examples_jaxseq.gptj.gptj_train \
 #     CONFIG \
