@@ -1,49 +1,42 @@
 from typing import Optional, Dict, Any, Tuple
-import tyro
-from JaxSeq.bucket_manager import open_with_bucket as open
-from transformers import AutoTokenizer
-from JaxSeq.utils import jsonl_stream, convert_path, load_mesh, get_dtype, setup_experiment_save
+from jaxtyping import PyTree
+from functools import partial
 import jax
 import jax.numpy as jnp
-from JaxSeq.utils import BlockingStrategy, Padding, Truncation, uuid_name, jsonl_load, get_weight_decay_mask, create_path, get_enabled_save_path
+import json
+import numpy as np
 import os
 import optax
+import pickle as pkl
+import re
+import tyro
+import random
+from flax.training.train_state import TrainState
+from transformers import AutoTokenizer
+from transformers.generation import GenerationConfig
+from JaxSeq.bucket_manager import open_with_bucket as open
+from JaxSeq.data import Seq2SeqDataset
+from JaxSeq.generation_eval import generate_language, compute_metrics
+from JaxSeq.logs import label_logs, log, pull_logs
 from JaxSeq.models.gpt2.interface import GPT2Train, GPT2Inference
 from JaxSeq.models.gpt2.load import load_train_state, ModelLoadMode
-import pickle as pkl
-from JaxSeq.data import Seq2SeqDataset
-from LLM_RL.algorithms.ppo.train import train_loop
+from JaxSeq.shard_model import shard_params_from_params
+from JaxSeq.utils import BlockingStrategy, Padding, Truncation, uuid_name, jsonl_load, get_weight_decay_mask, create_path, get_enabled_save_path
+from JaxSeq.utils import jsonl_stream, convert_path, load_mesh, get_dtype, setup_experiment_save
 from LLM_RL.algorithms.ppo.base_interface import ppo_loss_fn, FixedKLController, AdaptiveKLController
-from JaxSeq.generation_eval import generate_language, compute_metrics
-from transformers.generation import GenerationConfig
-from jaxtyping import PyTree
-import re
-from LLM_RL.environment import TextEnv, TextHistory, Text, interact_environment, text_env_eval, TextTrajectory, TextTrajectoryChain
 from LLM_RL.algorithms.ppo.gpt2.interface import GPT2Policy, GPT2PPOInference, GPT2PPOTrain
+from LLM_RL.algorithms.ppo.train import train_loop
+from LLM_RL.environment import TextEnv, TextHistory, Text, interact_environment, text_env_eval, TextTrajectory, TextTrajectoryChain
 from LLM_RL.heads.linear_head import load_train_state_from_config as load_head_train_state_from_config
 from LLM_RL.heads.linear_head import LinearHeadConfig
-from JaxSeq.shard_model import shard_params_from_params
-from flax.training.train_state import TrainState
 from LLM_RL.algorithms.ppo.data import PPODataset, PPOIterableDataset
 from LLM_RL.utils import get_tensor_stats_np
-from functools import partial
-import numpy as np
-from JaxSeq.logs import label_logs, log, pull_logs
-import json
+from .env import TwentyQuestionsPolicyEnvironment
+from .oracle import T5Oracle
+from .oracle import T5ModelLoadMode as T5OracleModelLoadMode
+from .data import get_default_word_list, create_conversation_from_history
 
-class BitsTestEnv(TextEnv):
-    def __init__(self, n: int):
-        self.n = n
 
-    def step(self, text_history: TextHistory) -> Tuple[TextHistory, float, bool]:
-        try:
-            bits = list(map(int, text_history[-1].text.strip().split(' ')))
-        except:
-            bits = []
-        return text_history, float(sum(bits) > (self.n // 2))*10.0, True
-
-    def reset(self, seed: Optional[int]=None, options: Optional[Dict]=None) -> TextHistory:
-        return (Text(text='<|endoftext|>', is_action=False),)
 
 def main(
     model_load_mode: ModelLoadMode, 
@@ -63,6 +56,8 @@ def main(
     n_rounds: int=1, 
     epochs: int=1, 
     max_steps: Optional[int]=None, 
+
+    seed: int=0,
     
     lr: float=1e-5, 
     weight_decay: float=0.0, 
@@ -73,8 +68,15 @@ def main(
     n_rollouts: int=128, 
     ppo_data_bsize: int=32, 
 
+    env_deterministic: bool=False,
+    env_verbose: bool=False,
+    oracle_model_mode: T5OracleModelLoadMode=T5OracleModelLoadMode.PARAMS,
+    oracle_model_path: str="gcs://rail-tpus-charles-3/JaxSeq/outputs/twenty_questions/flan-t5-xl_oracle_lr1e-5_test1/model_2.pkl",
+
     gradient_checkpoint: bool=False, 
     fsdp: bool=False, 
+    use_fp16_activations: bool=True,
+    use_fp16_params: bool=True,
 
     max_input_length: int=512, 
     max_output_length: int=512, 
@@ -118,8 +120,10 @@ def main(
 
     should_restore_loop_state: bool=False, 
 ):
-    input_args = locals()
+    input_args = locals().copy()
     print(input_args)
+
+    prng_key = jax.random.PRNGKey(seed)
 
     use_adaptive_kl = (kl_target is not None and kl_horizon is not None)
     if not use_adaptive_kl:
@@ -153,17 +157,20 @@ def main(
             every_k_schedule=grad_accum_steps, 
         )
 
+    model_dtype = get_dtype(use_fp16=use_fp16_activations)
+    params_dtype = get_dtype(use_fp16=use_fp16_params)
+
     policy_train_state, policy_model = load_train_state(
         model_load_mode=model_load_mode, 
         model_load_path=convert_path(model_load_path) if model_load_mode != ModelLoadMode.HF else model_load_path, 
-        model_dtype=jnp.float32, 
+        model_dtype=model_dtype, 
         optim_getter=policy_optim_getter, 
         tokenizer=tokenizer, 
         mesh=mesh, 
         force_pad_embeddings=force_pad_embeddings, 
         gradient_checkpoint=gradient_checkpoint, 
         fsdp=fsdp, 
-        params_dtype=jnp.float32, 
+        params_dtype=params_dtype, 
     )
     with jax.default_device(jax.devices('cpu')[0]):
         initital_policy_params = jax.tree_util.tree_map(
@@ -188,9 +195,7 @@ def main(
         tokenizer=tokenizer, 
     )
 
-    env = BitsTestEnv(n=10)
-    
-    policy_prng = jax.random.PRNGKey(0)
+    prng_key, policy_prng = jax.random.split(prng_key)
     policy = GPT2Policy(
         inference=policy_inference, 
         prng_key=policy_prng, 
@@ -268,25 +273,62 @@ def main(
     else:
         kl_controller = FixedKLController(kl_coef=init_kl_coef)
 
+    prng_key, oracle_prng = jax.random.split(prng_key)
+    env = TwentyQuestionsPolicyEnvironment(
+        oracle=T5Oracle.load_oracle(
+            mesh=mesh,
+            prng_key=oracle_prng,
+            model_load_mode=oracle_model_mode,
+            model_load_path=oracle_model_path,
+            use_fp16_activations=use_fp16_activations,
+            use_fp16_params=use_fp16_params,
+            max_input_length=124,
+            max_output_length=4,
+        ),
+        word_list=get_default_word_list(),
+        max_conversation_length=20,
+    )
+
+    if env_deterministic:
+        def seed_generator():
+            num_words = len(env.word_list)
+            i = 0
+            while True:
+                yield i
+                i = (i + 1) % num_words
+    else:
+        def seed_generator():
+            random_state = random.Random(seed)
+            while True:
+                yield random_state.getrandbits(64)
+
     data_round = 0
     def ppo_dataset_loader(ppo_inference: GPT2PPOInference, policy: GPT2Policy) -> PPODataset:
         nonlocal data_round
-        raw_results, summary_results = text_env_eval(
+
+        interactions, summary_results = text_env_eval(
             env=env, 
             policy=policy, 
             n_rollouts=n_rollouts, 
             bsize=rollout_bsize, 
+            seed_generator=seed_generator(),
         )
         summary_results = pull_logs(summary_results)
 
         text_trajectory_chains = []
-        for raw_result in raw_results:
+        for interaction in interactions:
             text_trajectory = TextTrajectory(
-                text_history=raw_result[-1].post_transition_history, 
-                reward=[0.0, raw_result[-1].reward], 
-                done=raw_result[-1].done, 
+                text_history=interaction[-1].post_transition_history, 
+                reward=tuple([transition.reward for transition in interaction]),
+                done=interaction[-1].done, 
             )
             text_trajectory_chains.append(TextTrajectoryChain(text_trajectory, None))
+        
+        conversations = []
+        for word_var, interaction in zip(env.word_list, interactions):
+            final_text_history = interaction[-1].post_transition_history
+            conversation = create_conversation_from_history(word_var, final_text_history, max_conversation_len=20)
+            conversations.append(conversation)
         
         ppo_data, all_kls = ppo_inference.get_ppo_data_from_text_trajectory_chain(
             text_trajectory_chains, 
@@ -337,10 +379,16 @@ def main(
                 pkl.dump(text_trajectory_chains, f)
             # save raw_results
             with open(get_enabled_save_path(
-                os.path.join(data_save_path, 'raw_results.pkl'), 
+                os.path.join(data_save_path, 'interactions.pkl'), 
                 enabled=is_main_process, 
             ), 'wb') as f:
-                pkl.dump(raw_results, f)
+                pkl.dump(interactions, f)
+            # save conversations
+            with open(get_enabled_save_path(
+                os.path.join(data_save_path, 'conversations.json'), 
+                enabled=is_main_process, 
+            ), 'wb') as f:
+                json.dump(interactions, f, indent=2)
             # save summary_results
             with open(get_enabled_save_path(
                 os.path.join(data_save_path, 'summary_results.json'), 

@@ -16,14 +16,14 @@ class Text:
     text: str
     is_action: bool
 
-TextHistory = Tuple[Text]
+TextHistory = Tuple[Text, ...]
 text_history_to_str = lambda text_history: ''.join(map(lambda x: x.text, text_history))
 
 # text trajectory should fit into a single context window, otherwise is truncated
 
 class TextTrajectory(NamedTuple):
     text_history: TextHistory
-    reward: Tuple[float]
+    reward: Tuple[float, ...]
     done: bool
 
     def __post_init__(self):
