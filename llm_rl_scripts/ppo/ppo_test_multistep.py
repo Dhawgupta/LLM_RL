@@ -48,6 +48,8 @@ class MultiStepBitsTestEnv(TextEnv):
                 bits = []
             self.prev_bits = bits
             self.response = self.rng.random() < 0.5
+            if len(bits) != self.n:
+                return text_history+(Text(str(self.response)+'\n', False),), -10.0, False
             return text_history+(Text(str(self.response)+'\n', False),), float(sum(bits) > (self.n // 2))*10.0, False
         else:
             try:
@@ -64,6 +66,8 @@ class MultiStepBitsTestEnv(TextEnv):
                 correct = sum(bits) > (self.n // 2)
             else:
                 raise NotImplementedError
+            if len(bits) != self.n or len(self.prev_bits) != self.n:
+                return text_history, -10.0, True
             return text_history, float(correct)*10.0, True
 
     def reset(self, seed: Optional[int]=None, options: Optional[Dict]=None) -> TextHistory:
@@ -313,8 +317,11 @@ def main(
                 reward=sum([[0.0, item.reward] for item in raw_result], []), 
                 done=raw_result[-1].done, 
             )
-            if TokenTrajectory.from_text_trajectory(text_trajectory, tokenizer).tokens.shape[0] > 1024:
-                import IPython; IPython.embed(); import sys; sys.exit() # TODO: remove this
+            if TokenTrajectory.from_text_trajectory(text_trajectory, tokenizer).tokens.shape[0] >= max_input_length+max_output_length:
+                text_trajectory = text_trajectory._replace(
+                    text_history=text_trajectory.text_history[:2], 
+                    reward=text_trajectory.reward[:2], 
+                )
             text_trajectory_chains.append(TextTrajectoryChain(text_trajectory, None))
         
         ppo_data, all_kls = ppo_inference.get_ppo_data_from_text_trajectory_chain(

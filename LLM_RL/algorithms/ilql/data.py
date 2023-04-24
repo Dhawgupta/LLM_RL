@@ -21,6 +21,10 @@ class ILQLData(NamedTuple):
         blocking_strategy: BlockingStrategy, 
         tokenizer: PreTrainedTokenizerBase, 
     ) -> Dict[str, np.ndarray]:
+        has_next_token = any(map(lambda x: x.next_token_ids is not None, data))
+        assert all(map(lambda x: x.next_token_ids is None, data)) or has_next_token
+        assert all(map(lambda x: x.next_done is None, data)) or has_next_token
+
         return dict(
             input_ids=block_sequences(
                 list(map(lambda x: x.input_ids, data)), 
@@ -46,8 +50,8 @@ class ILQLData(NamedTuple):
                 tokenizer.pad_token_id, 
                 dtype=np.int32, 
                 blocking_strategy=blocking_strategy, 
-            ), 
-            next_dones=np.asarray(list(map(lambda x: x.next_done, data)), dtype=np.bool_), 
+            ) if has_next_token else None, 
+            next_dones=np.asarray(list(map(lambda x: x.next_done, data)), dtype=np.bool_) if has_next_token else None, 
         )
     
     @classmethod
@@ -86,8 +90,10 @@ class ILQLDataset(Dataset):
         assert input_ids.shape[0] == should_take_action.shape[0]
         assert input_ids.shape[0] == rewards.shape[0]
         assert input_ids.shape[0] == dones.shape[0]
-        assert input_ids.shape[0] == next_token_ids.shape[0]
-        assert input_ids.shape[0] == next_dones.shape[0]
+        if next_token_ids is not None:
+            assert input_ids.shape[0] == next_token_ids.shape[0]
+        if next_dones is not None:
+            assert input_ids.shape[0] == next_dones.shape[0]
 
         self.input_ids = input_ids
         self.should_take_action = should_take_action
@@ -102,8 +108,8 @@ class ILQLDataset(Dataset):
             'should_take_action': jnp.asarray(self.should_take_action[index], dtype=jnp.bool_), 
             'rewards': jnp.asarray(self.rewards[index], dtype=jnp.float32), 
             'dones': jnp.asarray(self.dones[index], dtype=jnp.float32), 
-            'next_token_ids': jnp.asarray(self.next_token_ids[index], dtype=jnp.float32), 
-            'next_dones': jnp.asarray(self.next_dones[index], dtype=jnp.float32), 
+            'next_token_ids': jnp.asarray(self.next_token_ids[index], dtype=jnp.float32) if self.next_token_ids is not None else None, 
+            'next_dones': jnp.asarray(self.next_dones[index], dtype=jnp.float32) if self.next_dones is not None else None, 
         }
     
     def __len__(self):
@@ -112,12 +118,12 @@ class ILQLDataset(Dataset):
     @classmethod
     def from_ilql_data_list(
         cls, 
-        ppo_data_list: List[ILQLData], 
+        ilql_data_list: List[ILQLData], 
         tokenizer: PreTrainedTokenizerBase, 
         blocking_strategy: BlockingStrategy, 
     ) -> ILQLDataset:
         
-        data = ILQLData.block(ppo_data_list, blocking_strategy, tokenizer)
+        data = ILQLData.block(ilql_data_list, blocking_strategy, tokenizer)
 
         return cls(**data)
 
@@ -132,8 +138,8 @@ class _ILQLIteratorDataset:
             'should_take_action': jnp.asarray(item['should_take_action'], dtype=jnp.bool_), 
             'rewards': jnp.asarray(item['rewards'], dtype=jnp.float32), 
             'dones': jnp.asarray(item['dones'], dtype=jnp.float32), 
-            'next_token_ids': jnp.asarray(item['next_token_ids'], dtype=jnp.float32), 
-            'next_dones': jnp.asarray(item['next_dones'], dtype=jnp.float32), 
+            'next_token_ids': jnp.asarray(item['next_token_ids'], dtype=jnp.float32) if item['next_token_ids'] is not None else None, 
+            'next_dones': jnp.asarray(item['next_dones'], dtype=jnp.float32) if item['next_dones'] is not None else None, 
         }
 
 class ILQLIterableDataset(IterableDataset):
@@ -146,14 +152,14 @@ class ILQLIterableDataset(IterableDataset):
     @classmethod
     def from_ilql_data_iterable(
         cls, 
-        ppo_data: Iterable[ILQLData], 
+        ilql_data: Iterable[ILQLData], 
         tokenizer: PreTrainedTokenizerBase, 
         blocking_strategy: BlockingStrategy, 
     ) -> ILQLIterableDataset:
         
         class _TokensIterable(Iterable):
             def _tokens_generator(self):
-                for item in ppo_data:
+                for item in ilql_data:
                     yield jax.tree_util.tree_map(lambda x: x[0], ILQLData.block([item], blocking_strategy, tokenizer))
 
             def __iter__(self):

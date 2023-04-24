@@ -19,9 +19,9 @@ conda activate LLM_RL
 export GCLOUD_PROJECT="rail-tpus"
 export GCLOUD_TOKEN_PATH=${HOME}/.config/gcloud/rail-tpus.json
 
-python -m llm_rl_scripts.ppo.generate_test_data_multichain \
-    --n 10 \
-    --output_path data/test_ppo/10bit_data_multichain.jsonl \
+# python -m llm_rl_scripts.ppo.generate_test_data_multichain \
+#     --n 10 \
+#     --output_path data/test_ppo/10bit_data_multichain.jsonl \
 
 # python -m examples_jaxseq.misc.export_checkpoint \
 #     gcs://rail-tpus-csnell-us/LLM_RL_outputs/ppo_test_multistep2/exp.2023-04-22-21-52-41.254.015006f2e15811ed89e155792b4c6f0d/best/ \
@@ -32,7 +32,7 @@ python -m llm_rl_scripts.ppo.generate_test_data_multichain \
 #     --host 0.0.0.0 \
 #     --port 8099 \
 
-CUDA_VISIBLE_DEVICES=1 python -m llm_rl_scripts.ppo.ppo_test_multistep \
+CUDA_VISIBLE_DEVICES=5 python -m llm_rl_scripts.ppo.ppo_test_multistep \
     PARAMS \
     gcs://rail-tpus-csnell-us/LLM_RL_outputs/ppo_test_multistep2/exp.2023-04-22-21-52-41.254.015006f2e15811ed89e155792b4c6f0d/best \
     --exp-name None \

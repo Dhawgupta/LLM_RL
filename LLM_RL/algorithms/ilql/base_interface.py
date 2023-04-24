@@ -238,7 +238,7 @@ class ILQLSimpleForwardOutput(NamedTuple):
     q2: jax.Array
     v: jax.Array
 
-class ILQLInferenceSimple(Inference):
+class ILQLInferenceSimple(struct.PyTreeNode):
     pi_beta_params: Optional[PyTree]
     base_params: PyTree
     q1_head_params: PyTree
@@ -313,6 +313,39 @@ class ILQLInferenceSimple(Inference):
             trace, 
         )
     
+    def generate_from_str(
+        self, 
+        input_strs: List[str], 
+        prng_key: Optional[jax.random.PRNGKeyArray], 
+        blocking_strategy: BlockingStrategy=BlockingStrategy(padding=Padding.LEFT, truncation=Truncation.LEFT, max_length=None), 
+        generation_config: Optional[GenerationConfig]=None, 
+        input_token_process: Optional[Callable[[List[int]], List[int]]]=None, 
+        target_token_process: Optional[Callable[[List[int]], List[int]]]=None, 
+        trace: bool=True, 
+    ) -> GenerationFromStrOutput:
+        if input_token_process is None:
+            input_token_process = lambda x: x
+        if target_token_process is None:
+            target_token_process = lambda x: x
+        # tokenize
+        tokens = [input_token_process(self.tokenizer.encode(item)) for item in input_strs]
+        tokens = block_sequences(tokens, self.tokenizer.pad_token_id, np.int32, blocking_strategy)
+        # generate
+        outputs = self.generate(
+            jnp.asarray(tokens), 
+            prng_key, 
+            generation_config=generation_config, 
+            trace=trace
+        )
+        # process outputs
+        output_sequences = list(map(target_token_process, outputs.sequences.tolist()))
+        output_scores = None
+        if isinstance(outputs, FlaxBeamSearchOutput):
+            output_scores = np.asarray(outputs.scores)
+        # decode tokens
+        output_strs = self.tokenizer.batch_decode(output_sequences, skip_special_tokens=True)
+        return GenerationFromStrOutput(output_strs, output_scores)
+    
     def forward(
         self, 
         input_ids: jax.Array, 
@@ -341,6 +374,31 @@ class ILQLInferenceSimple(Inference):
             output_attentions, 
             train, 
         )
+    
+    def forward_from_str(
+        self, 
+        input_strs: List[str], 
+        blocking_strategy: BlockingStrategy=BlockingStrategy(padding=Padding.RIGHT, truncation=Truncation.RIGHT, max_length=None), 
+        output_attentions: Optional[bool]=None, 
+        output_hidden_states: Optional[bool]=None, 
+        train: bool=False, 
+        prng_key: Optional[jax.random.PRNGKeyArray]=None, 
+        input_token_process: Optional[Callable[[List[int]], List[int]]]=None, 
+    ) -> FlaxCausalLMOutput:
+        if input_token_process is None:
+            input_token_process = lambda x: x
+        # tokenize
+        tokens = [input_token_process(self.tokenizer.encode(item)) for item in input_strs]
+        tokens = block_sequences(tokens, self.tokenizer.pad_token_id, np.int32, blocking_strategy)
+        # forward
+        outputs = self.forward(
+            jnp.asarray(tokens), 
+            output_attentions=output_attentions, 
+            output_hidden_states=output_hidden_states, 
+            train=train, 
+            prng_key=prng_key, 
+        )
+        return outputs
 
 class ILQLFullForwardOutput(NamedTuple):
     base_raw_output: FlaxCausalLMOutput
@@ -351,7 +409,7 @@ class ILQLFullForwardOutput(NamedTuple):
     q1_target: jax.Array
     q2_target: jax.Array
 
-class ILQLInferenceFull(Inference):
+class ILQLInferenceFull(struct.PyTreeNode):
     pi_beta_params: Optional[PyTree]
     base_params: PyTree
     target_base_params: Optional[PyTree]
@@ -461,6 +519,39 @@ class ILQLInferenceFull(Inference):
             trace, 
         )
     
+    def generate_from_str(
+        self, 
+        input_strs: List[str], 
+        prng_key: Optional[jax.random.PRNGKeyArray], 
+        blocking_strategy: BlockingStrategy=BlockingStrategy(padding=Padding.LEFT, truncation=Truncation.LEFT, max_length=None), 
+        generation_config: Optional[GenerationConfig]=None, 
+        input_token_process: Optional[Callable[[List[int]], List[int]]]=None, 
+        target_token_process: Optional[Callable[[List[int]], List[int]]]=None, 
+        trace: bool=True, 
+    ) -> GenerationFromStrOutput:
+        if input_token_process is None:
+            input_token_process = lambda x: x
+        if target_token_process is None:
+            target_token_process = lambda x: x
+        # tokenize
+        tokens = [input_token_process(self.tokenizer.encode(item)) for item in input_strs]
+        tokens = block_sequences(tokens, self.tokenizer.pad_token_id, np.int32, blocking_strategy)
+        # generate
+        outputs = self.generate(
+            jnp.asarray(tokens), 
+            prng_key, 
+            generation_config=generation_config, 
+            trace=trace
+        )
+        # process outputs
+        output_sequences = list(map(target_token_process, outputs.sequences.tolist()))
+        output_scores = None
+        if isinstance(outputs, FlaxBeamSearchOutput):
+            output_scores = np.asarray(outputs.scores)
+        # decode tokens
+        output_strs = self.tokenizer.batch_decode(output_sequences, skip_special_tokens=True)
+        return GenerationFromStrOutput(output_strs, output_scores)
+    
     def forward(
         self, 
         input_ids: jax.Array, 
@@ -492,6 +583,31 @@ class ILQLInferenceFull(Inference):
             output_attentions, 
             train, 
         )
+    
+    def forward_from_str(
+        self, 
+        input_strs: List[str], 
+        blocking_strategy: BlockingStrategy=BlockingStrategy(padding=Padding.RIGHT, truncation=Truncation.RIGHT, max_length=None), 
+        output_attentions: Optional[bool]=None, 
+        output_hidden_states: Optional[bool]=None, 
+        train: bool=False, 
+        prng_key: Optional[jax.random.PRNGKeyArray]=None, 
+        input_token_process: Optional[Callable[[List[int]], List[int]]]=None, 
+    ) -> FlaxCausalLMOutput:
+        if input_token_process is None:
+            input_token_process = lambda x: x
+        # tokenize
+        tokens = [input_token_process(self.tokenizer.encode(item)) for item in input_strs]
+        tokens = block_sequences(tokens, self.tokenizer.pad_token_id, np.int32, blocking_strategy)
+        # forward
+        outputs = self.forward(
+            jnp.asarray(tokens), 
+            output_attentions=output_attentions, 
+            output_hidden_states=output_hidden_states, 
+            train=train, 
+            prng_key=prng_key, 
+        )
+        return outputs
     
     def eval_loss(
         self, 

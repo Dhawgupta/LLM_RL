@@ -313,11 +313,8 @@ class CombinedTokenTrajectoryChain(NamedTuple):
             ends_with_state = (not np.any(token_trajectories[i].is_action[1:][max_length:]))
             next_starts_with_action = i < len(token_trajectories)-1 and token_trajectories[i+1].is_action[0]
 
-            try:
-                assert not (ends_with_state and next_starts_with_action), 'trajectory truncation error'
-                assert no_trunc or ends_with_state, 'trajectory truncation error'
-            except Exception as e:
-                import IPython; IPython.embed(); raise e # TODO: remove this
+            assert not (ends_with_state and next_starts_with_action), 'trajectory truncation error'
+            assert no_trunc or ends_with_state, 'trajectory truncation error'
 
         return cls(
             input_tokens=np.concatenate([tt.tokens[:-1][:max_length] for tt in token_trajectories], axis=0), 
