@@ -219,7 +219,7 @@ class ILQLTrain(struct.PyTreeNode):
             next_tokens_position_ids, 
             next_dones, 
             prng_key, 
-            train=train, 
+            train, 
         )
 
         return self.replace(
@@ -661,7 +661,7 @@ class ILQLInferenceFull(struct.PyTreeNode):
             next_tokens_position_ids, 
             next_dones, 
             prng_key, 
-            train=train, 
+            train, 
         )
 
         return loss, logs
