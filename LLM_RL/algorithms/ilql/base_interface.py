@@ -19,6 +19,7 @@ import numpy as np
 from JaxSeq.utils import block_sequences, BlockingStrategy, Padding, Truncation
 from transformers.generation import FlaxBeamSearchOutput, FlaxGreedySearchOutput, FlaxSampleOutput
 from JaxSeq.models.base_interface import GenerationFromStrOutput, Inference
+from LLM_RL.environment import BatchedTextPolicy
 
 # loss function
 
@@ -550,4 +551,8 @@ class ILQLInferenceFull(Inference):
         return loss, logs
     
     def eval_loss_from_str(self, *args, **kwargs):
+        raise NotImplementedError
+
+class ILQLPolicy(BatchedTextPolicy):
+    def set_params(self, policy_params: PyTree) -> None:
         raise NotImplementedError
