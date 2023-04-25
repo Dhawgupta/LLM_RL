@@ -42,7 +42,7 @@ CUDA_VISIBLE_DEVICES=5 python -m llm_rl_scripts.ppo.ppo_test_multistep \
     --epochs 4 \
     --log-every 4 \
     --weight-decay 1e-6 \
-    --lr 1e-5 \
+    --lr 6e-5 \
     --use-wandb \
     --wandb-project "rlhf_multistep_binary_test" \
     --save-every-rounds 1 \

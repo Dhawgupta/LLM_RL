@@ -24,7 +24,7 @@ CUDA_VISIBLE_DEVICES=5 python -m llm_rl_scripts.ilql.ilql_test \
     --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/ilql_test/ \
     --train-bsize 32 \
     --eval-every-epochs 1 \
-    --epochs 4 \
+    --epochs 100 \
     --log-every 4 \
     --weight-decay 1e-6 \
     --lr 3e-5 \
