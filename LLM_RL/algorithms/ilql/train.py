@@ -175,6 +175,8 @@ def train_loop(
                 q1_target_head_params=trainer.q1_target_head_params, 
                 q2_target_head_params=trainer.q2_target_head_params, 
             )
+        else:
+            raise NotImplementedError
     
     def _eval(
         **loop_state: Dict[Hashable, Any], 
