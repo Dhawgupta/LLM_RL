@@ -31,7 +31,7 @@ from JaxSeq.logs import label_logs, log, pull_logs
 import json
 from llm_rl_scripts.ppo.ppo_test import BitsTestEnv
 from LLM_RL.heads.mlp_head import load_train_state as load_head_train_state, ModelLoadMode as HeadModelLoadMode
-from JaxSeq.train import train_loop
+from LLM_RL.algorithms.ilql.train import train_loop
 from LLM_RL.algorithms.ilql.data import ILQLData, ILQLDataset, ILQLIterableDataset
 
 def main(
