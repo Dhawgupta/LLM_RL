@@ -79,6 +79,12 @@ def main(
     max_checkpoints: Optional[int]=None, 
     save_train_state: bool=True, 
 
+    policy_do_sample: bool=True, 
+    policy_num_beams: int=1, 
+    policy_temperature: Optional[float]=None, 
+    policy_top_p: Optional[float]=None, 
+    policy_top_k: Optional[int]=None, 
+
     force_pad_embeddings: bool=False, 
 
     should_restore_loop_state: bool=False, 
@@ -178,6 +184,15 @@ def main(
         model=base_model, 
         params=target_base_params, 
     )
+    with jax.default_device(jax.devices('cpu')[0]):
+        pi_beta_params = jax.tree_util.tree_map(
+            lambda x: x.copy(), 
+            base_train_state.params, 
+        )
+    pi_beta_params = shard_params_from_params(
+        model=base_model, 
+        params=pi_beta_params, 
+    )
 
     q1_head_train_state, q_head = load_head_train_state_from_config(
         model_config=MLPHeadConfig(
@@ -274,30 +289,49 @@ def main(
         polyak_alpha=0.005, 
         hard_update_every=None, 
     )
+
+    inference = GPTJInferenceFull.load_inference(
+        pi_beta_params=pi_beta_params, 
+        base_params=base_train_state.params, 
+        target_base_params=target_base_params, 
+        q1_head_params=q1_head_train_state.params, 
+        q2_head_params=q2_head_train_state.params, 
+        v_head_params=v_head_train_state.params, 
+        q1_target_head_params=q1_target_head_params, 
+        q2_target_head_params=q2_target_head_params, 
+        pi_beta_model=base_model, 
+        base_model=base_model, 
+        q_head_model=q_head, 
+        v_head_model=v_head, 
+        tokenizer=tokenizer, 
+        loss_fn=loss_fn, 
+        beta=8.0, 
+        dp_shard_logits=True, 
+    )
     
     env = BitsTestEnv(n=10)
     
-    # policy_prng = jax.random.PRNGKey(0)
-    # policy = GPTJPolicy(
-    #     inference=policy_inference, 
-    #     prng_key=policy_prng, 
-    #     generation_config=GenerationConfig(
-    #         do_sample=policy_do_sample, 
-    #         num_beams=policy_num_beams, 
-    #         temperature=policy_temperature, 
-    #         top_p=policy_top_p, 
-    #         top_k=policy_top_k, 
-    #         eos_token_id=tokenizer.encode('\n')[0], 
-    #         pad_token_id=tokenizer.pad_token_id, 
-    #         max_new_tokens=max_output_length, 
-    #     ), 
-    #     blocking_strategy=BlockingStrategy(
-    #         padding=Padding.LEFT, 
-    #         truncation=Truncation.LEFT, 
-    #         max_length=max_input_length, 
-    #     ), 
-    #     out_str_process=lambda x: x.removesuffix('\n')+'\n', 
-    # )
+    policy_prng = jax.random.PRNGKey(0)
+    policy = GPTJPolicy(
+        inference=inference, 
+        prng_key=policy_prng, 
+        generation_config=GenerationConfig(
+            do_sample=policy_do_sample, 
+            num_beams=policy_num_beams, 
+            temperature=policy_temperature, 
+            top_p=policy_top_p, 
+            top_k=policy_top_k, 
+            eos_token_id=tokenizer.encode('\n')[0], 
+            pad_token_id=tokenizer.pad_token_id, 
+            max_length=max_length, 
+        ), 
+        blocking_strategy=BlockingStrategy(
+            padding=Padding.LEFT, 
+            truncation=Truncation.LEFT, 
+            max_length=max_length, 
+        ), 
+        out_str_process=lambda x: x.removesuffix('\n')+'\n', 
+    )
 
     save_dir, exp_name = setup_experiment_save(
         exp_name=exp_name, 
@@ -306,12 +340,38 @@ def main(
         script__file__=__file__, 
         is_main_process=is_main_process, 
     )
+
+    def evaluate(inference: GPTJInferenceFull):
+        nonlocal policy
+        policy.set_params(
+            (
+                inference.pi_beta_params, 
+                inference.base_params, 
+                inference.target_base_params, 
+                inference.q1_head_params, 
+                inference.q2_head_params, 
+                inference.v_head_params, 
+                inference.q1_target_head_params, 
+                inference.q2_target_head_params, 
+            ), 
+        )
+        raw_results, summary_results = text_env_eval(
+            env=env, 
+            policy=policy, 
+            n_rollouts=32, 
+            bsize=1, 
+        )
+
+        logs = pull_logs(summary_results)
+        log(logs, use_wandb and is_main_process)
+
+        return float('inf'), logs
     
     train_prng = jax.random.PRNGKey(1)
     ppo_trainer, ppo_inference, policy = train_loop(
         trainer=train, 
-        inference=None, 
-        evaluator=None, 
+        inference=inference, 
+        evaluator=evaluate, 
         dataset=dataset, 
         prng_key=train_prng, 
         save_dir=save_dir, 

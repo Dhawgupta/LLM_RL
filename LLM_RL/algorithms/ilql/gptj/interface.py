@@ -1206,4 +1206,28 @@ class GPTJPolicy(ILQLPolicy):
         ]
     
     def set_params(self, policy_params: PyTree) -> None:
-        self.inference = self.inference.replace(params=policy_params)
+        if isinstance(self.inference, ILQLInferenceSimple):
+            pi_beta_params, base_params, q1_head_params, \
+                q2_head_params, v_head_params = policy_params
+            self.inference = self.inference.replace(
+                pi_beta_params=pi_beta_params, 
+                base_params=base_params, 
+                q1_head_params=q1_head_params, 
+                q2_head_params=q2_head_params, 
+                v_head_params=v_head_params, 
+            )
+        elif isinstance(self.inference, ILQLInferenceFull):
+            pi_beta_params, base_params, target_base_params, q1_head_params, \
+                q2_head_params, v_head_params, q1_target_head_params, q2_target_head_params = policy_params
+            self.inference = self.inference.replace(
+                pi_beta_params=pi_beta_params, 
+                base_params=base_params, 
+                target_base_params=target_base_params, 
+                q1_head_params=q1_head_params, 
+                q2_head_params=q2_head_params, 
+                v_head_params=v_head_params, 
+                q1_target_head_params=q1_target_head_params, 
+                q2_target_head_params=q2_target_head_params, 
+            )
+        else:
+            raise NotImplementedError
