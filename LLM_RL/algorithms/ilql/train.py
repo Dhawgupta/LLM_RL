@@ -169,6 +169,7 @@ def train_loop(
         elif isinstance(inference, ILQLInferenceFull):
             inference = inference.replace(
                 base_params=trainer.base_train_state.params, 
+                target_base_params=trainer.target_base_params, 
                 q1_head_params=trainer.q1_head_train_state.params, 
                 q2_head_params=trainer.q2_head_train_state.params, 
                 v_head_params=trainer.v_head_train_state.params, 
