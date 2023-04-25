@@ -157,13 +157,31 @@ def train_loop(
             saved_checkpoints.append(curr_save_dir)
         print('saved.')
     
+    def _inference_update():
+        nonlocal inference
+        if isinstance(inference, ILQLInferenceSimple):
+            inference = inference.replace(
+                base_params=trainer.base_train_state.params, 
+                q1_head_params=trainer.q1_head_train_state.params, 
+                q2_head_params=trainer.q2_head_train_state.params, 
+                v_head_params=trainer.v_head_train_state.params, 
+            )
+        elif isinstance(inference, ILQLInferenceFull):
+            inference = inference.replace(
+                base_params=trainer.base_train_state.params, 
+                q1_head_params=trainer.q1_head_train_state.params, 
+                q2_head_params=trainer.q2_head_train_state.params, 
+                v_head_params=trainer.v_head_train_state.params, 
+                q1_target_params=trainer.q1_target_head_params, 
+                q2_target_params=trainer.q2_target_head_params, 
+            )
+    
     def _eval(
         **loop_state: Dict[Hashable, Any], 
     ):
         nonlocal best_perf
-        nonlocal inference
         # get eval logs
-        inference = inference.replace(params=trainer.train_state.params)
+        _inference_update()
         eval_perf, eval_logs = evaluator(inference)
 
         # publish eval logs
@@ -322,22 +340,5 @@ def train_loop(
     # stop wandb
     if use_wandb and is_main_process:
         wandb.finish()
-    if isinstance(inference, ILQLInferenceSimple):
-        inference = inference.replace(
-            base_params=trainer.base_train_state.params, 
-            q1_head_params=trainer.q1_head_train_state.params, 
-            q2_head_params=trainer.q2_head_train_state.params, 
-            v_head_params=trainer.v_head_train_state.params, 
-        )
-    elif isinstance(inference, ILQLInferenceFull):
-        inference = inference.replace(
-            base_params=trainer.base_train_state.params, 
-            q1_head_params=trainer.q1_head_train_state.params, 
-            q2_head_params=trainer.q2_head_train_state.params, 
-            v_head_params=trainer.v_head_train_state.params, 
-            q1_target_params=trainer.q1_target_head_params, 
-            q2_target_params=trainer.q2_target_head_params, 
-        )
-    else:
-        raise NotImplementedError
+    _inference_update()
     return trainer, inference
