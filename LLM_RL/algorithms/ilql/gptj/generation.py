@@ -11,6 +11,7 @@ from jax import lax
 from transformers.modeling_flax_utils import FlaxPreTrainedModel
 from transformers.configuration_utils import PretrainedConfig
 from JaxSeq.stream_tokens import FlaxStreamGenerationMixin
+from transformers.generation.flax_logits_process import FlaxLogitsProcessorList
 
 @dataclass
 class GPTJILQLGenerationOutput(ModelOutput):
@@ -174,6 +175,14 @@ class CheapGPTJILQLGeneration(FlaxStreamGenerationMixin):
 
     def _validate_model_kwargs(self, model_kwargs: Dict[str, Any]):
         pass
+
+    def _get_logits_processor(self,*args, **kwargs) -> FlaxLogitsProcessorList:
+        processors = FlaxLogitsProcessorList()
+        def squash_extra_tokens(input_ids, scores, cur_len):
+            return scores.at[:, self.config.unpadded_vocab_size:].set(-float('inf'))
+
+        processors.append(squash_extra_tokens)
+        return processors
 
 class FullGPTJILQLGeneration(FlaxStreamGenerationMixin):
     
@@ -351,3 +360,11 @@ class FullGPTJILQLGeneration(FlaxStreamGenerationMixin):
 
     def _validate_model_kwargs(self, model_kwargs: Dict[str, Any]):
         pass
+
+    def _get_logits_processor(self,*args, **kwargs) -> FlaxLogitsProcessorList:
+        processors = FlaxLogitsProcessorList()
+        def squash_extra_tokens(input_ids, scores, cur_len):
+            return scores.at[:, self.config.unpadded_vocab_size:].set(-float('inf'))
+
+        processors.append(squash_extra_tokens)
+        return processors
