@@ -111,7 +111,7 @@ def ilql_loss(
         target_q1=get_tensor_stats(target_q1sa_selected, mask=sa_mask, n=n), 
         target_q2=get_tensor_stats(target_q2sa_selected, mask=sa_mask, n=n), 
         vns=get_tensor_stats(vns_selected, mask=ns_mask, n=n), 
-        final_v=get_tensor_stats(v_final, mask=ns_mask, n=n), 
+        v_final=get_tensor_stats(v_final, mask=jnp.ones(v_final.shape, dtype=jnp.int32), n=v_final.shape[0]), 
         rewards=get_tensor_stats(rewards, mask=sa_mask, n=n), 
     )
 
