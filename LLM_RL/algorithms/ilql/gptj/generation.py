@@ -171,19 +171,8 @@ class CheapGPTJILQLGeneration(FlaxStreamGenerationMixin, FlaxGenerationMixin):
         model_kwargs["position_ids"] = model_kwargs["position_ids"][:, -1:] + 1
         return model_kwargs
     
-    # def _validate_model_class(self):
-    #     pass
-
-    # def _validate_model_kwargs(self, model_kwargs: Dict[str, Any]):
-    #     pass
-
-    # def _get_logits_processor(self,*args, **kwargs) -> FlaxLogitsProcessorList:
-    #     processors = FlaxLogitsProcessorList()
-    #     def squash_extra_tokens(input_ids, scores, cur_len):
-    #         return scores.at[:, self.config.unpadded_vocab_size:].set(-float('inf'))
-
-    #     processors.append(squash_extra_tokens)
-    #     return processors
+    def can_generate(self) -> bool:
+        return True
 
 class FullGPTJILQLGeneration(FlaxStreamGenerationMixin, FlaxGenerationMixin):
     
@@ -356,16 +345,5 @@ class FullGPTJILQLGeneration(FlaxStreamGenerationMixin, FlaxGenerationMixin):
         model_kwargs["position_ids"] = model_kwargs["position_ids"][:, -1:] + 1
         return model_kwargs
     
-    # def _validate_model_class(self):
-    #     pass
-
-    # def _validate_model_kwargs(self, model_kwargs: Dict[str, Any]):
-    #     pass
-
-    # def _get_logits_processor(self,*args, **kwargs) -> FlaxLogitsProcessorList:
-    #     processors = FlaxLogitsProcessorList()
-    #     def squash_extra_tokens(input_ids, scores, cur_len):
-    #         return scores.at[:, self.config.unpadded_vocab_size:].set(-float('inf'))
-
-    #     processors.append(squash_extra_tokens)
-    #     return processors
+    def can_generate(self) -> bool:
+        return True
