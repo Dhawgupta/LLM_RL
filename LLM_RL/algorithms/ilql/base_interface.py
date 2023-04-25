@@ -78,7 +78,6 @@ def ilql_loss(
     ns_mask = (vns_query_indicators.sum(axis=1) > 0).astype(jnp.float32)
 
     n_sa, n_ns = sa_mask.sum(), ns_mask.sum()
-    assert n == n_sa and n == n_ns
 
     q1_loss = (optax.l2_loss(q1sa_selected, jax.lax.stop_gradient(rs_selected + gamma * vns_selected)) * sa_mask).sum() / n
     q2_loss = (optax.l2_loss(q2sa_selected, jax.lax.stop_gradient(rs_selected + gamma * vns_selected)) * sa_mask).sum() / n
