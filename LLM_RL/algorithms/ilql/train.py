@@ -159,6 +159,7 @@ def train_loop(
     
     def _inference_update():
         nonlocal inference
+        import IPython; IPython.embed()
         if isinstance(inference, ILQLInferenceSimple):
             inference = inference.replace(
                 base_params=trainer.base_train_state.params, 

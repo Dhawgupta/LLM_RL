@@ -42,13 +42,13 @@ CUDA_VISIBLE_DEVICES=5 python -m llm_rl_scripts.ppo.ppo_test_multistep \
     --epochs 4 \
     --log-every 4 \
     --weight-decay 1e-6 \
-    --lr 3e-5 \
+    --lr 1e-5 \
     --use-wandb \
     --wandb-project "rlhf_multistep_binary_test" \
     --save-every-rounds 1 \
     --init-kl-coef 0.001 \
-    --kl-target 0.1 \
-    --kl-horizon 10000 \
+    # --kl-target 0.1 \
+    # --kl-horizon 10000 \
 
 # 4/22/2023
 
