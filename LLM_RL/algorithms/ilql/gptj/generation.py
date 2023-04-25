@@ -12,13 +12,14 @@ from transformers.modeling_flax_utils import FlaxPreTrainedModel
 from transformers.configuration_utils import PretrainedConfig
 from JaxSeq.stream_tokens import FlaxStreamGenerationMixin
 from transformers.generation.flax_logits_process import FlaxLogitsProcessorList
+from transformers.generation import FlaxGenerationMixin
 
 @dataclass
 class GPTJILQLGenerationOutput(ModelOutput):
     logits: jnp.ndarray = None
     past_key_values: Optional[Tuple[Tuple[Tuple[jnp.ndarray]]]] = None
 
-class CheapGPTJILQLGeneration(FlaxStreamGenerationMixin):
+class CheapGPTJILQLGeneration(FlaxStreamGenerationMixin, FlaxGenerationMixin):
     
     def __init__(
         self, 
@@ -170,21 +171,21 @@ class CheapGPTJILQLGeneration(FlaxStreamGenerationMixin):
         model_kwargs["position_ids"] = model_kwargs["position_ids"][:, -1:] + 1
         return model_kwargs
     
-    def _validate_model_class(self):
-        pass
+    # def _validate_model_class(self):
+    #     pass
 
-    def _validate_model_kwargs(self, model_kwargs: Dict[str, Any]):
-        pass
+    # def _validate_model_kwargs(self, model_kwargs: Dict[str, Any]):
+    #     pass
 
-    def _get_logits_processor(self,*args, **kwargs) -> FlaxLogitsProcessorList:
-        processors = FlaxLogitsProcessorList()
-        def squash_extra_tokens(input_ids, scores, cur_len):
-            return scores.at[:, self.config.unpadded_vocab_size:].set(-float('inf'))
+    # def _get_logits_processor(self,*args, **kwargs) -> FlaxLogitsProcessorList:
+    #     processors = FlaxLogitsProcessorList()
+    #     def squash_extra_tokens(input_ids, scores, cur_len):
+    #         return scores.at[:, self.config.unpadded_vocab_size:].set(-float('inf'))
 
-        processors.append(squash_extra_tokens)
-        return processors
+    #     processors.append(squash_extra_tokens)
+    #     return processors
 
-class FullGPTJILQLGeneration(FlaxStreamGenerationMixin):
+class FullGPTJILQLGeneration(FlaxStreamGenerationMixin, FlaxGenerationMixin):
     
     def __init__(
         self, 
@@ -355,16 +356,16 @@ class FullGPTJILQLGeneration(FlaxStreamGenerationMixin):
         model_kwargs["position_ids"] = model_kwargs["position_ids"][:, -1:] + 1
         return model_kwargs
     
-    def _validate_model_class(self):
-        pass
+    # def _validate_model_class(self):
+    #     pass
 
-    def _validate_model_kwargs(self, model_kwargs: Dict[str, Any]):
-        pass
+    # def _validate_model_kwargs(self, model_kwargs: Dict[str, Any]):
+    #     pass
 
-    def _get_logits_processor(self,*args, **kwargs) -> FlaxLogitsProcessorList:
-        processors = FlaxLogitsProcessorList()
-        def squash_extra_tokens(input_ids, scores, cur_len):
-            return scores.at[:, self.config.unpadded_vocab_size:].set(-float('inf'))
+    # def _get_logits_processor(self,*args, **kwargs) -> FlaxLogitsProcessorList:
+    #     processors = FlaxLogitsProcessorList()
+    #     def squash_extra_tokens(input_ids, scores, cur_len):
+    #         return scores.at[:, self.config.unpadded_vocab_size:].set(-float('inf'))
 
-        processors.append(squash_extra_tokens)
-        return processors
+    #     processors.append(squash_extra_tokens)
+    #     return processors
