@@ -336,12 +336,12 @@ def main(
                 top_k=policy_top_k, 
                 eos_token_id=tokenizer.encode('\n')[0], 
                 pad_token_id=tokenizer.pad_token_id, 
-                max_length=policy_max_input_length, 
+                max_new_tokens=policy_max_output_length, 
             ), 
             blocking_strategy=BlockingStrategy(
                 padding=Padding.LEFT, 
                 truncation=Truncation.LEFT, 
-                new_tokens=policy_max_output_length, 
+                max_length=policy_max_input_length, 
             ), 
             out_str_process=lambda x: x.removesuffix('\n')+'\n', 
         )
