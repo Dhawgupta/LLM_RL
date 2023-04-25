@@ -172,8 +172,8 @@ def train_loop(
                 q1_head_params=trainer.q1_head_train_state.params, 
                 q2_head_params=trainer.q2_head_train_state.params, 
                 v_head_params=trainer.v_head_train_state.params, 
-                q1_target_params=trainer.q1_target_head_params, 
-                q2_target_params=trainer.q2_target_head_params, 
+                q1_target_head_params=trainer.q1_target_head_params, 
+                q2_target_head_params=trainer.q2_target_head_params, 
             )
     
     def _eval(
