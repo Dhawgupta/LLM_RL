@@ -168,6 +168,9 @@ class CheapGPTJILQLGeneration(FlaxStreamGenerationMixin):
         model_kwargs["past_key_values"] = model_outputs.past_key_values
         model_kwargs["position_ids"] = model_kwargs["position_ids"][:, -1:] + 1
         return model_kwargs
+    
+    def _validate_model_class(self):
+        pass
 
 class FullGPTJILQLGeneration(FlaxStreamGenerationMixin):
     
@@ -339,3 +342,6 @@ class FullGPTJILQLGeneration(FlaxStreamGenerationMixin):
         model_kwargs["past_key_values"] = model_outputs.past_key_values
         model_kwargs["position_ids"] = model_kwargs["position_ids"][:, -1:] + 1
         return model_kwargs
+    
+    def _validate_model_class(self):
+        pass
