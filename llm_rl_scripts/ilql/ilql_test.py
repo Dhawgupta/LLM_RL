@@ -310,28 +310,6 @@ def main(
     )
     
     env = BitsTestEnv(n=10)
-    
-    policy_prng = jax.random.PRNGKey(0)
-    policy = GPTJPolicy(
-        inference=inference, 
-        prng_key=policy_prng, 
-        generation_config=GenerationConfig(
-            do_sample=policy_do_sample, 
-            num_beams=policy_num_beams, 
-            temperature=policy_temperature, 
-            top_p=policy_top_p, 
-            top_k=policy_top_k, 
-            eos_token_id=tokenizer.encode('\n')[0], 
-            pad_token_id=tokenizer.pad_token_id, 
-            max_length=max_length, 
-        ), 
-        blocking_strategy=BlockingStrategy(
-            padding=Padding.LEFT, 
-            truncation=Truncation.LEFT, 
-            max_length=max_length, 
-        ), 
-        out_str_process=lambda x: x.removesuffix('\n')+'\n', 
-    )
 
     save_dir, exp_name = setup_experiment_save(
         exp_name=exp_name, 
@@ -341,20 +319,31 @@ def main(
         is_main_process=is_main_process, 
     )
 
+    policy_prng = jax.random.PRNGKey(0)
     def evaluate(inference: GPTJInferenceFull):
-        nonlocal policy
-        policy.set_params(
-            (
-                inference.pi_beta_params, 
-                inference.base_params, 
-                inference.target_base_params, 
-                inference.q1_head_params, 
-                inference.q2_head_params, 
-                inference.v_head_params, 
-                inference.q1_target_head_params, 
-                inference.q2_target_head_params, 
+        nonlocal policy_prng
+        policy_prng, new_key = jax.random.split(policy_prng)
+        policy = GPTJPolicy(
+            inference=inference, 
+            prng_key=new_key, 
+            generation_config=GenerationConfig(
+                do_sample=policy_do_sample, 
+                num_beams=policy_num_beams, 
+                temperature=policy_temperature, 
+                top_p=policy_top_p, 
+                top_k=policy_top_k, 
+                eos_token_id=tokenizer.encode('\n')[0], 
+                pad_token_id=tokenizer.pad_token_id, 
+                max_length=max_length, 
             ), 
+            blocking_strategy=BlockingStrategy(
+                padding=Padding.LEFT, 
+                truncation=Truncation.LEFT, 
+                max_length=max_length, 
+            ), 
+            out_str_process=lambda x: x.removesuffix('\n')+'\n', 
         )
+
         raw_results, summary_results = text_env_eval(
             env=env, 
             policy=policy, 
