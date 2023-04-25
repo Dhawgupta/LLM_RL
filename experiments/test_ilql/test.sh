@@ -27,7 +27,7 @@ CUDA_VISIBLE_DEVICES=5 python -m llm_rl_scripts.ilql.ilql_test \
     --epochs 100 \
     --log-every 4 \
     --weight-decay 1e-6 \
-    --lr 3e-5 \
+    --lr 3e-4 \
     --use-wandb \
     --wandb-project "ilql_binary_test" \
 
