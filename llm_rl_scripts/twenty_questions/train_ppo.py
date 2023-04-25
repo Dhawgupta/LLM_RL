@@ -22,7 +22,7 @@ from JaxSeq.models.gpt2.interface import GPT2Train, GPT2Inference
 from JaxSeq.models.gpt2.load import load_train_state, ModelLoadMode
 from JaxSeq.shard_model import shard_params_from_params
 from JaxSeq.utils import BlockingStrategy, Padding, Truncation, uuid_name, jsonl_load, get_weight_decay_mask, create_path, get_enabled_save_path
-from JaxSeq.utils import jsonl_stream, convert_path, load_mesh, get_dtype, setup_experiment_save
+from JaxSeq.utils import jsonl_stream, convert_path, load_mesh, get_dtype, setup_experiment_save, multihost_device_get
 from LLM_RL.algorithms.ppo.base_interface import ppo_loss_fn, FixedKLController, AdaptiveKLController
 from LLM_RL.algorithms.ppo.gpt2.interface import GPT2Policy, GPT2PPOInference, GPT2PPOTrain
 from LLM_RL.algorithms.ppo.train import train_loop
@@ -69,7 +69,6 @@ def main(
     ppo_data_bsize: int=32, 
 
     env_deterministic: bool=False,
-    env_verbose: bool=False,
     oracle_model_mode: T5OracleModelLoadMode=T5OracleModelLoadMode.PARAMS,
     oracle_model_path: str="gcs://rail-tpus-charles-3/JaxSeq/outputs/twenty_questions/flan-t5-xl_oracle_lr1e-5_test1/model_2.pkl",
 
@@ -175,13 +174,13 @@ def main(
         params_dtype=params_dtype, 
     )
     with jax.default_device(jax.devices('cpu')[0]):
-        initital_policy_params = jax.tree_util.tree_map(
-            lambda x: x.copy(), 
+        initial_policy_params = jax.tree_util.tree_map(
+            lambda x: multihost_device_get(x.copy(), mesh=mesh), 
             policy_train_state.params, 
         )
-    initital_policy_params = shard_params_from_params(
+    initial_policy_params = shard_params_from_params(
         model=policy_model, 
-        params=initital_policy_params, 
+        params=initial_policy_params, 
     )
 
     loop_state = dict()
@@ -253,7 +252,7 @@ def main(
     loss_f = partial(ppo_loss_fn, cliprange_value=cliprange_value, cliprange=cliprange, value_loss_coef=value_loss_coef)
 
     ppo_inference = GPT2PPOInference.load_inference(
-        initial_policy_params=initital_policy_params, 
+        initial_policy_params=initial_policy_params, 
         policy_params=policy_train_state.params, 
         value_head_params=value_head_train_state.params, 
         initial_policy_model=policy_model, 
@@ -277,6 +276,7 @@ def main(
     else:
         kl_controller = FixedKLController(kl_coef=init_kl_coef)
 
+    print("loading environment")
     prng_key, oracle_prng = jax.random.split(prng_key)
     env = TwentyQuestionsPolicyEnvironment(
         oracle=T5Oracle.load_oracle(
@@ -316,14 +316,19 @@ def main(
             n_rollouts=n_rollouts, 
             bsize=rollout_bsize, 
             seed_generator=seed_generator(),
+            env_options={"deterministic": env_deterministic},
         )
         summary_results = pull_logs(summary_results)
 
         text_trajectory_chains = []
         for interaction in interactions:
+            reward = [0.0]
+            for transition in interaction:
+                reward.append(transition.reward)
+                reward.append(0.0)
             text_trajectory = TextTrajectory(
                 text_history=interaction[-1].post_transition_history, 
-                reward=tuple([transition.reward for transition in interaction]),
+                reward=tuple(reward),
                 done=interaction[-1].done, 
             )
             text_trajectory_chains.append(TextTrajectoryChain(text_trajectory, None))
@@ -413,7 +418,7 @@ def main(
         is_main_process=is_main_process, 
     )
     
-    train_prng = jax.random.PRNGKey(1)
+    prng_key, train_prng = jax.random.split(prng_key)
     ppo_trainer, ppo_inference, policy = train_loop(
         trainer=ppo_trainer, 
         inference=ppo_inference, 

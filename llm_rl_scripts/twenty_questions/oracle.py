@@ -109,7 +109,8 @@ class T5Oracle(TwentyQuestionsOracle):
             top_p=None, 
             top_k=None, 
             eos_token_id=tokenizer.encode('\n')[0], 
-            pad_token_id=tokenizer.pad_token_id, 
+            pad_token_id=tokenizer.pad_token_id,
+            decoder_start_token_id=model.config.decoder_start_token_id,
             max_new_tokens=max_output_length, 
         )
         

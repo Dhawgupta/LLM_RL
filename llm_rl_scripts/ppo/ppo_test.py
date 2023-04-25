@@ -2,7 +2,7 @@ from typing import Optional, Dict, Any, Tuple
 import tyro
 from JaxSeq.bucket_manager import open_with_bucket as open
 from transformers import AutoTokenizer
-from JaxSeq.utils import jsonl_stream, convert_path, load_mesh, get_dtype, setup_experiment_save
+from JaxSeq.utils import jsonl_stream, convert_path, load_mesh, get_dtype, setup_experiment_save, multihost_device_get
 import jax
 import jax.numpy as jnp
 from JaxSeq.utils import BlockingStrategy, Padding, Truncation, uuid_name, jsonl_load, get_weight_decay_mask, create_path, get_enabled_save_path

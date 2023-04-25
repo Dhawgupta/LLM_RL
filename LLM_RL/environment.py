@@ -21,14 +21,15 @@ text_history_to_str = lambda text_history: ''.join(map(lambda x: x.text, text_hi
 
 # text trajectory should fit into a single context window, otherwise is truncated
 
-class TextTrajectory(NamedTuple):
+@dataclass(frozen=True)
+class TextTrajectory:
     text_history: TextHistory
     reward: Tuple[float, ...]
     done: bool
 
     def __post_init__(self):
-        assert len(self.reward) == len(self.text_history) # reward for each text
-        assert all([r == 0.0 for r, t in zip(self.reward, self.text_history) if not t.is_action]) # reward for non-actions texts is 0.0
+        assert len(self.reward) == len(self.text_history), "reward is needed for each text"
+        assert all([r == 0.0 for r, t in zip(self.reward, self.text_history) if not t.is_action]), "reward for non-actions texts should be 0.0"
 
 # text trajectory chain is a linked list of text trajectories
 
@@ -276,7 +277,8 @@ class UserPolicy(TextPolicy):
 """tokenize environment objects"""
 
 
-class TokenHistory(NamedTuple):
+@dataclass(frozen=True)
+class TokenHistory:
     tokens: np.ndarray # 1d int32 array
     is_action: np.ndarray # 1d bool array
 
@@ -310,7 +312,8 @@ class TokenHistory(NamedTuple):
             np.array(is_action, dtype=np.bool_), 
         )
 
-class TokenTrajectory(NamedTuple):
+@dataclass(frozen=True)
+class TokenTrajectory:
     tokens: np.ndarray # 1d int32 array
     is_action: np.ndarray # 1d bool array
     reward: np.ndarray # 1d float32 array
@@ -358,7 +361,8 @@ class TokenTrajectory(NamedTuple):
             np.array(done, dtype=np.bool_), 
         )
 
-class TokenTrajectoryChain(NamedTuple):
+@dataclass(frozen=True)
+class TokenTrajectoryChain:
     token_trajectory: TokenTrajectory
     next: Optional[TokenTrajectoryChain]
 

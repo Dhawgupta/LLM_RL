@@ -2,7 +2,7 @@ from typing import Optional, Dict, Any, Tuple
 import tyro
 from JaxSeq.bucket_manager import open_with_bucket as open
 from transformers import AutoTokenizer
-from JaxSeq.utils import jsonl_stream, convert_path, load_mesh, get_dtype, setup_experiment_save
+from JaxSeq.utils import jsonl_stream, convert_path, load_mesh, get_dtype, setup_experiment_save, multihost_device_get
 import jax
 import jax.numpy as jnp
 from JaxSeq.utils import BlockingStrategy, Padding, Truncation, uuid_name, jsonl_load, get_weight_decay_mask, create_path, get_enabled_save_path
@@ -14,7 +14,6 @@ import pickle as pkl
 from JaxSeq.data import Seq2SeqDataset
 from LLM_RL.algorithms.ppo.train import train_loop
 from LLM_RL.algorithms.ppo.base_interface import ppo_loss_fn, FixedKLController, AdaptiveKLController
-from JaxSeq.generation_eval import generate_language, compute_metrics
 from transformers.generation import GenerationConfig
 from jaxtyping import PyTree
 import re
@@ -23,7 +22,6 @@ from LLM_RL.algorithms.ppo.gpt2.interface import GPT2Policy, GPT2PPOInference, G
 from LLM_RL.heads.linear_head import load_train_state_from_config as load_head_train_state_from_config
 from LLM_RL.heads.linear_head import LinearHeadConfig
 from JaxSeq.shard_model import shard_params_from_params
-from flax.training.train_state import TrainState
 from LLM_RL.algorithms.ppo.data import PPODataset, PPOIterableDataset
 from LLM_RL.utils import get_tensor_stats_np
 from functools import partial
@@ -76,6 +74,8 @@ def main(
 
     gradient_checkpoint: bool=False, 
     fsdp: bool=False, 
+    use_fp16_activations: bool=True,
+    use_fp16_params: bool=True,
 
     max_input_length: int=512, 
     max_output_length: int=512, 
@@ -119,7 +119,7 @@ def main(
 
     should_restore_loop_state: bool=False, 
 ):
-    input_args = locals()
+    input_args = locals().copy()
     print(input_args)
 
     use_adaptive_kl = (kl_target is not None and kl_horizon is not None)
@@ -153,12 +153,15 @@ def main(
             ), 
             every_k_schedule=grad_accum_steps, 
         )
+    
+    model_dtype = get_dtype(use_fp16=use_fp16_activations)
+    params_dtype = get_dtype(use_fp16=use_fp16_params)
 
     model_prng_key = jax.random.PRNGKey(2)
     policy_train_state, policy_model = load_train_state(
         model_load_mode=model_load_mode, 
         model_load_path=convert_path(model_load_path) if model_load_mode != ModelLoadMode.HF else model_load_path, 
-        model_dtype=jnp.float32, 
+        model_dtype=model_dtype, 
         optim_getter=policy_optim_getter, 
         tokenizer=tokenizer, 
         mesh=mesh, 
@@ -166,16 +169,16 @@ def main(
         force_pad_embeddings=force_pad_embeddings, 
         gradient_checkpoint=gradient_checkpoint, 
         fsdp=fsdp, 
-        params_dtype=jnp.float32, 
+        params_dtype=params_dtype, 
     )
     with jax.default_device(jax.devices('cpu')[0]):
-        initital_policy_params = jax.tree_util.tree_map(
+        initial_policy_params = jax.tree_util.tree_map(
             lambda x: multihost_device_get(x, mesh=mesh).copy(), 
             policy_train_state.params, 
         )
-    initital_policy_params = shard_params_from_params(
+    initial_policy_params = shard_params_from_params(
         model=policy_model, 
-        params=initital_policy_params, 
+        params=initial_policy_params, 
     )
 
     loop_state = dict()
@@ -249,7 +252,7 @@ def main(
     loss_f = partial(ppo_loss_fn, cliprange_value=cliprange_value, cliprange=cliprange, value_loss_coef=value_loss_coef)
 
     ppo_inference = GPT2PPOInference.load_inference(
-        initial_policy_params=initital_policy_params, 
+        initial_policy_params=initial_policy_params, 
         policy_params=policy_train_state.params, 
         value_head_params=value_head_train_state.params, 
         initial_policy_model=policy_model, 
@@ -288,7 +291,7 @@ def main(
         for raw_result in raw_results:
             text_trajectory = TextTrajectory(
                 text_history=raw_result[-1].post_transition_history, 
-                reward=[0.0, raw_result[-1].reward], 
+                reward=(0.0, raw_result[-1].reward), 
                 done=raw_result[-1].done, 
             )
             text_trajectory_chains.append(TextTrajectoryChain(text_trajectory, None))

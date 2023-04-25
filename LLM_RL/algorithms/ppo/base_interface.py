@@ -14,7 +14,7 @@ from transformers.tokenization_utils import PreTrainedTokenizerBase
 from JaxSeq.utils import with_named_sharding_constraint, match_partition_rules, BlockingStrategy, block_sequences, Padding, Truncation, multihost_device_get
 from optax import softmax_cross_entropy_with_integer_labels
 from flax.training.train_state import TrainState
-from transformers.modeling_flax_outputs import FlaxCausalLMOutput
+from transformers.modeling_flax_outputs import FlaxCausalLMOutput, FlaxCausalLMOutputWithCrossAttentions
 from transformers.generation import FlaxBeamSearchOutput, FlaxGreedySearchOutput, FlaxSampleOutput
 from flax.core import FrozenDict, freeze
 import flax.linen as nn
@@ -333,8 +333,8 @@ class CombinedTokenTrajectoryChain(NamedTuple):
         return np.split(arr, np.cumsum(self.chunk_lens)[:-1], axis=0)
 
 class PPOForwardOutput(NamedTuple):
-    initial_policy_raw_output: FlaxCausalLMOutput
-    policy_raw_output: FlaxCausalLMOutput
+    initial_policy_raw_output: Union[FlaxCausalLMOutput, FlaxCausalLMOutputWithCrossAttentions]
+    policy_raw_output: Union[FlaxCausalLMOutput, FlaxCausalLMOutputWithCrossAttentions]
     values: jax.Array
 
 class PPOInference(struct.PyTreeNode):
