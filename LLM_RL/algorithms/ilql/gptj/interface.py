@@ -278,8 +278,8 @@ class GPTJILQLTrain(ILQLTrain):
                     last_action_idxs = (should_take_action.shape[1]-1)-jnp.argmax(jnp.flip(should_take_action, axis=1).astype(jnp.int32), axis=1)+1
                     last_token_idxs = (attention_mask.shape[1]-1)-jnp.argmax(jnp.flip(attention_mask, axis=1).astype(jnp.int32), axis=1)
                     final_state_idxs = ((1 - dones) * last_action_idxs + dones * last_token_idxs).astype(jnp.int32)
-                    final_v = v_full[jnp.arange(0, should_take_action.shape[0], dtype=jnp.int32), final_state_idxs]
-                    final_v = final_v * (1 - dones)
+                    v_final = v_full[jnp.arange(0, should_take_action.shape[0], dtype=jnp.int32), final_state_idxs]
+                    v_final = v_final * (1 - dones)
                 v_final = jax.lax.stop_gradient(v_final)
 
                 loss, info = loss_fn(
