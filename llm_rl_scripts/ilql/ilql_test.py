@@ -17,7 +17,7 @@ from JaxSeq.generation_eval import generate_language, compute_metrics
 from transformers.generation import GenerationConfig
 from jaxtyping import PyTree
 import re
-from LLM_RL.environment import TextEnv, TextHistory, Text, interact_environment, text_env_eval, TextTrajectory, TextTrajectoryChain, TokenTrajectoryChain
+from LLM_RL.environment import TextEnv, TextHistory, Text, interact_environment, text_env_eval, TextTrajectory, TextTrajectoryChain, TokenTrajectoryChain, text_history_to_str
 from LLM_RL.algorithms.ilql.gptj.interface import GPTJPolicy, GPTJInferenceFull, GPTJILQLTrain
 from LLM_RL.heads.mlp_head import load_train_state_from_config as load_head_train_state_from_config
 from LLM_RL.heads.mlp_head import MLPHeadConfig
@@ -353,13 +353,18 @@ def main(
             bsize=1, 
         )
 
+        for item in raw_results:
+            print('='*25)
+            print(text_history_to_str(item[-1].post_transition_history))
+            print('='*25)
+
         logs = pull_logs(summary_results)
         log(logs, use_wandb and is_main_process)
 
         return float('inf'), logs
     
     train_prng = jax.random.PRNGKey(1)
-    ppo_trainer, ppo_inference, policy = train_loop(
+    trainer, inference = train_loop(
         trainer=train, 
         inference=inference, 
         evaluator=evaluate, 
