@@ -310,22 +310,22 @@ class GPTJILQLTrain(ILQLTrain):
             base_grads = jax.tree_util.tree_map(
                 lambda x, ps: with_named_sharding_constraint(x, mesh, ps), 
                 base_grads, 
-                base_train_state.params, 
+                base_train_state_partition_spec.params, 
             )
             q1_head_grads = jax.tree_util.tree_map(
                 lambda x, ps: with_named_sharding_constraint(x, mesh, ps), 
                 q1_head_grads, 
-                q1_head_train_state.params, 
+                q1_head_train_state_partition_spec.params, 
             )
             q2_head_grads = jax.tree_util.tree_map(
                 lambda x, ps: with_named_sharding_constraint(x, mesh, ps), 
                 q2_head_grads, 
-                q2_head_train_state.params, 
+                q2_head_train_state_partition_spec.params, 
             )
             v_head_grads = jax.tree_util.tree_map(
                 lambda x, ps: with_named_sharding_constraint(x, mesh, ps), 
                 v_head_grads, 
-                v_head_train_state.params, 
+                v_head_train_state_partition_spec.params, 
             )
             # update params and optim state
             base_train_state = base_train_state.apply_gradients(grads=base_grads)
