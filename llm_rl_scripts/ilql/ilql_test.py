@@ -341,7 +341,7 @@ def main(
             blocking_strategy=BlockingStrategy(
                 padding=Padding.LEFT, 
                 truncation=Truncation.LEFT, 
-                max_new_tokens=policy_max_output_length, 
+                new_tokens=policy_max_output_length, 
             ), 
             out_str_process=lambda x: x.removesuffix('\n')+'\n', 
         )
