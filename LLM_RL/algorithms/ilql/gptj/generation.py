@@ -1,4 +1,4 @@
-from typing import Optional, Tuple, Union
+from typing import Optional, Tuple, Union, Dict, Any
 from dataclasses import dataclass
 from transformers.modeling_outputs import CausalLMOutputWithCrossAttentions
 from transformers.utils import ModelOutput
@@ -170,6 +170,9 @@ class CheapGPTJILQLGeneration(FlaxStreamGenerationMixin):
         return model_kwargs
     
     def _validate_model_class(self):
+        pass
+
+    def _validate_model_kwargs(self, model_kwargs: Dict[str, Any]):
         pass
 
 class FullGPTJILQLGeneration(FlaxStreamGenerationMixin):
@@ -344,4 +347,7 @@ class FullGPTJILQLGeneration(FlaxStreamGenerationMixin):
         return model_kwargs
     
     def _validate_model_class(self):
+        pass
+
+    def _validate_model_kwargs(self, model_kwargs: Dict[str, Any]):
         pass
