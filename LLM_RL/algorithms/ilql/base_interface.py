@@ -77,7 +77,7 @@ def ilql_loss(
     sa_mask = (qv_query_indicators.sum(axis=1) > 0).astype(jnp.float32)
     ns_mask = (vns_query_indicators.sum(axis=1) > 0).astype(jnp.float32)
 
-    n_sa, n_ns = sa_mask.sum(), ns_mask.sum()
+    # n_sa, n_ns = sa_mask.sum(), ns_mask.sum()
 
     q1_loss = (optax.l2_loss(q1sa_selected, jax.lax.stop_gradient(rs_selected + gamma * vns_selected)) * sa_mask).sum() / n
     q2_loss = (optax.l2_loss(q2sa_selected, jax.lax.stop_gradient(rs_selected + gamma * vns_selected)) * sa_mask).sum() / n
@@ -104,15 +104,15 @@ def ilql_loss(
             q1_cql_loss=q1_cql_loss, 
             q2_cql_loss=q2_cql_loss, 
         ), 
-        q1=get_tensor_stats(q1sa_selected, mask=sa_mask), 
-        q2=get_tensor_stats(q2sa_selected, mask=sa_mask), 
-        v=get_tensor_stats(v_selected, mask=sa_mask), 
-        target_q=get_tensor_stats(target_q_selected, mask=sa_mask), 
-        target_q1=get_tensor_stats(target_q1sa_selected, mask=sa_mask), 
-        target_q2=get_tensor_stats(target_q2sa_selected, mask=sa_mask), 
-        vns=get_tensor_stats(vns_selected, mask=ns_mask), 
-        final_v=get_tensor_stats(v_final, mask=ns_mask), 
-        rewards=get_tensor_stats(rewards, mask=sa_mask), 
+        q1=get_tensor_stats(q1sa_selected, mask=sa_mask, n=n), 
+        q2=get_tensor_stats(q2sa_selected, mask=sa_mask, n=n), 
+        v=get_tensor_stats(v_selected, mask=sa_mask, n=n), 
+        target_q=get_tensor_stats(target_q_selected, mask=sa_mask, n=n), 
+        target_q1=get_tensor_stats(target_q1sa_selected, mask=sa_mask, n=n), 
+        target_q2=get_tensor_stats(target_q2sa_selected, mask=sa_mask, n=n), 
+        vns=get_tensor_stats(vns_selected, mask=ns_mask, n=n), 
+        final_v=get_tensor_stats(v_final, mask=ns_mask, n=n), 
+        rewards=get_tensor_stats(rewards, mask=sa_mask, n=n), 
     )
 
     return loss, logs
