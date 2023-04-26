@@ -9,7 +9,7 @@ from transformers.tokenization_utils import PreTrainedTokenizerBase
 from JaxSeq.utils import with_named_sharding_constraint, match_partition_rules
 from optax import softmax_cross_entropy_with_integer_labels
 from flax.training.train_state import TrainState
-from transformers.modeling_flax_outputs import FlaxCausalLMOutput
+from transformers.modeling_flax_outputs import FlaxCausalLMOutput, FlaxCausalLMOutputWithCrossAttentions
 import flax.linen as nn
 from LLM_RL.algorithms.ppo.base_interface import PPOTrain, ppo_loss_fn, PPOInference, PPOForwardOutput
 from jax.sharding import NamedSharding
@@ -92,7 +92,7 @@ class GPT2PPOTrain(PPOTrain):
             def grad_loss(policy_params: PyTree, value_head_params: PyTree, prng_key: jax.random.PRNGKeyArray):
                 
                 new_key = None
-                if new_key is not None:
+                if prng_key is not None:
                     prng_key, new_key = jax.random.split(prng_key)
                 model_output = policy_model(
                     input_ids=input_ids, 
@@ -105,7 +105,7 @@ class GPT2PPOTrain(PPOTrain):
                 )
 
                 new_key = None
-                if new_key is not None:
+                if prng_key is not None:
                     prng_key, new_key = jax.random.split(prng_key)
                 values = value_head_model.apply(
                     {'params': value_head_params}, 
@@ -163,6 +163,11 @@ class GPT2PPOTrain(PPOTrain):
             _step=_step, 
         )
 
+class PPOForwardOutputGPT2(NamedTuple):
+    initial_policy_raw_output: FlaxCausalLMOutputWithCrossAttentions
+    policy_raw_output: FlaxCausalLMOutputWithCrossAttentions
+    values: jax.Array
+
 class GPT2PPOInference(PPOInference):
     @classmethod
     def load_inference(
@@ -185,14 +190,14 @@ class GPT2PPOInference(PPOInference):
         initial_policy_params_partition_spec = None
         if has_initial_policy:
             initial_policy_params_partition_spec = match_partition_rules(initial_policy_model.config.get_partition_rules(), initial_policy_params)
-        policy_params_partition_spec = match_partition_rules(initial_policy_model.config.get_partition_rules(), policy_params)
+        policy_params_partition_spec = match_partition_rules(policy_model.config.get_partition_rules(), policy_params)
         value_head_params_partition_spec = match_partition_rules(value_head_model.config.get_partition_rules(), value_head_params)
 
         @partial(
-            jax.jit, 
+            pjit, 
             static_argnames=('initial_policy_output_attentions', 'initial_policy_output_hidden_states', 'policy_output_attentions', 'train'), 
             in_shardings=(
-                jax.tree_util.tree_map(lambda ps: NamedSharding(mesh, ps), initial_policy_params_partition_spec) if has_initial_policy is None else NamedSharding(mesh, PS()), 
+                jax.tree_util.tree_map(lambda ps: NamedSharding(mesh, ps), initial_policy_params_partition_spec) if has_initial_policy else NamedSharding(mesh, PS()), 
                 jax.tree_util.tree_map(lambda ps: NamedSharding(mesh, ps), policy_params_partition_spec), 
                 jax.tree_util.tree_map(lambda ps: NamedSharding(mesh, ps), value_head_params_partition_spec), 
                 NamedSharding(mesh, PS()), 
@@ -200,16 +205,20 @@ class GPT2PPOInference(PPOInference):
                 NamedSharding(mesh, PS()), 
                 NamedSharding(mesh, PS()), 
             ), 
-            out_shardings=PPOForwardOutput(
-                initial_policy_raw_output=FlaxCausalLMOutput(
+            out_shardings=PPOForwardOutputGPT2(
+                initial_policy_raw_output=FlaxCausalLMOutputWithCrossAttentions(
                     logits=NamedSharding(mesh, PS("dp", None, None)) if dp_shard_logits else NamedSharding(mesh, PS()), 
+                    past_key_values=NamedSharding(mesh, PS()), # assume no sharding for past key values
                     hidden_states=NamedSharding(mesh, PS()), # assume no sharding for hidden states
                     attentions=NamedSharding(mesh, PS()), # assume no sharding for attentions
+                    cross_attentions=NamedSharding(mesh, PS()), # assume no sharding for cross attentions
                 ) if has_initial_policy else NamedSharding(mesh, PS()), 
-                policy_raw_output=FlaxCausalLMOutput(
+                policy_raw_output=FlaxCausalLMOutputWithCrossAttentions(
                     logits=NamedSharding(mesh, PS("dp", None, None)) if dp_shard_logits else NamedSharding(mesh, PS()), 
+                    past_key_values=NamedSharding(mesh, PS()), # assume no sharding for past key values
                     hidden_states=NamedSharding(mesh, PS()), # assume no sharding for hidden states
                     attentions=NamedSharding(mesh, PS()), # assume no sharding for attentions
+                    cross_attentions=NamedSharding(mesh, PS()), # assume no sharding for cross attentions
                 ), 
                 values=NamedSharding(mesh, PS()), 
             ), 
@@ -226,7 +235,7 @@ class GPT2PPOInference(PPOInference):
             initial_policy_output_hidden_states: Optional[bool]=None, 
             policy_output_attentions: Optional[bool]=None, # no policy_output_hidden_states option because this is required
             train: bool=False, 
-        ) -> PPOForwardOutput:
+        ) -> PPOForwardOutputGPT2:
             # data parallel shard inputs
             input_ids = with_named_sharding_constraint(input_ids, mesh, PS("dp", None))
             attention_mask = with_named_sharding_constraint(attention_mask, mesh, PS("dp", None))
@@ -278,14 +287,14 @@ class GPT2PPOInference(PPOInference):
                 if has_initial_policy:
                     initial_model_output = initial_model_output.replace(logits=with_named_sharding_constraint(initial_model_output.logits, mesh, PS("dp", None, None)))
                 model_output = model_output.replace(logits=with_named_sharding_constraint(model_output.logits, mesh, PS("dp", None, None)))
-            return PPOForwardOutput(
+            return PPOForwardOutputGPT2(
                 initial_policy_raw_output=initial_model_output, 
                 policy_raw_output=model_output, 
                 values=values, 
             )
     
         @partial(
-            jax.jit, 
+            pjit, 
             static_argnames=('train',), 
             in_shardings=(
                 jax.tree_util.tree_map(lambda ps: NamedSharding(mesh, ps), policy_params_partition_spec), 

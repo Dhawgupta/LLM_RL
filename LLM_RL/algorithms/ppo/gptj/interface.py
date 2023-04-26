@@ -92,7 +92,7 @@ class GPTJPPOTrain(PPOTrain):
             def grad_loss(policy_params: PyTree, value_head_params: PyTree, prng_key: jax.random.PRNGKeyArray):
                 
                 new_key = None
-                if new_key is not None:
+                if prng_key is not None:
                     prng_key, new_key = jax.random.split(prng_key)
                 model_output = policy_model(
                     input_ids=input_ids, 
@@ -105,7 +105,7 @@ class GPTJPPOTrain(PPOTrain):
                 )
 
                 new_key = None
-                if new_key is not None:
+                if prng_key is not None:
                     prng_key, new_key = jax.random.split(prng_key)
                 values = value_head_model.apply(
                     {'params': value_head_params}, 
@@ -185,14 +185,14 @@ class GPTJPPOInference(PPOInference):
         initial_policy_params_partition_spec = None
         if has_initial_policy:
             initial_policy_params_partition_spec = match_partition_rules(initial_policy_model.config.get_partition_rules(), initial_policy_params)
-        policy_params_partition_spec = match_partition_rules(initial_policy_model.config.get_partition_rules(), policy_params)
+        policy_params_partition_spec = match_partition_rules(policy_model.config.get_partition_rules(), policy_params)
         value_head_params_partition_spec = match_partition_rules(value_head_model.config.get_partition_rules(), value_head_params)
 
         @partial(
             jax.jit, 
             static_argnames=('initial_policy_output_attentions', 'initial_policy_output_hidden_states', 'policy_output_attentions', 'train'), 
             in_shardings=(
-                jax.tree_util.tree_map(lambda ps: NamedSharding(mesh, ps), initial_policy_params_partition_spec) if has_initial_policy is None else NamedSharding(mesh, PS()), 
+                jax.tree_util.tree_map(lambda ps: NamedSharding(mesh, ps), initial_policy_params_partition_spec) if has_initial_policy else NamedSharding(mesh, PS()), 
                 jax.tree_util.tree_map(lambda ps: NamedSharding(mesh, ps), policy_params_partition_spec), 
                 jax.tree_util.tree_map(lambda ps: NamedSharding(mesh, ps), value_head_params_partition_spec), 
                 NamedSharding(mesh, PS()), 

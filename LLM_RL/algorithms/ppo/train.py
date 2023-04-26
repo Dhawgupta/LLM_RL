@@ -262,7 +262,6 @@ def train_loop(
             for batch in tqdm(d, total=steps_per_epoch):
                 
                 # step model and get training logs
-                prng_key, new_prng = jax.random.split(prng_key)
                 if 'step' in loop_state and step < loop_state['step']:
                     step += 1
                     continue

@@ -143,7 +143,7 @@ class GPTJILQLTrain(ILQLTrain):
                 # get base hidden states
 
                 new_key = None
-                if new_key is not None:
+                if prng_key is not None:
                     prng_key, new_key = jax.random.split(prng_key)
                 base_model_output = base_model(
                     input_ids=input_ids, 
@@ -157,7 +157,7 @@ class GPTJILQLTrain(ILQLTrain):
 
                 if target_base_params is not None:
                     new_key = None
-                    if new_key is not None:
+                    if prng_key is not None:
                         prng_key, new_key = jax.random.split(prng_key)
                     target_base_model_output = base_model(
                         input_ids=input_ids, 
@@ -173,7 +173,7 @@ class GPTJILQLTrain(ILQLTrain):
                 
                 if next_token_ids is not None:
                     new_key = None
-                    if new_key is not None:
+                    if prng_key is not None:
                         prng_key, new_key = jax.random.split(prng_key)
                     next_token_base_model_output = base_model(
                         input_ids=next_token_ids, 
@@ -188,53 +188,53 @@ class GPTJILQLTrain(ILQLTrain):
                 # get values
 
                 new_key = None
-                if new_key is not None:
+                if prng_key is not None:
                     prng_key, new_key = jax.random.split(prng_key)
                 q1_head_output = q_head_model.apply(
                     {'params': q1_head_params}, 
                     base_model_output.hidden_states[-1], 
                     train=train, 
-                    rngs={'dropout': new_key} if new_key is not None else None, 
+                    rngs={'dropout': new_key} if prng_key is not None else None, 
                 )
 
                 new_key = None
-                if new_key is not None:
+                if prng_key is not None:
                     prng_key, new_key = jax.random.split(prng_key)
                 q2_head_output = q_head_model.apply(
                     {'params': q2_head_params}, 
                     base_model_output.hidden_states[-1], 
                     train=train, 
-                    rngs={'dropout': new_key} if new_key is not None else None, 
+                    rngs={'dropout': new_key} if prng_key is not None else None, 
                 )
 
                 new_key = None
-                if new_key is not None:
+                if prng_key is not None:
                     prng_key, new_key = jax.random.split(prng_key)
                 v_head_output = v_head_model.apply(
                     {'params': v_head_params}, 
                     base_model_output.hidden_states[-1], 
                     train=train, 
-                    rngs={'dropout': new_key} if new_key is not None else None, 
+                    rngs={'dropout': new_key} if prng_key is not None else None, 
                 )
 
                 new_key = None
-                if new_key is not None:
+                if prng_key is not None:
                     prng_key, new_key = jax.random.split(prng_key)
                 target_q1_head_output = q_head_model.apply(
                     {'params': q1_target_head_params}, 
                     target_base_model_output.hidden_states[-1], 
                     train=train, 
-                    rngs={'dropout': new_key} if new_key is not None else None, 
+                    rngs={'dropout': new_key} if prng_key is not None else None, 
                 )
 
                 new_key = None
-                if new_key is not None:
+                if prng_key is not None:
                     prng_key, new_key = jax.random.split(prng_key)
                 target_q2_head_output = q_head_model.apply(
                     {'params': q2_target_head_params}, 
                     target_base_model_output.hidden_states[-1], 
                     train=train, 
-                    rngs={'dropout': new_key} if new_key is not None else None, 
+                    rngs={'dropout': new_key} if prng_key is not None else None, 
                 )
 
                 # stop gradients
@@ -265,13 +265,13 @@ class GPTJILQLTrain(ILQLTrain):
                     final_next_token_h = next_token_base_model_output.hidden_states[-1][jnp.arange(0, input_ids.shape[0], dtype=jnp.int32), last_next_token_idxs, :]
 
                     new_key = None
-                    if new_key is not None:
+                    if prng_key is not None:
                         prng_key, new_key = jax.random.split(prng_key)
                     next_token_v_head_output = v_head_model.apply(
                         {'params': v_head_params}, 
                         final_next_token_h, 
                         train=train, 
-                        rngs={'dropout': new_key} if new_key is not None else None, 
+                        rngs={'dropout': new_key} if prng_key is not None else None, 
                     ).sqeueze(1)
                     v_final = next_token_v_head_output * (1 - next_dones.astype(jnp.float32))
                 else:
@@ -563,7 +563,7 @@ class GPTJILQLInferenceSimple(ILQLInferenceSimple):
                 {'params': q1_head_params}, 
                 base_output.hidden_states[-1], 
                 train=train, 
-                rngs={'dropout': new_key} if new_key is not None else None, 
+                rngs={'dropout': new_key} if prng_key is not None else None, 
             )
             # trunc padded qs
             q1 = q1.at[:, :, base_model.config.unpadded_vocab_size:].set(-float('inf'))
@@ -576,7 +576,7 @@ class GPTJILQLInferenceSimple(ILQLInferenceSimple):
                 {'params': q2_head_params}, 
                 base_output.hidden_states[-1], 
                 train=train, 
-                rngs={'dropout': new_key} if new_key is not None else None, 
+                rngs={'dropout': new_key} if prng_key is not None else None, 
             )
             # trunc padded qs
             q2 = q2.at[:, :, base_model.config.unpadded_vocab_size:].set(-float('inf'))
@@ -589,7 +589,7 @@ class GPTJILQLInferenceSimple(ILQLInferenceSimple):
                 {'params': v_head_params}, 
                 base_output.hidden_states[-1], 
                 train=train, 
-                rngs={'dropout': new_key} if new_key is not None else None, 
+                rngs={'dropout': new_key} if prng_key is not None else None, 
             ).squeeze(2)
 
             # assert sharding on outputs
@@ -826,7 +826,7 @@ class GPTJInferenceFull(ILQLInferenceFull):
                 {'params': q1_head_params}, 
                 base_output.hidden_states[-1], 
                 train=train, 
-                rngs={'dropout': new_key} if new_key is not None else None, 
+                rngs={'dropout': new_key} if prng_key is not None else None, 
             )
             # trunc padded qs
             q1 = q1.at[:, :, base_model.config.unpadded_vocab_size:].set(-float('inf'))
@@ -839,7 +839,7 @@ class GPTJInferenceFull(ILQLInferenceFull):
                 {'params': q2_head_params}, 
                 base_output.hidden_states[-1], 
                 train=train, 
-                rngs={'dropout': new_key} if new_key is not None else None, 
+                rngs={'dropout': new_key} if prng_key is not None else None, 
             )
             # trunc padded qs
             q2 = q2.at[:, :, base_model.config.unpadded_vocab_size:].set(-float('inf'))
@@ -852,7 +852,7 @@ class GPTJInferenceFull(ILQLInferenceFull):
                 {'params': v_head_params}, 
                 base_output.hidden_states[-1], 
                 train=train, 
-                rngs={'dropout': new_key} if new_key is not None else None, 
+                rngs={'dropout': new_key} if prng_key is not None else None, 
             ).squeeze(2)
 
             # get q1_target
@@ -863,7 +863,7 @@ class GPTJInferenceFull(ILQLInferenceFull):
                 {'params': q1_target_head_params}, 
                 target_base_output.hidden_states[-1], 
                 train=train, 
-                rngs={'dropout': new_key} if new_key is not None else None, 
+                rngs={'dropout': new_key} if prng_key is not None else None, 
             )
             # trunc padded qs
             q1_target = q1_target.at[:, :, base_model.config.unpadded_vocab_size:].set(-float('inf'))
@@ -876,7 +876,7 @@ class GPTJInferenceFull(ILQLInferenceFull):
                 {'params': q2_target_head_params}, 
                 target_base_output.hidden_states[-1], 
                 train=train, 
-                rngs={'dropout': new_key} if new_key is not None else None, 
+                rngs={'dropout': new_key} if prng_key is not None else None, 
             )
             # trunc padded qs
             q2_target = q2_target.at[:, :, base_model.config.unpadded_vocab_size:].set(-float('inf'))
@@ -971,7 +971,7 @@ class GPTJInferenceFull(ILQLInferenceFull):
             # get base hidden states
 
             new_key = None
-            if new_key is not None:
+            if prng_key is not None:
                 prng_key, new_key = jax.random.split(prng_key)
             base_model_output = base_model(
                 input_ids=input_ids, 
@@ -985,7 +985,7 @@ class GPTJInferenceFull(ILQLInferenceFull):
 
             if target_base_params is not None:
                 new_key = None
-                if new_key is not None:
+                if prng_key is not None:
                     prng_key, new_key = jax.random.split(prng_key)
                 target_base_model_output = base_model(
                     input_ids=input_ids, 
@@ -1001,7 +1001,7 @@ class GPTJInferenceFull(ILQLInferenceFull):
             
             if next_token_ids is not None:
                 new_key = None
-                if new_key is not None:
+                if prng_key is not None:
                     prng_key, new_key = jax.random.split(prng_key)
                 next_token_base_model_output = base_model(
                     input_ids=next_token_ids, 
@@ -1016,53 +1016,53 @@ class GPTJInferenceFull(ILQLInferenceFull):
             # get values
 
             new_key = None
-            if new_key is not None:
+            if prng_key is not None:
                 prng_key, new_key = jax.random.split(prng_key)
             q1_head_output = q_head_model.apply(
                 {'params': q1_head_params}, 
                 base_model_output.hidden_states[-1], 
                 train=train, 
-                rngs={'dropout': new_key} if new_key is not None else None, 
+                rngs={'dropout': new_key} if prng_key is not None else None, 
             )
 
             new_key = None
-            if new_key is not None:
+            if prng_key is not None:
                 prng_key, new_key = jax.random.split(prng_key)
             q2_head_output = q_head_model.apply(
                 {'params': q2_head_params}, 
                 base_model_output.hidden_states[-1], 
                 train=train, 
-                rngs={'dropout': new_key} if new_key is not None else None, 
+                rngs={'dropout': new_key} if prng_key is not None else None, 
             )
 
             new_key = None
-            if new_key is not None:
+            if prng_key is not None:
                 prng_key, new_key = jax.random.split(prng_key)
             v_head_output = v_head_model.apply(
                 {'params': v_head_params}, 
                 base_model_output.hidden_states[-1], 
                 train=train, 
-                rngs={'dropout': new_key} if new_key is not None else None, 
+                rngs={'dropout': new_key} if prng_key is not None else None, 
             )
 
             new_key = None
-            if new_key is not None:
+            if prng_key is not None:
                 prng_key, new_key = jax.random.split(prng_key)
             target_q1_head_output = q_head_model.apply(
                 {'params': q1_target_head_params}, 
                 target_base_model_output.hidden_states[-1], 
                 train=train, 
-                rngs={'dropout': new_key} if new_key is not None else None, 
+                rngs={'dropout': new_key} if prng_key is not None else None, 
             )
 
             new_key = None
-            if new_key is not None:
+            if prng_key is not None:
                 prng_key, new_key = jax.random.split(prng_key)
             target_q2_head_output = q_head_model.apply(
                 {'params': q2_target_head_params}, 
                 target_base_model_output.hidden_states[-1], 
                 train=train, 
-                rngs={'dropout': new_key} if new_key is not None else None, 
+                rngs={'dropout': new_key} if prng_key is not None else None, 
             )
 
             # process outputs
@@ -1085,13 +1085,13 @@ class GPTJInferenceFull(ILQLInferenceFull):
                 final_next_token_h = next_token_base_model_output.hidden_states[-1][jnp.arange(0, input_ids.shape[0], dtype=jnp.int32), last_next_token_idxs, :]
 
                 new_key = None
-                if new_key is not None:
+                if prng_key is not None:
                     prng_key, new_key = jax.random.split(prng_key)
                 next_token_v_head_output = v_head_model.apply(
                     {'params': v_head_params}, 
                     final_next_token_h, 
                     train=train, 
-                    rngs={'dropout': new_key} if new_key is not None else None, 
+                    rngs={'dropout': new_key} if prng_key is not None else None, 
                 ).sqeueze(1)
                 v_final = next_token_v_head_output * (1 - next_dones.astype(jnp.float32))
             else:

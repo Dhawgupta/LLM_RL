@@ -30,6 +30,7 @@ from functools import partial
 import numpy as np
 from JaxSeq.logs import label_logs, log, pull_logs
 import json
+from JaxSeq.utils import multihost_device_get
 
 class BitsTestEnv(TextEnv):
     def __init__(self, n: int):
@@ -167,7 +168,7 @@ def main(
     )
     with jax.default_device(jax.devices('cpu')[0]):
         initital_policy_params = jax.tree_util.tree_map(
-            lambda x: x.copy(), 
+            lambda x: multihost_device_get(x, mesh=mesh).copy(), 
             policy_train_state.params, 
         )
     initital_policy_params = shard_params_from_params(

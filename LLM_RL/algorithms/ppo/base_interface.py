@@ -492,10 +492,13 @@ class PPOInference(struct.PyTreeNode):
         initial_policy_logprobs, policy_logprobs, values = [], [], []
         for i in tqdm(range(0, len(tokens), bsize), disable=not verbose):
             tokens_batch = jnp.asarray(tokens[i:(i+bsize)], dtype=jnp.int32)
+            new_key = None
+            if prng_key is not None:
+                prng_key, new_key = jax.random.split(prng_key)
             forward_batch_output = self.forward(
                 tokens_batch, 
                 train=train, 
-                prng_key=prng_key, 
+                prng_key=new_key, 
             )
 
             initial_policy_logits = forward_batch_output.initial_policy_raw_output.logits
