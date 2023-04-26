@@ -169,6 +169,7 @@ def load_train_state_from_config(
     model_dtype: Union[str, jnp.dtype], 
     optim_getter: Callable[[PyTree], optax.GradientTransformation], 
     mesh: Mesh, # should be shape (dp, mp)
+    prng_key: jax.random.PRNGKeyArray, 
     pad_to_output_dim: Optional[int]=None, 
     fsdp: bool=False, 
     params_dtype: Optional[Union[str, jnp.dtype]]=jnp.float32, 
@@ -178,7 +179,7 @@ def load_train_state_from_config(
     model.config.mesh = mesh
     model.config.fsdp = fsdp
     # shard params
-    params = freeze(shard_params_from_config(model, params_dtype=params_dtype))
+    params = freeze(shard_params_from_config(model, prng_key, params_dtype=params_dtype))
     # pad outputs
     if pad_to_output_dim is not None:
         params = freeze(pad_outputs(unfreeze(params), model, pad_to_output_dim, dtype=params_dtype))
@@ -193,6 +194,7 @@ def load_train_state(
     model_dtype: Union[str, jnp.dtype], 
     optim_getter: Callable[[PyTree], optax.GradientTransformation], 
     mesh: Mesh, # should be shape (dp, mp)
+    prng_key: Optional[jax.random.PRNGKeyArray]=None, 
     pad_to_output_dim: Optional[int]=None, 
     fsdp: bool=False, 
     params_dtype: Optional[Union[str, jnp.dtype]]=jnp.float32, 
@@ -200,6 +202,7 @@ def load_train_state(
     
     if ModelLoadMode.match_load_mode(model_load_mode, ModelLoadMode.CONFIG):
         # load config
+        assert prng_key is not None, 'Must provide prng_key when loading from config.'
         with open(model_load_path, 'r') as f:
             model_config = MLPHeadConfig(**json.load(f))
         train_state, model = load_train_state_from_config(
@@ -207,6 +210,7 @@ def load_train_state(
             model_dtype=model_dtype, 
             optim_getter=optim_getter, 
             mesh=mesh, 
+            prng_key=prng_key, 
             pad_to_output_dim=pad_to_output_dim, 
             fsdp=fsdp, 
             params_dtype=params_dtype, 
@@ -264,6 +268,7 @@ def load_params_from_config(
     model_config: MLPHeadConfig, 
     model_dtype: Union[str, jnp.dtype], 
     mesh: Mesh, # should be shape (dp, mp)
+    prng_key: jax.random.PRNGKeyArray, 
     pad_to_output_dim: Optional[int]=None, 
     fsdp: bool=False, 
     params_dtype: Optional[Union[str, jnp.dtype]]=jnp.float32, 
@@ -273,7 +278,7 @@ def load_params_from_config(
     model.config.mesh = mesh
     model.config.fsdp = fsdp
     # shard params
-    params = shard_params_from_config(model, params_dtype=params_dtype)
+    params = shard_params_from_config(model, prng_key, params_dtype=params_dtype)
     # pad outputs
     if pad_to_output_dim is not None:
         params = freeze(pad_outputs(unfreeze(params), model, pad_to_output_dim, dtype=params_dtype))
@@ -285,6 +290,7 @@ def load_params(
     model_load_path: str, 
     model_dtype: Union[str, jnp.dtype], 
     mesh: Mesh, 
+    prng_key: Optional[jax.random.PRNGKeyArray]=None, 
     pad_to_output_dim: Optional[int]=None, 
     fsdp: bool=False, 
     params_dtype: Optional[Union[str, jnp.dtype]]=jnp.float32, 
@@ -292,12 +298,14 @@ def load_params(
     
     if ModelLoadMode.match_load_mode(model_load_mode, ModelLoadMode.CONFIG):
         # load config
+        assert prng_key is not None, 'Must provide prng_key when loading from config.'
         with open(model_load_path, 'r') as f:
             model_config = MLPHeadConfig(**json.load(f))
         params, model = load_params_from_config(
             model_config=model_config, 
             model_dtype=model_dtype, 
             mesh=mesh, 
+            prng_key=prng_key, 
             pad_to_output_dim=pad_to_output_dim, 
             fsdp=fsdp, 
             params_dtype=params_dtype, 

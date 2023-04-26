@@ -62,6 +62,7 @@ def shard_train_state_from_params(
 
 def shard_params_from_config(
     model: nn.Module, 
+    prng_key: jax.random.PRNGKeyArray, 
     params_dtype: Union[str, jnp.dtype]=jnp.float32, 
 ) -> PyTree:
     # setup init function
@@ -75,7 +76,7 @@ def shard_params_from_config(
         return params
 
     # get shard spec
-    params_shape = jax.eval_shape(init_fn, jax.random.PRNGKey(0))
+    params_shape = jax.eval_shape(init_fn, prng_key)
     out_shardings = get_sharding_from_model(model, params_shape)
     assert out_shardings is not None
 
@@ -83,13 +84,14 @@ def shard_params_from_config(
     params = jax.jit(
         init_fn, 
         out_shardings=out_shardings, 
-    )(jax.random.PRNGKey(0))
+    )(prng_key)
 
     return params
 
 def shard_train_state_from_config(
     model: nn.Module, 
     optim: optax.GradientTransformation, 
+    prng_key: jax.random.PRNGKeyArray, 
     params_dtype: Union[str, jnp.dtype]=jnp.float32, 
 ) -> TrainState:
     
@@ -104,7 +106,7 @@ def shard_train_state_from_config(
         return TrainState.create(params=params, tx=optim, apply_fn=None)
 
     # get shard spec
-    train_state_shape = jax.eval_shape(init_fn, jax.random.PRNGKey(0))
+    train_state_shape = jax.eval_shape(init_fn, prng_key)
     out_shardings = get_sharding_from_model(model, train_state_shape)
     assert out_shardings is not None
 
@@ -112,7 +114,7 @@ def shard_train_state_from_config(
     train_state = jax.jit(
         init_fn, 
         out_shardings=out_shardings, 
-    )(jax.random.PRNGKey(0))
+    )(prng_key)
 
     return train_state
 

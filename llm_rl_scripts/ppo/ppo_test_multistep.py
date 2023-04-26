@@ -184,6 +184,7 @@ def main(
             every_k_schedule=grad_accum_steps, 
         )
 
+    model_prng_key = jax.random.PRNGKey(2)
     policy_train_state, policy_model = load_train_state(
         model_load_mode=model_load_mode, 
         model_load_path=convert_path(model_load_path) if model_load_mode != ModelLoadMode.HF else model_load_path, 
@@ -191,6 +192,7 @@ def main(
         optim_getter=policy_optim_getter, 
         tokenizer=tokenizer, 
         mesh=mesh, 
+        prng_key=model_prng_key, 
         force_pad_embeddings=force_pad_embeddings, 
         gradient_checkpoint=gradient_checkpoint, 
         fsdp=fsdp, 
@@ -257,6 +259,7 @@ def main(
             every_k_schedule=grad_accum_steps, 
         )
     
+    head_prng_key = jax.random.PRNGKey(3)
     value_head_train_state, value_head = load_head_train_state_from_config(
         model_config=LinearHeadConfig(
             input_dim=policy_model.config.n_embd, 
@@ -267,6 +270,7 @@ def main(
         model_dtype=jnp.float32, 
         optim_getter=value_head_optim_getter, 
         mesh=mesh, 
+        prng_key=head_prng_key, 
         pad_to_output_dim=None, 
         fsdp=fsdp, 
         params_dtype=jnp.float32, 
