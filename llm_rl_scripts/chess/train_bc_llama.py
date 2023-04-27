@@ -161,6 +161,7 @@ def main(
             return optax.MultiSteps(optim, every_k_schedule=grad_accum_steps)
         return optim
 
+    model_prng_key = jax.random.PRNGKey(2)
     train_state, model = load_train_state(
         model_load_mode=model_load_mode, 
         model_load_path=convert_path(model_load_path) if model_load_mode != ModelLoadMode.HF else model_load_path, 
@@ -168,6 +169,7 @@ def main(
         optim_getter=optim_getter, 
         tokenizer=tokenizer, 
         mesh=mesh, 
+        model_prng_key=model_prng_key, 
         force_pad_embeddings=force_pad_embeddings, 
         gradient_checkpoint=gradient_checkpoint, 
         fsdp=fsdp, 
