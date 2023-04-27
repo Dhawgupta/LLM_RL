@@ -554,16 +554,17 @@ class PPOInference(struct.PyTreeNode):
         ]
 
         log_ratio = [
-            policy_logprob - initial_policy_logprob
-            for initial_policy_logprob, policy_logprob in zip(initial_policy_logprobs_chains, policy_logprobs_chains)
+            (policy_logprob - initial_policy_logprob) * chain.should_take_action.astype(np.float32)
+            for initial_policy_logprob, policy_logprob, chain in zip(initial_policy_logprobs_chains, policy_logprobs_chains, combined_token_trajectory_chains)
         ]
 
-        all_log_ratio = np.concatenate(list(map(lambda x: x.reshape(-1), log_ratio)), axis=0)
+        valid_log_ratio_idxs = np.argwhere(np.concatenate(list(map(lambda chain: chain.should_take_action.astype(np.float32).reshape(-1), combined_token_trajectory_chains)), axis=0))[:, 0]
+        all_log_ratio = np.concatenate(list(map(lambda x: x.reshape(-1), log_ratio)), axis=0)[valid_log_ratio_idxs]
         all_kls = np.exp(all_log_ratio) - 1 - all_log_ratio
         # add kl penalty to reward
         for i in range(n_chains):
             combined_token_trajectory_chains[i] = combined_token_trajectory_chains[i]._replace(
-                rewards=combined_token_trajectory_chains[i].rewards + kl_weight * log_ratio[i], 
+                rewards=combined_token_trajectory_chains[i].rewards - kl_weight * log_ratio[i], 
             )
 
         advantage_chains, return_chains = [], []
