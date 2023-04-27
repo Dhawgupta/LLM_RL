@@ -159,7 +159,7 @@ def main(
     model_dtype = get_dtype(use_fp16=use_fp16_activations)
     params_dtype = get_dtype(use_fp16=use_fp16_params)
 
-    model_prng_key = jax.random.PRNGKey(2)
+    model_prng_key, prng_key = jax.random.split(prng_key)
     policy_train_state, policy_model = load_train_state(
         model_load_mode=model_load_mode, 
         model_load_path=convert_path(model_load_path) if model_load_mode != ModelLoadMode.HF else model_load_path, 
@@ -175,7 +175,7 @@ def main(
     )
     with jax.default_device(jax.devices('cpu')[0]):
         initial_policy_params = jax.tree_util.tree_map(
-            lambda x: multihost_device_get(x.copy(), mesh=mesh), 
+            lambda x: multihost_device_get(x, mesh=mesh).copy(), 
             policy_train_state.params, 
         )
     initial_policy_params = shard_params_from_params(
@@ -232,7 +232,7 @@ def main(
             every_k_schedule=grad_accum_steps, 
         )
     
-    head_prng_key = jax.random.PRNGKey(3)
+    head_prng_key, prng_key = jax.random.split(prng_key)
     value_head_train_state, value_head = load_head_train_state_from_config(
         model_config=LinearHeadConfig(
             input_dim=policy_model.config.n_embd, 

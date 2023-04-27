@@ -11,7 +11,7 @@ from copy import deepcopy
 
 # define text objects
 
-@dataclass
+@dataclass(frozen=True)
 class Text:
     text: str
     is_action: bool
