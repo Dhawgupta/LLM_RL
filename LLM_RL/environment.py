@@ -317,11 +317,17 @@ class TokenTrajectory:
     tokens: np.ndarray # 1d int32 array
     is_action: np.ndarray # 1d bool array
     reward: np.ndarray # 1d float32 array
-    done: Union[bool, np.ndarray] # bool scalar
+    done: np.ndarray # bool scalar
 
     def __post_init__(self):
-        assert all(len(item.shape) == 1 for item in self), '(tokens, is_action, reward, done) must all be 1 dimensional'
-        assert all([item.shape == self[0].shape for item in self[1:]]), '(tokens, is_action, reward, done) must all have the same shape'
+        assert len(self.tokens.shape) == 1, 'tokens must be 1 dimensional'
+        assert len(self.is_action.shape) == 1, 'is_action must be 1 dimensional'
+        assert len(self.reward.shape) == 1, 'reward must be 1 dimensional'
+        assert len(self.done.shape) == 0, 'done must be scalar'
+
+        assert self.is_action.shape == self.tokens.shape, 'is_action must have the same shape as tokens'
+        assert self.reward.shape == self.tokens.shape, 'reward must have the same shape as tokens'
+
         assert not np.any(((1 - self.is_action.astype(np.float32)) * self.reward) != 0.0), 'reward must be 0.0 if not an action'
     
     @classmethod
@@ -337,7 +343,6 @@ class TokenTrajectory:
         tokens = []
         is_action = []
         reward = []
-        done = []
 
         for i, item in enumerate(text_trajectory.text_history):
             
@@ -349,7 +354,6 @@ class TokenTrajectory:
             
             # add reward at the last token in the text
             reward.extend(([0.0]*(len(new_tokens)-1))+[text_trajectory.reward[i]])
-            done.extend([False]*len(new_tokens))
         
         # get done
         done = text_trajectory.done

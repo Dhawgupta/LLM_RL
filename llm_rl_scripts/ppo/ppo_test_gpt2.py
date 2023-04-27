@@ -74,8 +74,8 @@ def main(
 
     gradient_checkpoint: bool=False, 
     fsdp: bool=False, 
-    use_fp16_activations: bool=True,
-    use_fp16_params: bool=True,
+    use_fp16_activations: bool=False,
+    use_fp16_params: bool=False,
 
     max_input_length: int=512, 
     max_output_length: int=512, 
