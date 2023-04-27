@@ -22,7 +22,7 @@ from transformers.modeling_flax_outputs import FlaxCausalLMOutput
 from LLM_RL.algorithms.ilql.base_interface import ILQLPolicy
 from transformers.generation import GenerationConfig
 from LLM_RL.environment import TextHistory, text_history_to_str, Text
-from examples_jaxseq.misc.commandline_server_client import strip_prompt_from_completion
+from JaxSeq.utils import strip_prompt_from_completion
 
 class GPTJILQLTrain(ILQLTrain):
     @classmethod
