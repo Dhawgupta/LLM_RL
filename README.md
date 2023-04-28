@@ -17,6 +17,7 @@ Install with conda (cpu, tpu, or gpu).
 ``` shell
 conda env create -f environment.yml
 conda activate LLM_RL
+python -m pip install --upgrade pip
 python -m pip install -e .
 ```
 
@@ -24,6 +25,7 @@ python -m pip install -e .
 ``` shell
 conda env create -f environment.yml
 conda activate LLM_RL
+python -m pip install --upgrade pip
 conda install jaxlib=*=*cuda* jax cuda-nvcc -c conda-forge -c nvidia
 python -m pip install -e .
 ```
