@@ -30,7 +30,7 @@ class TwentyQuestionsPolicyEnvironment(TextEnv):
         # print(f"step: question={question}, answer={answer}")
         answer_text = Text(answer + "\n", is_action=False)
 
-        trajectory = create_trajectory_from_history(self.curr_word, text_history + [answer_text], self.max_conversation_length)
+        trajectory = create_trajectory_from_history(self.curr_word, text_history + (answer_text,), self.max_conversation_length)
 
         return trajectory.text_history, trajectory.reward[-2], trajectory.done
     
@@ -47,7 +47,7 @@ class TwentyQuestionsPolicyEnvironment(TextEnv):
             self.curr_word = self.random.choice(self.word_list)
 
         # print(f"reset: word={self.curr_word}")
-        return [Text(INITIAL_STR, is_action=False)]
+        return (Text(INITIAL_STR, is_action=False),)
 
     def copy(self):
         return TwentyQuestionsPolicyEnvironment(
@@ -55,27 +55,4 @@ class TwentyQuestionsPolicyEnvironment(TextEnv):
             word_list=self.word_list,
             max_conversation_length=self.max_conversation_length,
         )
-
-
-class TwentyQuestionsDTPolicyEnvironment(TwentyQuestionsPolicyEnvironment):
-    
-    def step(self, text_history: TextHistory) -> Tuple[TextHistory, float, bool]:
-        next_text_history, reward, done = super().step(text_history)
-
-        next_answer = next_text_history[-1].text
-        last_answer = next_text_history[-3].text
-        
-        last_rtg = token_str_to_rtg(last_answer, max_conversation_len=self.max_conversation_length)
-        next_rtg = last_rtg - reward
-        
-        new_next_answer = rtg_to_token_str(next_rtg) + next_answer
-        new_next_text_history = next_text_history[:-1] + [Text(new_next_answer, is_action=False)]
-
-        return new_next_text_history, reward, done
-
-    def reset(self, seed: Optional[int] = None, options: Optional[Dict] = None) -> TextHistory:
-        _ = super().reset(seed=seed, options=options)
-        target_rtg = options["target_rtg"]
-        target_rtg_str = rtg_to_token_str(target_rtg, max_conversation_len=self.max_conversation_length)
-        return [Text(target_rtg_str + INITIAL_STR, is_action=False)]
 
