@@ -19,7 +19,6 @@ conda activate LLM_RL
 export GCLOUD_PROJECT="civic-boulder-204700"
 export GCLOUD_TOKEN_PATH="${HOME}/.config/gcloud/civic-boulder-204700-V2.json"
 
-<<<<<<< HEAD
 CUDA_VISIBLE_DEVICES=5 python -m llm_rl_scripts.ppo.ppo_test_multichain \
     PARAMS \
     gcs://rail-tpus-csnell-us/LLM_RL_outputs/ppo_test_multichain/exp.2023-04-23-23-52-26.325.e657cef4e23111edb66069ae2bcdca7b/best \
@@ -37,28 +36,32 @@ CUDA_VISIBLE_DEVICES=5 python -m llm_rl_scripts.ppo.ppo_test_multichain \
     --lr 3e-5 \
     --use-wandb \
     --wandb-project "rlhf_multichain_binary_test" \
-=======
-CUDA_VISIBLE_DEVICES=3 python -m llm_rl_scripts.ppo.ppo_test \
-    PARAMS \
-    gcs://charlie-bucket2/LLM_RL_outputs/ppo_test/exp.2023-03-25-02-33-00.401/best \
-    --exp-name None \
-    --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/ppo_test/ \
-    --train-bsize 32 \
-    --n-rounds 100 \
-    --epochs 4 \
-    --log-every 4 \
-    --weight-decay 1e-6 \
-    --lr 3e-5 \
-    --use-wandb \
-    --wandb-project "rlhf_binary_test" \
-    --save-every-rounds 1 \
->>>>>>> b21510bf800aef75131db6edb32c417783e7fa6f
     --init-kl-coef 0.001 \
     --kl-target 0.1 \
     --kl-horizon 10000 \
     --value-loss-coef 1.0 \
     # --cliprange-value 100.0 \
     # --save-every-rounds 1 \
+
+# CUDA_VISIBLE_DEVICES=3 python -m llm_rl_scripts.ppo.ppo_test \
+#     PARAMS \
+#     gcs://charlie-bucket2/LLM_RL_outputs/ppo_test/exp.2023-03-25-02-33-00.401/best \
+#     --exp-name None \
+#     --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/ppo_test/ \
+#     --train-bsize 32 \
+#     --n-rounds 100 \
+#     --epochs 4 \
+#     --log-every 4 \
+#     --weight-decay 1e-6 \
+#     --lr 3e-5 \
+#     --use-wandb \
+#     --wandb-project "rlhf_binary_test" \
+#     --init-kl-coef 0.001 \
+#     --kl-target 0.1 \
+#     --kl-horizon 10000 \
+#     --value-loss-coef 1.0 \
+#     # --cliprange-value 100.0 \
+#     # --save-every-rounds 1 \
 
 # python -m examples_jaxseq.misc.export_checkpoint \
 #     gcs://rail-tpus-csnell-us/LLM_RL_outputs/ppo_test_multichain/exp.2023-04-23-23-52-26.325.e657cef4e23111edb66069ae2bcdca7b/best \
