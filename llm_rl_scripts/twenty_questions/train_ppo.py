@@ -396,8 +396,8 @@ def main(
             with open(get_enabled_save_path(
                 os.path.join(data_save_path, 'conversations.json'), 
                 enabled=is_main_process, 
-            ), 'wb') as f:
-                json.dump(interactions, f, indent=2)
+            ), 'w') as f:
+                json.dump(conversations, f, indent=2)
             # save summary_results
             with open(get_enabled_save_path(
                 os.path.join(data_save_path, 'summary_results.json'), 

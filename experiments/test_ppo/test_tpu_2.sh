@@ -1,8 +1,8 @@
 #!/bin/bash
 
-export PYTHONPATH=${PWD}:${PWD}/JaxSeq2/
+# export PYTHONPATH=${PWD}:${PWD}/JaxSeq2/
 # export XLA_PYTHON_CLIENT_ALLOCATOR=platform
-export JAX_DISABLE_JIT=1
+# export JAX_DISABLE_JIT=1
 # export CUDA_VISIBLE_DEVICES=""
 # export TOKENIZERS_PARALLELISM=false
 export GCLOUD_PROJECT="rail-tpus"

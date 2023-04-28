@@ -32,8 +32,8 @@ class TextTrajectory:
         assert all([r == 0.0 for r, t in zip(self.reward, self.text_history) if not t.is_action]), "reward for non-actions texts should be 0.0"
 
 # text trajectory chain is a linked list of text trajectories
-
-class TextTrajectoryChain(NamedTuple):
+@dataclass(frozen=True)
+class TextTrajectoryChain:
     text_trajectory: TextTrajectory
     next: Optional[TextTrajectoryChain]
 
@@ -156,6 +156,7 @@ def interact_environment(
     env_seed: Union[Optional[int], Optional[List[Optional[int]]]]=None, 
     env_options: Union[Optional[Dict], Optional[List[Optional[int]]]]=None, 
     bsize: int=1, 
+    npad: int=0,
 ) -> List[List[InteractionTransition]]:
     assert bsize > 0
     if isinstance(env, TextEnv):
@@ -177,12 +178,13 @@ def interact_environment(
     done = [False]*bsize
     while not all(done):
         pre_action_history = text_history
-        text_history = policy.act(text_history, done=done)
+        text_history = policy.act(text_history + [(Text("", is_action=False),)]*npad, done=done + [True]*npad)
+        text_history = text_history[:bsize]
         post_action_history = text_history
 
         step_results = env.step(text_history, done=done)
         step_results = list(map(lambda x: (None, None, True) if x is None else x, step_results))
-        text_history, reward, done = list(zip(*step_results))
+        text_history, reward, done = (list(x) for x in zip(*step_results))
         post_transition_history = text_history
         
         for batch_idx in range(bsize):
@@ -217,13 +219,16 @@ def text_env_eval(
     
     interactions, rewards, dones = [], [], []
     for _ in tqdm(range((n_rollouts+(bsize-1))//bsize), disable=not verbose):
+        actual_bsize = min(n_rollouts-len(interactions), bsize)
+        npad = bsize - actual_bsize
         interaction_batch = interact_environment(
             env, 
             policy, 
             initial_text_history=initial_text_history, 
-            env_seed=[None]*bsize if seed_generator is None else [next(seed_generator) for _ in range(bsize)], 
-            env_options=[env_options]*bsize, 
-            bsize=min(n_rollouts-len(interactions), bsize), 
+            env_seed=[None]*actual_bsize if seed_generator is None else [next(seed_generator) for _ in range(actual_bsize)], 
+            env_options=[env_options]*actual_bsize, 
+            bsize=actual_bsize,
+            npad=npad,
         )
         
         for interaction in interaction_batch:
