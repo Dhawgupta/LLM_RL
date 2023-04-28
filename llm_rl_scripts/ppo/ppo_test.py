@@ -41,7 +41,7 @@ class BitsTestEnv(TextEnv):
             bits = list(map(int, text_history[-1].text.strip().split(' ')))
         except:
             bits = []
-        return text_history, float(sum(bits) > (self.n // 2))*10.0, True
+        return text_history, float(sum(bits) > (self.n // 2))*10.0-4.5, True
 
     def reset(self, seed: Optional[int]=None, options: Optional[Dict]=None) -> TextHistory:
         return (Text(text='<|endoftext|>', is_action=False),)

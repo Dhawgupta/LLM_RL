@@ -8,3 +8,4 @@ data/
 *jsonl
 dump.rdb
 secrets.sh
+*.egg-info/
