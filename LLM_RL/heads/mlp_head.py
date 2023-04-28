@@ -56,6 +56,7 @@ class MLPHeadConfig(HeadConfig):
         use_bias: bool=True, 
         unpadded_output_dim: Optional[int]=None, 
         initializer_range: Optional[int]=None, 
+        bias_init: Optional[float]=None, 
         fsdp: bool=False, 
         mesh: Optional[jax.sharding.Mesh]=None, 
     ) -> None:
@@ -64,6 +65,7 @@ class MLPHeadConfig(HeadConfig):
         self.output_dim = output_dim
         self.use_bias = use_bias
         self.initializer_range = initializer_range
+        self.bias_init = bias_init
         self.fsdp = fsdp
         self.mesh = mesh
         self.unpadded_output_dim = unpadded_output_dim
@@ -102,9 +104,14 @@ class MLPHead(nn.Module):
 
     def setup(self) -> None:
         if self.config.initializer_range is None:
-            initalizer = jax.nn.initializers.lecun_normal()
+            kernel_initalizer = jax.nn.initializers.lecun_normal()
         else:
-            initalizer = jax.nn.initializers.normal(self.config.initializer_range)
+            kernel_initalizer = jax.nn.initializers.normal(self.config.initializer_range)
+        
+        if self.config.bias_init is None:
+            bias_initalizer = jax.nn.initializers.zeros
+        else:
+            bias_initalizer = jax.nn.initializers.constant(self.config.bias_init)
         
         self.dense1 = nn.Dense(
             features=self.config.hidden_dim, 
@@ -112,7 +119,8 @@ class MLPHead(nn.Module):
             dtype=self.dtype, 
             param_dtype=self.param_dtype, 
             precision=self.precision, 
-            kernel_init=initalizer, 
+            kernel_init=kernel_initalizer, 
+            bias_init=bias_initalizer, 
         )
         self.dense2 = nn.Dense(
             features=self.config.output_dim, 
@@ -120,7 +128,8 @@ class MLPHead(nn.Module):
             dtype=self.dtype, 
             param_dtype=self.param_dtype, 
             precision=self.precision, 
-            kernel_init=initalizer, 
+            kernel_init=kernel_initalizer, 
+            bias_init=bias_initalizer, 
         )
 
     def __call__(

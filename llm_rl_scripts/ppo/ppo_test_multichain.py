@@ -33,49 +33,45 @@ import json
 import random
 from JaxSeq.utils import multihost_device_get
 
-class MultiStepBitsTestEnv(TextEnv):
+class MultiChainBitsTestEnv(TextEnv):
     def __init__(self, n: int):
         self.n = n
         self.rng = None
-        self.prev_bits = None
-        self.response = None
+        self.turn = None
+        self.total = None
 
     def step(self, text_history: TextHistory) -> Tuple[TextHistory, float, bool]:
         assert self.rng is not None
-        if self.prev_bits is None:
-            try:
-                bits = list(map(int, text_history[-1].text.strip().split(' ')))
-            except:
-                bits = []
-            self.prev_bits = bits
-            self.response = self.rng.random() < 0.5
-            if len(bits) != self.n:
-                return text_history+(Text(str(self.response)+'\n', False),), -10.0-4.35, False
-            return text_history+(Text(str(self.response)+'\n', False),), float(sum(bits) > (self.n // 2))*10.0-4.35, False
+        assert self.turn is not None
+        assert self.total is not None
+
+        try:
+            bit = int(text_history[-1].text.strip())
+        except:
+            bit = None
+        
+        sign = self.rng.choice([-1, 1])
+        self.turn += 1
+        if bit is not None:
+            self.total += bit * sign
+
+        done = self.turn == self.n
+        if done:
+            reward = float(self.total < -(self.n // 2))*(self.n**2)
         else:
-            try:
-                bits = list(map(int, text_history[-1].text.strip().split(' ')))
-            except:
-                bits = []
-            if self.response and sum(self.prev_bits) > (self.n // 2):
-                correct = sum(bits) > (self.n // 2)
-            elif self.response and sum(self.prev_bits) <= (self.n // 2):
-                correct = sum(bits) <= (self.n // 2)
-            elif (not self.response) and sum(self.prev_bits) > (self.n // 2):
-                correct = sum(bits) <= (self.n // 2)
-            elif (not self.response) and sum(self.prev_bits) <= (self.n // 2):
-                correct = sum(bits) > (self.n // 2)
+            if bit is None:
+                reward = -10.0
             else:
-                raise NotImplementedError
-            if len(bits) != self.n or len(self.prev_bits) != self.n:
-                return text_history, -10.0-4.35, True
-            return text_history, float(correct)*10.0-4.35, True
+                reward = bit * sign
+        
+        return (Text(text=f'<|endoftext|>total: {self.total}, sign: {sign}, turn: {self.turn}\n', is_action=False),), reward, done
 
     def reset(self, seed: Optional[int]=None, options: Optional[Dict]=None) -> TextHistory:
         self.rng = random.Random(seed)
-        self.prev_bits = None
-        self.response = None
-        return (Text(text='<|endoftext|>', is_action=False),)
+        sign = self.rng.choice([-1, 1])
+        self.turn = 0
+        self.total = 0
+        return (Text(text=f'<|endoftext|>total: {self.total}, sign: {sign}, turn: {self.turn}\n', is_action=False),)
 
 def main(
     model_load_mode: ModelLoadMode, 
@@ -222,7 +218,7 @@ def main(
         tokenizer=tokenizer, 
     )
 
-    env = MultiStepBitsTestEnv(n=10)
+    env = MultiChainBitsTestEnv(n=10)
     
     policy_prng = jax.random.PRNGKey(0)
     policy = GPTJPolicy(
@@ -267,6 +263,7 @@ def main(
             output_dim=1, 
             use_bias=True, 
             initializer_range=0.0, 
+            bias_init=0.375, 
         ), 
         model_dtype=jnp.float32, 
         optim_getter=value_head_optim_getter, 
@@ -317,18 +314,29 @@ def main(
 
         text_trajectory_chains = []
         for raw_result in raw_results:
-            text_trajectory = TextTrajectory(
-                text_history=raw_result[-1].post_transition_history, 
-                reward=sum([[0.0, item.reward] for item in raw_result], []), 
-                done=raw_result[-1].done, 
-            )
-            if TokenTrajectory.from_text_trajectory(text_trajectory, tokenizer).tokens.shape[0] >= max_input_length+max_output_length:
-                text_trajectory = text_trajectory._replace(
-                    text_history=text_trajectory.text_history[:2], 
-                    reward=text_trajectory.reward[:2], 
+            curr_chain = []
+            for transition in raw_result:
+                text_trajectory = TextTrajectory(
+                    text_history=transition.post_action_history, 
+                    reward=[0.0, transition.reward], 
+                    done=transition.done, 
                 )
-            text_trajectory_chains.append(TextTrajectoryChain(text_trajectory, None))
-        
+                # if TokenTrajectory.from_text_trajectory(text_trajectory, tokenizer).tokens.shape[0] >= max_input_length+max_output_length:
+                #     text_trajectory = text_trajectory._replace(
+                #         text_history=text_trajectory.text_history[:1]+(Text('\n', True),), 
+                #         reward=text_trajectory.reward[:1]+[0.0], 
+                #     )
+                curr_chain.append(text_trajectory)
+            
+            chain = None
+            for text_trajectory in curr_chain[::-1]:
+                chain = TextTrajectoryChain(
+                    text_trajectory=text_trajectory, 
+                    next=chain, 
+                )
+            
+            text_trajectory_chains.append(chain)
+
         ppo_data, all_kls = ppo_inference.get_ppo_data_from_text_trajectory_chain(
             text_trajectory_chains, 
             bsize=ppo_data_bsize, 
@@ -338,6 +346,7 @@ def main(
             kl_weight=kl_controller.value, 
             use_advantage_whitening=use_advantage_whitening, 
         )
+        
         mean_kl = all_kls.mean().item()
         kl_controller.update(mean_kl, train_bsize)
 

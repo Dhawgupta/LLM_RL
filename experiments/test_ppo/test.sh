@@ -14,31 +14,96 @@ source ${PWD}/secrets.sh
 source ~/miniconda3/bin/activate
 conda activate LLM_RL
 
-# 4/26/2023
+# 4/27/2023
 
 export GCLOUD_PROJECT="rail-tpus"
 export GCLOUD_TOKEN_PATH=${HOME}/.config/gcloud/rail-tpus.json
 
-CUDA_VISIBLE_DEVICES=5 python -m llm_rl_scripts.ppo.ppo_test_multistep \
+CUDA_VISIBLE_DEVICES=5 python -m llm_rl_scripts.ppo.ppo_test_multichain \
     PARAMS \
-    gcs://rail-tpus-csnell-us/LLM_RL_outputs/ppo_test_multistep2/exp.2023-04-22-21-52-41.254.015006f2e15811ed89e155792b4c6f0d/best \
+    gcs://rail-tpus-csnell-us/LLM_RL_outputs/ppo_test_multichain/exp.2023-04-23-23-52-26.325.e657cef4e23111edb66069ae2bcdca7b/best \
     --exp-name None \
-    --outputs-path gcs://rail-tpus-csnell-us/LLM_RL_outputs/ppo_test_multistep/ \
+    --outputs-path gcs://rail-tpus-csnell-us/LLM_RL_outputs/ppo_test_multichain/ \
+    --n-rollouts 512 \
     --train-bsize 1 \
-    --grad-accum-steps 32 \
+    --grad-accum-steps 512 \
     --rollout-bsize 1 \
     --ppo-data-bsize 1 \
     --n-rounds 100 \
     --epochs 4 \
-    --log-every 128 \
+    --log-every 512 \
     --weight-decay 1e-6 \
-    --lr 6e-5 \
+    --lr 3e-5 \
     --use-wandb \
-    --wandb-project "rlhf_multistep_binary_test" \
-    --save-every-rounds 1 \
+    --wandb-project "rlhf_multichain_binary_test" \
     --init-kl-coef 0.001 \
     --kl-target 0.1 \
     --kl-horizon 10000 \
+    --value-loss-coef 1.0 \
+    # --cliprange-value 100.0 \
+    # --save-every-rounds 1 \
+
+# python -m examples_jaxseq.misc.export_checkpoint \
+#     gcs://rail-tpus-csnell-us/LLM_RL_outputs/ppo_test_multichain/exp.2023-04-23-23-52-26.325.e657cef4e23111edb66069ae2bcdca7b/best \
+
+# ppo multisteps
+# export GCLOUD_PROJECT="rail-tpus"
+# export GCLOUD_TOKEN_PATH=${HOME}/.config/gcloud/rail-tpus.json
+
+# CUDA_VISIBLE_DEVICES=5 python -m llm_rl_scripts.ppo.ppo_test_multistep \
+#     PARAMS \
+#     gcs://rail-tpus-csnell-us/LLM_RL_outputs/ppo_test_multistep2/exp.2023-04-22-21-52-41.254.015006f2e15811ed89e155792b4c6f0d/best \
+#     --exp-name None \
+#     --outputs-path gcs://rail-tpus-csnell-us/LLM_RL_outputs/ppo_test_multistep/ \
+#     --n-rollouts 512 \
+#     --train-bsize 1 \
+#     --grad-accum-steps 128 \
+#     --rollout-bsize 1 \
+#     --ppo-data-bsize 1 \
+#     --n-rounds 100 \
+#     --epochs 4 \
+#     --log-every 128 \
+#     --weight-decay 1e-6 \
+#     --lr 3e-5 \
+#     --use-wandb \
+#     --wandb-project "rlhf_multistep_binary_test" \
+#     --init-kl-coef 0.001 \
+#     --kl-target 0.1 \
+#     --kl-horizon 10000 \
+#     --value-loss-coef 1.0 \
+#     # --cliprange-value 100.0 \
+#     # --save-every-rounds 1 \
+
+
+
+# 4/26/2023
+
+# export GCLOUD_PROJECT="rail-tpus"
+# export GCLOUD_TOKEN_PATH=${HOME}/.config/gcloud/rail-tpus.json
+
+# CUDA_VISIBLE_DEVICES=5 python -m llm_rl_scripts.ppo.ppo_test_multistep \
+#     PARAMS \
+#     gcs://rail-tpus-csnell-us/LLM_RL_outputs/ppo_test_multistep2/exp.2023-04-22-21-52-41.254.015006f2e15811ed89e155792b4c6f0d/best \
+#     --exp-name None \
+#     --outputs-path gcs://rail-tpus-csnell-us/LLM_RL_outputs/ppo_test_multistep/ \
+#     --n-rollouts 512 \
+#     --train-bsize 1 \
+#     --grad-accum-steps 128 \
+#     --rollout-bsize 1 \
+#     --ppo-data-bsize 1 \
+#     --n-rounds 100 \
+#     --epochs 4 \
+#     --log-every 128 \
+#     --weight-decay 1e-6 \
+#     --lr 3e-5 \
+#     --use-wandb \
+#     --wandb-project "rlhf_multistep_binary_test" \
+#     --init-kl-coef 0.001 \
+#     --kl-target 0.1 \
+#     --kl-horizon 10000 \
+#     --value-loss-coef 1.0 \
+#     # --cliprange-value 100.0 \
+#     # --save-every-rounds 1 \
 
 # 4/25/2023
 
