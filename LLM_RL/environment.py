@@ -11,7 +11,7 @@ from copy import deepcopy
 
 # define text objects
 
-@dataclass
+@dataclass(frozen=True)
 class Text:
     text: str
     is_action: bool
@@ -21,18 +21,19 @@ text_history_to_str = lambda text_history: ''.join(map(lambda x: x.text, text_hi
 
 # text trajectory should fit into a single context window, otherwise is truncated
 
-class TextTrajectory(NamedTuple):
+@dataclass(frozen=True)
+class TextTrajectory:
     text_history: TextHistory
     reward: Tuple[float, ...]
     done: bool
 
     def __post_init__(self):
-        assert len(self.reward) == len(self.text_history) # reward for each text
-        assert all([r == 0.0 for r, t in zip(self.reward, self.text_history) if not t.is_action]) # reward for non-actions texts is 0.0
+        assert len(self.reward) == len(self.text_history), "reward is needed for each text"
+        assert all([r == 0.0 for r, t in zip(self.reward, self.text_history) if not t.is_action]), "reward for non-actions texts should be 0.0"
 
 # text trajectory chain is a linked list of text trajectories
-
-class TextTrajectoryChain(NamedTuple):
+@dataclass(frozen=True)
+class TextTrajectoryChain:
     text_trajectory: TextTrajectory
     next: Optional[TextTrajectoryChain]
 
@@ -155,6 +156,7 @@ def interact_environment(
     env_seed: Union[Optional[int], Optional[List[Optional[int]]]]=None, 
     env_options: Union[Optional[Dict], Optional[List[Optional[int]]]]=None, 
     bsize: int=1, 
+    npad: int=0,
 ) -> List[List[InteractionTransition]]:
     assert bsize > 0
     if isinstance(env, TextEnv):
@@ -176,12 +178,13 @@ def interact_environment(
     done = [False]*bsize
     while not all(done):
         pre_action_history = text_history
-        text_history = policy.act(text_history, done=done)
+        text_history = policy.act(text_history + [(Text("", is_action=False),)]*npad, done=done + [True]*npad)
+        text_history = text_history[:bsize]
         post_action_history = text_history
 
         step_results = env.step(text_history, done=done)
         step_results = list(map(lambda x: (None, None, True) if x is None else x, step_results))
-        text_history, reward, done = list(zip(*step_results))
+        text_history, reward, done = (list(x) for x in zip(*step_results))
         post_transition_history = text_history
         
         for batch_idx in range(bsize):
@@ -216,13 +219,16 @@ def text_env_eval(
     
     interactions, rewards, dones = [], [], []
     for _ in tqdm(range((n_rollouts+(bsize-1))//bsize), disable=not verbose):
+        actual_bsize = min(n_rollouts-len(interactions), bsize)
+        npad = bsize - actual_bsize
         interaction_batch = interact_environment(
             env, 
             policy, 
             initial_text_history=initial_text_history, 
-            env_seed=[None]*bsize if seed_generator is None else [next(seed_generator) for _ in range(bsize)], 
-            env_options=[env_options]*bsize, 
-            bsize=min(n_rollouts-len(interactions), bsize), 
+            env_seed=[None]*actual_bsize if seed_generator is None else [next(seed_generator) for _ in range(actual_bsize)], 
+            env_options=[env_options]*actual_bsize, 
+            bsize=actual_bsize,
+            npad=npad,
         )
         
         for interaction in interaction_batch:
@@ -276,7 +282,8 @@ class UserPolicy(TextPolicy):
 """tokenize environment objects"""
 
 
-class TokenHistory(NamedTuple):
+@dataclass(frozen=True)
+class TokenHistory:
     tokens: np.ndarray # 1d int32 array
     is_action: np.ndarray # 1d bool array
 
@@ -310,15 +317,22 @@ class TokenHistory(NamedTuple):
             np.array(is_action, dtype=np.bool_), 
         )
 
-class TokenTrajectory(NamedTuple):
+@dataclass(frozen=True)
+class TokenTrajectory:
     tokens: np.ndarray # 1d int32 array
     is_action: np.ndarray # 1d bool array
     reward: np.ndarray # 1d float32 array
-    done: Union[bool, np.ndarray] # bool scalar
+    done: np.ndarray # bool scalar
 
     def __post_init__(self):
-        assert all(len(item.shape) == 1 for item in self), '(tokens, is_action, reward, done) must all be 1 dimensional'
-        assert all([item.shape == self[0].shape for item in self[1:]]), '(tokens, is_action, reward, done) must all have the same shape'
+        assert len(self.tokens.shape) == 1, 'tokens must be 1 dimensional'
+        assert len(self.is_action.shape) == 1, 'is_action must be 1 dimensional'
+        assert len(self.reward.shape) == 1, 'reward must be 1 dimensional'
+        assert len(self.done.shape) == 0, 'done must be scalar'
+
+        assert self.is_action.shape == self.tokens.shape, 'is_action must have the same shape as tokens'
+        assert self.reward.shape == self.tokens.shape, 'reward must have the same shape as tokens'
+
         assert not np.any(((1 - self.is_action.astype(np.float32)) * self.reward) != 0.0), 'reward must be 0.0 if not an action'
     
     @classmethod
@@ -334,7 +348,6 @@ class TokenTrajectory(NamedTuple):
         tokens = []
         is_action = []
         reward = []
-        done = []
 
         for i, item in enumerate(text_trajectory.text_history):
             
@@ -346,7 +359,6 @@ class TokenTrajectory(NamedTuple):
             
             # add reward at the last token in the text
             reward.extend(([0.0]*(len(new_tokens)-1))+[text_trajectory.reward[i]])
-            done.extend([False]*len(new_tokens))
         
         # get done
         done = text_trajectory.done
@@ -358,7 +370,8 @@ class TokenTrajectory(NamedTuple):
             np.array(done, dtype=np.bool_), 
         )
 
-class TokenTrajectoryChain(NamedTuple):
+@dataclass(frozen=True)
+class TokenTrajectoryChain:
     token_trajectory: TokenTrajectory
     next: Optional[TokenTrajectoryChain]
 

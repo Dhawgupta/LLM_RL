@@ -113,7 +113,7 @@ def create_trajectory_from_history(
         if word_guessed:
             reward[-2] = 0.0
 
-    return TextTrajectory(text_history, reward, done)
+    return TextTrajectory(text_history, tuple(reward), done)
 
 
 def split_question_answer(line: str) -> Tuple[str, str]:
@@ -164,7 +164,7 @@ def create_trajectory_from_conversation(conversation: Conversation, max_conversa
     if conversation["correct"]:
         reward[-2] = 0.0
 
-    return TextTrajectory(text_history, reward, done)
+    return TextTrajectory(tuple(text_history), tuple(reward), done)
 
 
 def create_trajectories_from_conversations(
@@ -285,7 +285,7 @@ def create_dt_text_history_from_trajectory(text_trajectory: TextTrajectory, max_
 
     assert math.isclose(rtg, 0.0)
 
-    return new_text_history
+    return tuple(new_text_history)
 
 
 def asker_postproc(question: str) -> str:
