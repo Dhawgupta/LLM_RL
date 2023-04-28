@@ -45,15 +45,3 @@ git clone https://github.com/Sea-Snell/JaxSeq2.git
 cd JaxSeq2
 python -m pip install -e .
 ```
-
-### **3. install JaxSeq2**
-https://github.com/Sea-Snell/JaxSeq2.git to install JaxSeq2 in the LLM_RL environment.
-
-
-
-
-## Update JaxSeq2
-
-``` shell
-git submodule update --remote JaxSeq2
-```
