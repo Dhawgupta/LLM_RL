@@ -1,4 +1,5 @@
-from examples_jaxseq.misc.commandline_server_client import Client, strip_prompt_from_completion
+from examples_jaxseq.misc.commandline_server_client import Client
+from JaxSeq.utils import strip_prompt_from_completion
 from LLM_RL.environment import TextPolicy, TextHistory, text_history_to_str, Text, text_env_eval, interact_environment
 from llm_rl_scripts.chess.env import FenChessHistoryEnvSingleTurn, postprocess_state
 import tyro

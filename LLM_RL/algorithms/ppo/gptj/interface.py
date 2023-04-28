@@ -21,7 +21,7 @@ from JaxSeq.models.gptj.interface import GPTJInference
 import jax.numpy as jnp
 from LLM_RL.algorithms.ppo.base_interface import PPOPolicy
 from jax.experimental.pjit import pjit
-from examples_jaxseq.misc.commandline_server_client import strip_prompt_from_completion
+from JaxSeq.utils import strip_prompt_from_completion
 
 class GPTJPPOTrain(PPOTrain):
     @classmethod
@@ -189,7 +189,7 @@ class GPTJPPOInference(PPOInference):
         value_head_params_partition_spec = match_partition_rules(value_head_model.config.get_partition_rules(), value_head_params)
 
         @partial(
-            jax.jit, 
+            pjit, 
             static_argnames=('initial_policy_output_attentions', 'initial_policy_output_hidden_states', 'policy_output_attentions', 'train'), 
             in_shardings=(
                 jax.tree_util.tree_map(lambda ps: NamedSharding(mesh, ps), initial_policy_params_partition_spec) if has_initial_policy else NamedSharding(mesh, PS()), 
@@ -285,7 +285,7 @@ class GPTJPPOInference(PPOInference):
             )
     
         @partial(
-            jax.jit, 
+            pjit, 
             static_argnames=('train',), 
             in_shardings=(
                 jax.tree_util.tree_map(lambda ps: NamedSharding(mesh, ps), policy_params_partition_spec), 

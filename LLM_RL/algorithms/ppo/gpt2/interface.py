@@ -21,7 +21,7 @@ from JaxSeq.models.gpt2.interface import GPT2Inference
 import jax.numpy as jnp
 from LLM_RL.algorithms.ppo.base_interface import PPOPolicy
 from jax.experimental.pjit import pjit
-from examples_jaxseq.misc.commandline_server_client import strip_prompt_from_completion
+from JaxSeq.utils import strip_prompt_from_completion
 
 class GPT2PPOTrain(PPOTrain):
     @classmethod
