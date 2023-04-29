@@ -59,13 +59,16 @@ def ilql_loss(
     qv_query_indicators = get_query_indicators(should_take_action.reshape(-1))
 
     is_next_state = should_take_action.copy()
+    # set first action position to false
     is_next_state = is_next_state.at[jnp.arange(0, is_next_state.shape[0], dtype=jnp.int32), jnp.argmax(is_next_state.astype(jnp.int32), axis=1)].set(False)
+    # set endpoint to true as long as there is at least 1 action in the sequence
     is_next_state = jnp.concatenate((is_next_state, (should_take_action.sum(axis=1) > 0)[..., None]), axis=1)
 
     vns_query_indicators = get_query_indicators(is_next_state.reshape(-1))
     # should be the same number of vns as qv, so we can clip the extra padding to match shape
-    vns_query_indicators = vns_query_indicators[:qv_query_indicators.shape[0], :] # TODO: check this
+    vns_query_indicators = vns_query_indicators[:qv_query_indicators.shape[0], :]
     
+    # extract selected values
     q1sa_selected = (qv_query_indicators * q1sa_flat).sum(axis=1)
     q2sa_selected = (qv_query_indicators * q2sa_flat).sum(axis=1)
     v_selected = (qv_query_indicators * v_flat).sum(axis=1)
@@ -74,19 +77,21 @@ def ilql_loss(
     vns_selected = (vns_query_indicators * vns_flat).sum(axis=1)
     rs_selected = (qv_query_indicators * rewards.reshape(-1)).sum(axis=1)
 
+    # get masks for selected values
     sa_mask = (qv_query_indicators.sum(axis=1) > 0).astype(jnp.float32)
     ns_mask = (vns_query_indicators.sum(axis=1) > 0).astype(jnp.float32)
 
-    # n_sa, n_ns = sa_mask.sum(), ns_mask.sum()
-
+    # compute q loss
     q1_loss = (optax.l2_loss(q1sa_selected, jax.lax.stop_gradient(rs_selected + gamma * vns_selected)) * sa_mask).sum() / n
     q2_loss = (optax.l2_loss(q2sa_selected, jax.lax.stop_gradient(rs_selected + gamma * vns_selected)) * sa_mask).sum() / n
 
+    # compute v loss
     target_q_selected = jnp.minimum(target_q1sa_selected, target_q2sa_selected)
     expectile_indicator = (target_q_selected >= v_selected).astype(jnp.float32)
     expectile_weights = expectile_indicator * tau + (1 - expectile_indicator) * (1 - tau)
     v_loss = (optax.l2_loss(v_selected, jax.lax.stop_gradient(target_q_selected)) * jax.lax.stop_gradient(expectile_weights) * sa_mask).sum() / n
 
+    # compute cql loss on both q heads
     q1_cql_loss = optax.softmax_cross_entropy_with_integer_labels(q1_logits, token_ids)
     q1_cql_loss = (mask * q1_cql_loss).sum() / n
 

@@ -60,9 +60,13 @@ class ILQLData(NamedTuple):
         token_trajectory_chain: TokenTrajectoryChain, 
     ):
         if token_trajectory_chain.next is not None:
-            first_next_action = np.argmax(token_trajectory_chain.next.token_trajectory.is_action[1:], axis=0)+1
-            next_token_ids = token_trajectory_chain.next.token_trajectory.tokens[:first_next_action]
-            next_done = token_trajectory_chain.next.token_trajectory.done
+            if token_trajectory_chain.next.token_trajectory.is_action[1:].sum() > 0:
+                first_next_action = np.argmax(token_trajectory_chain.next.token_trajectory.is_action[1:], axis=0)+1
+                next_token_ids = token_trajectory_chain.next.token_trajectory.tokens[:first_next_action]
+                next_done = False
+            else:
+                next_token_ids = token_trajectory_chain.next.token_trajectory.tokens
+                next_done = token_trajectory_chain.next.token_trajectory.done
         else:
             next_token_ids, next_done = None, None
         return cls(

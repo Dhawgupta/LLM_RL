@@ -29,11 +29,13 @@ from functools import partial
 import numpy as np
 from JaxSeq.logs import label_logs, log, pull_logs
 import json
-from llm_rl_scripts.ppo.ppo_test import BitsTestEnv
+from llm_rl_scripts.ppo.ppo_test_multichain import MultiChainBitsTestEnv
 from LLM_RL.heads.mlp_head import load_train_state as load_head_train_state, ModelLoadMode as HeadModelLoadMode
 from LLM_RL.algorithms.ilql.train import train_loop
 from LLM_RL.algorithms.ilql.data import ILQLData, ILQLDataset, ILQLIterableDataset
 from JaxSeq.utils import multihost_device_get
+from tqdm.auto import tqdm
+import random
 
 def main(
     model_load_mode: ModelLoadMode, 
@@ -107,30 +109,50 @@ def main(
     with open(convert_path(train_data_path), 'r') as f:
         raw_data = jsonl_load(f)
     
-    ilql_data = []
-    for item in raw_data:
-        text_trajectory_chain = TextTrajectoryChain(
-            text_trajectory=TextTrajectory(
-                text_history=[
-                    Text('<|endoftext|>', False), 
-                    Text(item['out_text'], True), 
-                ], 
-                reward=[0.0, item['reward']], 
-                done=True, 
-            ), 
-            next=None, 
-        )
-        token_trajectory_chain = TokenTrajectoryChain.from_text_trajectory_chain(text_trajectory_chain, tokenizer)
-        ilql_data.append(ILQLData.from_token_trajectory_chain(token_trajectory_chain))
+    rng = random.Random(0)
+    def raw_data_iterable():
+        idxs = list(range(0, len(raw_data), 10))
+        rng.shuffle(idxs)
+
+        for idx in idxs:
+            curr_chain = []
+            for turn_idx in range(10):
+                item = raw_data[idx+turn_idx]
+                curr_chain.append(TextTrajectory(
+                    text_history=[
+                        Text('<|endoftext|>'+item['in_text'], False), 
+                        Text(item['out_text'], True), 
+                    ], 
+                    reward=[0.0, item['reward']], 
+                    done=(turn_idx == 9), 
+                ))
+            
+            chain = None
+            for text_trajectory in curr_chain[::-1]:
+                chain = TextTrajectoryChain(
+                    text_trajectory=text_trajectory, 
+                    next=chain, 
+                )
+            
+            token_trajectory_chain = TokenTrajectoryChain.from_text_trajectory_chain(chain, tokenizer)
+            # train on correlated chain
+            while token_trajectory_chain is not None:
+                yield ILQLData.from_token_trajectory_chain(token_trajectory_chain)
+                token_trajectory_chain = token_trajectory_chain.next
     
-    dataset = ILQLDataset.from_ilql_data_list(
-        ilql_data, 
+    class ILQLDataIterable:
+        def __iter__(self):
+            return raw_data_iterable()
+    
+    data_iterable = ILQLDataIterable()
+    dataset = ILQLIterableDataset.from_ilql_data_iterable(
+        data_iterable, 
         tokenizer, 
         BlockingStrategy(
             padding=Padding.RIGHT, 
             truncation=Truncation.RIGHT, 
             max_length=max_length, 
-        )
+        ), 
     )
 
     def policy_optim_getter(params: PyTree):
@@ -208,7 +230,7 @@ def main(
             output_dim=base_model.config.vocab_size, 
             use_bias=True, 
             layer2_initializer_range=0.0, 
-            layer2_bias_init=0.0, 
+            layer2_bias_init=0.375, 
         ), 
         model_dtype=jnp.float32, 
         optim_getter=value_head_optim_getter, 
@@ -236,7 +258,7 @@ def main(
             output_dim=base_model.config.vocab_size, 
             use_bias=True, 
             layer2_initializer_range=0.0, 
-            layer2_bias_init=0.0, 
+            layer2_bias_init=0.375, 
         ), 
         model_dtype=jnp.float32, 
         optim_getter=value_head_optim_getter, 
@@ -264,7 +286,7 @@ def main(
             output_dim=1, 
             use_bias=True, 
             layer2_initializer_range=0.0, 
-            layer2_bias_init=0.0, 
+            layer2_bias_init=0.375, 
         ), 
         model_dtype=jnp.float32, 
         optim_getter=value_head_optim_getter, 
@@ -319,11 +341,11 @@ def main(
         v_head_model=v_head, 
         tokenizer=tokenizer, 
         loss_fn=loss_fn, 
-        beta=128.0, 
+        beta=64.0, 
         dp_shard_logits=True, 
     )
     
-    env = BitsTestEnv(n=10)
+    env = MultiChainBitsTestEnv(n=10)
 
     save_dir, exp_name = setup_experiment_save(
         exp_name=exp_name, 
@@ -365,9 +387,10 @@ def main(
             bsize=1, 
         )
 
-        for item in raw_results:
+        for turns in raw_results:
             print('='*25)
-            print(text_history_to_str(item[-1].post_transition_history))
+            for turn in turns:
+                print(text_history_to_str(turn.post_action_history))
             print('='*25)
 
         logs = pull_logs(summary_results)

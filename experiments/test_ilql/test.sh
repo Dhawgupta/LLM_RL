@@ -19,10 +19,10 @@ conda activate LLM_RL
 export GCLOUD_PROJECT="civic-boulder-204700"
 export GCLOUD_TOKEN_PATH="${HOME}/.config/gcloud/civic-boulder-204700-V2.json"
 
-CUDA_VISIBLE_DEVICES=5 python -m llm_rl_scripts.ilql.ilql_multistep_test \
+CUDA_VISIBLE_DEVICES=5 python -m llm_rl_scripts.ilql.ilql_multichain_test \
     PARAMS \
-    gcs://charlie-bucket2/LLM_RL_outputs/ppo_test/exp.2023-04-22-21-52-41.254.015006f2e15811ed89e155792b4c6f0d/best \
-    gcs://charlie-bucket2/datasets/test_ppo/10bit_data_multistep.jsonl \
+    gcs://charlie-bucket2/LLM_RL_outputs/ppo_test/exp.2023-04-23-23-52-26.325.e657cef4e23111edb66069ae2bcdca7b/best/ \
+    gcs://charlie-bucket2/datasets/test_ppo/10bit_data_multichain.jsonl \
     --exp-name None \
     --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/ilql_test/ \
     --train-bsize 1 \
@@ -34,7 +34,27 @@ CUDA_VISIBLE_DEVICES=5 python -m llm_rl_scripts.ilql.ilql_multistep_test \
     --weight-decay 1e-6 \
     --lr 3e-4 \
     --use-wandb \
-    --wandb-project "ilql_multistep_test" \
+    --wandb-project "ilql_multichain_test" \
+
+# export GCLOUD_PROJECT="civic-boulder-204700"
+# export GCLOUD_TOKEN_PATH="${HOME}/.config/gcloud/civic-boulder-204700-V2.json"
+
+# CUDA_VISIBLE_DEVICES=5 python -m llm_rl_scripts.ilql.ilql_multistep_test \
+#     PARAMS \
+#     gcs://charlie-bucket2/LLM_RL_outputs/ppo_test/exp.2023-04-22-21-52-41.254.015006f2e15811ed89e155792b4c6f0d/best \
+#     gcs://charlie-bucket2/datasets/test_ppo/10bit_data_multistep.jsonl \
+#     --exp-name None \
+#     --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/ilql_test/ \
+#     --train-bsize 1 \
+#     --grad-accum-steps 64 \
+#     --eval-every-epochs 1 \
+#     --eval-every-steps 1024 \
+#     --epochs 100 \
+#     --log-every 64 \
+#     --weight-decay 1e-6 \
+#     --lr 3e-4 \
+#     --use-wandb \
+#     --wandb-project "ilql_multistep_test" \
 
 # 4/24/2023
 

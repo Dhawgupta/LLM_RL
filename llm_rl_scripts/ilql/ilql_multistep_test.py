@@ -162,8 +162,8 @@ def main(
         data_iterable, 
         tokenizer, 
         BlockingStrategy(
-            padding=Padding.LEFT, 
-            truncation=Truncation.LEFT, 
+            padding=Padding.RIGHT, 
+            truncation=Truncation.RIGHT, 
             max_length=max_length, 
         ), 
     )
@@ -263,7 +263,6 @@ def main(
         params=q1_target_head_params, 
     )
 
-    # TODO: add rng key for loading
     q2_prng_key = jax.random.PRNGKey(5)
     q2_head_train_state, _ = load_head_train_state_from_config(
         model_config=MLPHeadConfig(
