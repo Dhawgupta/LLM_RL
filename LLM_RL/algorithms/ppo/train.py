@@ -22,6 +22,7 @@ from LLM_RL.environment import TextEnv
 from LLM_RL.algorithms.ppo.base_interface import PPOPolicy
 import flax.linen as nn
 import os
+import jax.numpy as jnp
 
 def dump_state(
     policy_model: FlaxPreTrainedModel, 
@@ -31,6 +32,7 @@ def dump_state(
     save_dir: str, 
     save_train_state: bool, 
     enable_save: bool, 
+    save_dtype: jnp.dtype, 
     **loop_state: Dict[Hashable, Any], 
 ):
     # dump loop_state
@@ -48,12 +50,14 @@ def dump_state(
         save_pytree(
             tree=policy_train_state, 
             path=get_enabled_save_path(os.path.join(save_dir, 'policy', 'train_state.msgpack'), enabled=enable_save), 
+            dtype=save_dtype, 
             sharding=get_sharding_from_model_policy(policy_model, policy_train_state), 
         )
     else:
         save_pytree(
             tree=policy_train_state.params, 
             path=get_enabled_save_path(os.path.join(save_dir, 'policy', 'params.msgpack'), enabled=enable_save), 
+            dtype=save_dtype, 
             sharding=get_sharding_from_model_policy(policy_model, policy_train_state.params), 
         )
 
@@ -68,12 +72,14 @@ def dump_state(
         save_pytree(
             tree=value_head_train_state, 
             path=get_enabled_save_path(os.path.join(save_dir, 'value_head', 'train_state.msgpack'), enabled=enable_save), 
+            dtype=save_dtype, 
             sharding=get_sharding_from_model_head(value_head_model, value_head_train_state), 
         )
     else:
         save_pytree(
             tree=value_head_train_state.params, 
             path=get_enabled_save_path(os.path.join(save_dir, 'value_head', 'params.msgpack'), enabled=enable_save), 
+            dtype=save_dtype, 
             sharding=get_sharding_from_model_head(value_head_model, value_head_train_state.params), 
         )
 
@@ -129,6 +135,7 @@ def train_loop(
     save_best: bool, 
     max_checkpoints: Optional[int], 
     save_train_state: bool, 
+    save_dtype: jnp.dtype, 
     use_wandb: bool, 
     wandb_project: Optional[str], 
     wandb_run_name: Optional[str], 
@@ -184,6 +191,7 @@ def train_loop(
             save_dir=curr_save_dir, 
             save_train_state=save_train_state, 
             enable_save=is_main_process, 
+            save_dtype=save_dtype, 
             **loop_state, 
         )
         if add_to_queue and is_main_process:

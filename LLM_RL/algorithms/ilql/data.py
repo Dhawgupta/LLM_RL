@@ -147,7 +147,7 @@ class ILQLIterableDataset(IterableDataset):
         self.ilql_data = ilql_data
     
     def __iter__(self):
-        return _ILQLIteratorDataset(iter(self.ppo_data))
+        return _ILQLIteratorDataset(iter(self.ilql_data))
     
     @classmethod
     def from_ilql_data_iterable(

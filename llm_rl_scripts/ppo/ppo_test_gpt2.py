@@ -96,6 +96,7 @@ def main(
     max_checkpoints: Optional[int]=None, 
     save_train_state: bool=True, 
     save_ppo_dataset: bool=True, 
+    save_bf16: bool=True, 
 
     policy_do_sample: bool=True, 
     policy_num_beams: int=1, 
@@ -370,6 +371,7 @@ def main(
     )
     
     train_prng = jax.random.PRNGKey(1)
+    save_dtype = jnp.bfloat16 if save_bf16 else jnp.float32
     ppo_trainer, ppo_inference, policy = train_loop(
         trainer=ppo_trainer, 
         inference=ppo_inference, 
@@ -396,6 +398,7 @@ def main(
         save_best=save_best, 
         max_checkpoints=max_checkpoints, 
         save_train_state=save_train_state, 
+        save_dtype=save_dtype, 
         use_wandb=use_wandb, 
         wandb_project=wandb_project, 
         wandb_run_name=exp_name, 

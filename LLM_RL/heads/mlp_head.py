@@ -55,8 +55,10 @@ class MLPHeadConfig(HeadConfig):
         output_dim: int, 
         use_bias: bool=True, 
         unpadded_output_dim: Optional[int]=None, 
-        initializer_range: Optional[int]=None, 
-        bias_init: Optional[float]=None, 
+        layer1_initializer_range: Optional[int]=None, 
+        layer1_bias_init: Optional[float]=None, 
+        layer2_initializer_range: Optional[int]=None, 
+        layer2_bias_init: Optional[float]=None, 
         fsdp: bool=False, 
         mesh: Optional[jax.sharding.Mesh]=None, 
     ) -> None:
@@ -64,8 +66,10 @@ class MLPHeadConfig(HeadConfig):
         self.hidden_dim = hidden_dim
         self.output_dim = output_dim
         self.use_bias = use_bias
-        self.initializer_range = initializer_range
-        self.bias_init = bias_init
+        self.layer1_initializer_range = layer1_initializer_range
+        self.layer1_bias_init = layer1_bias_init
+        self.layer2_initializer_range = layer2_initializer_range
+        self.layer2_bias_init = layer2_bias_init
         self.fsdp = fsdp
         self.mesh = mesh
         self.unpadded_output_dim = unpadded_output_dim
@@ -103,15 +107,25 @@ class MLPHead(nn.Module):
     precision: Optional[Union[jax.lax.Precision, str]]=None
 
     def setup(self) -> None:
-        if self.config.initializer_range is None:
-            kernel_initalizer = jax.nn.initializers.lecun_normal()
+        if self.config.layer1_initializer_range is None:
+            kernel_initalizer_layer1 = jax.nn.initializers.lecun_normal()
         else:
-            kernel_initalizer = jax.nn.initializers.normal(self.config.initializer_range)
+            kernel_initalizer_layer1 = jax.nn.initializers.normal(self.config.layer1_initializer_range)
         
-        if self.config.bias_init is None:
-            bias_initalizer = jax.nn.initializers.zeros
+        if self.config.layer1_bias_init is None:
+            bias_initalizer_layer1 = jax.nn.initializers.zeros
         else:
-            bias_initalizer = jax.nn.initializers.constant(self.config.bias_init)
+            bias_initalizer_layer1 = jax.nn.initializers.constant(self.config.layer1_bias_init)
+        
+        if self.config.layer2_initializer_range is None:
+            kernel_initalizer_layer2 = jax.nn.initializers.lecun_normal()
+        else:
+            kernel_initalizer_layer2 = jax.nn.initializers.normal(self.config.layer2_initializer_range)
+        
+        if self.config.layer2_bias_init is None:
+            bias_initalizer_layer2 = jax.nn.initializers.zeros
+        else:
+            bias_initalizer_layer2 = jax.nn.initializers.constant(self.config.layer2_bias_init)
         
         self.dense1 = nn.Dense(
             features=self.config.hidden_dim, 
@@ -119,8 +133,8 @@ class MLPHead(nn.Module):
             dtype=self.dtype, 
             param_dtype=self.param_dtype, 
             precision=self.precision, 
-            kernel_init=kernel_initalizer, 
-            bias_init=bias_initalizer, 
+            kernel_init=kernel_initalizer_layer1, 
+            bias_init=bias_initalizer_layer1, 
         )
         self.dense2 = nn.Dense(
             features=self.config.output_dim, 
@@ -128,8 +142,8 @@ class MLPHead(nn.Module):
             dtype=self.dtype, 
             param_dtype=self.param_dtype, 
             precision=self.precision, 
-            kernel_init=kernel_initalizer, 
-            bias_init=bias_initalizer, 
+            kernel_init=kernel_initalizer_layer2, 
+            bias_init=bias_initalizer_layer2, 
         )
 
     def __call__(

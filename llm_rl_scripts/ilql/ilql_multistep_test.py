@@ -29,11 +29,13 @@ from functools import partial
 import numpy as np
 from JaxSeq.logs import label_logs, log, pull_logs
 import json
-from llm_rl_scripts.ppo.ppo_test import BitsTestEnv
+from llm_rl_scripts.ppo.ppo_test_multistep import MultiStepBitsTestEnv
 from LLM_RL.heads.mlp_head import load_train_state as load_head_train_state, ModelLoadMode as HeadModelLoadMode
 from LLM_RL.algorithms.ilql.train import train_loop
 from LLM_RL.algorithms.ilql.data import ILQLData, ILQLDataset, ILQLIterableDataset
 from JaxSeq.utils import multihost_device_get
+from tqdm.auto import tqdm
+import random
 
 def main(
     model_load_mode: ModelLoadMode, 
@@ -107,30 +109,63 @@ def main(
     with open(convert_path(train_data_path), 'r') as f:
         raw_data = jsonl_load(f)
     
-    ilql_data = []
-    for item in raw_data:
-        text_trajectory_chain = TextTrajectoryChain(
-            text_trajectory=TextTrajectory(
-                text_history=[
-                    Text('<|endoftext|>', False), 
-                    Text(item['out_text'], True), 
-                ], 
-                reward=[0.0, item['reward']], 
-                done=True, 
-            ), 
-            next=None, 
-        )
-        token_trajectory_chain = TokenTrajectoryChain.from_text_trajectory_chain(text_trajectory_chain, tokenizer)
-        ilql_data.append(ILQLData.from_token_trajectory_chain(token_trajectory_chain))
+    rng = random.Random(0)
+    def raw_data_iterable():
+        idx_pairs = list(zip(sum(map(lambda x: [x]*1024, range(0, len(raw_data), 1025)), []), list(range(1, 1025))*1024))
+        rng.shuffle(idx_pairs)
+        for i, x in idx_pairs:
+            initial_item = raw_data[i]
+            subsequent_item = raw_data[i+x]
+            env = MultiStepBitsTestEnv(10)
+            th = env.reset()
+            
+            initial_bits = list(map(int, initial_item['out_text'].strip().split(' ')))
+            if rng.random() < 0.1:
+                initial_bits += [int(rng.random() < 0.5) for _ in range(rng.randint(1, 10))]
+            if rng.random() > 0.9:
+                initial_bits = initial_bits[:rng.randint(0, len(initial_bits))]
+            
+            _, r1, _ = env.step(th+(Text(' '.join(map(str, initial_bits))+'\n', True),))
+            env.response = subsequent_item['in_text'].strip().split('\n')[1] == 'True'
+            env.prev_bits = initial_bits
+            th = th+(Text(str(env.response)+'\n', False),)
+
+            subsequent_bits = list(map(int, subsequent_item['out_text'].strip().split(' ')))
+            if rng.random() < 0.1:
+                subsequent_bits += [int(rng.random() < 0.5) for _ in range(rng.randint(1, 10))]
+            if rng.random() > 0.9:
+                subsequent_bits = subsequent_bits[:rng.randint(0, len(subsequent_bits))]
+
+            _, r2, _ = env.step(th+(Text(' '.join(map(str, subsequent_bits))+'\n', True),))
+            text_trajectory_chain = TextTrajectoryChain(
+                text_trajectory=TextTrajectory(
+                    text_history=[
+                        Text('<|endoftext|>', False), 
+                        Text(initial_item['out_text'], True), 
+                        Text(subsequent_item['in_text'].strip().split('\n')[1]+'\n', False), 
+                        Text(subsequent_item['out_text'], True), 
+                    ], 
+                    reward=[0.0, r1, 0.0, r2], 
+                    done=True, 
+                ), 
+                next=None, 
+            )
+            token_trajectory_chain = TokenTrajectoryChain.from_text_trajectory_chain(text_trajectory_chain, tokenizer)
+            yield ILQLData.from_token_trajectory_chain(token_trajectory_chain)
     
-    dataset = ILQLDataset.from_ilql_data_list(
-        ilql_data, 
+    class ILQLDataIterable:
+        def __iter__(self):
+            return raw_data_iterable()
+    
+    data_iterable = ILQLDataIterable()
+    dataset = ILQLIterableDataset.from_ilql_data_iterable(
+        data_iterable, 
         tokenizer, 
         BlockingStrategy(
             padding=Padding.LEFT, 
             truncation=Truncation.LEFT, 
             max_length=max_length, 
-        )
+        ), 
     )
 
     def policy_optim_getter(params: PyTree):
@@ -320,11 +355,11 @@ def main(
         v_head_model=v_head, 
         tokenizer=tokenizer, 
         loss_fn=loss_fn, 
-        beta=128.0, 
+        beta=4.0, 
         dp_shard_logits=True, 
     )
     
-    env = BitsTestEnv(n=10)
+    env = MultiStepBitsTestEnv(n=10)
 
     save_dir, exp_name = setup_experiment_save(
         exp_name=exp_name, 

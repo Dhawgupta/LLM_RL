@@ -73,6 +73,7 @@ def main(
     save_best: bool=True, 
     max_checkpoints: Optional[int]=None, 
     save_train_state: bool=True, 
+    save_bf16: bool=True, 
 
     eval_loss_bsize: int=32, 
     eval_loss_batches: Optional[int]=None, 
@@ -269,6 +270,7 @@ def main(
         return loss_metrics['loss'], {'loss_metrics': loss_metrics, 'move_accuracy': move_accuracy}
     
     train_prng = jax.random.PRNGKey(1)
+    save_dtype = jnp.bfloat16 if save_bf16 else jnp.float32
     trainer, inference = train_loop(
         trainer=trainer, 
         inference=inference, 
@@ -291,6 +293,7 @@ def main(
         save_best=save_best, 
         max_checkpoints=max_checkpoints, 
         save_train_state=save_train_state, 
+        save_dtype=save_dtype, 
         use_wandb=use_wandb, 
         wandb_project=wandb_project, 
         wandb_run_name=exp_name, 

@@ -19,6 +19,7 @@ from transformers.modeling_flax_utils import FlaxPreTrainedModel
 import pickle as pkl
 from jax.sharding import NamedSharding
 from LLM_RL.algorithms.ilql.base_interface import ILQLTrain, ILQLInferenceFull, ILQLInferenceSimple
+import jax.numpy as jnp
 
 def dump_state(
     model: FlaxPreTrainedModel, 
@@ -26,6 +27,7 @@ def dump_state(
     save_dir: str, 
     save_train_state: bool, 
     enable_save: bool, 
+    save_dtype: jnp.dtype, 
     **loop_state: Dict[Hashable, Any], 
 ):  
     # dump model config
@@ -39,12 +41,14 @@ def dump_state(
         save_pytree(
             tree=train_state, 
             path=get_enabled_save_path(os.path.join(save_dir, 'train_state.msgpack'), enabled=enable_save), 
+            dtype=save_dtype, 
             sharding=get_sharding_from_model(model, train_state), 
         )
     else:
         save_pytree(
             tree=train_state.params, 
             path=get_enabled_save_path(os.path.join(save_dir, 'params.msgpack'), enabled=enable_save), 
+            dtype=save_dtype, 
             sharding=get_sharding_from_model(model, train_state.params), 
         )
 
@@ -96,6 +100,7 @@ def train_loop(
     save_best: bool, 
     max_checkpoints: Optional[int], 
     save_train_state: bool, 
+    save_dtype: jnp.dtype, 
     use_wandb: bool, 
     wandb_project: Optional[str], 
     wandb_run_name: Optional[str], 
@@ -151,6 +156,7 @@ def train_loop(
             save_dir=curr_save_dir, 
             save_train_state=save_train_state, 
             enable_save=is_main_process, 
+            save_dtype=save_dtype, 
             **loop_state, 
         )
         if add_to_queue and is_main_process:
