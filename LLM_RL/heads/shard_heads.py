@@ -11,7 +11,7 @@ from jax.sharding import Mesh
 from jaxtyping import PyTree
 from JaxSeq.utils import float_to_dtype
 import flax.linen as nn
-from JaxSeq.utils import multihost_device_put
+from JaxSeq.utils import multihost_device_put, multihost_device_get
 from jax.experimental.pjit import pjit
 
 def get_sharding_from_model(
@@ -208,3 +208,26 @@ def shard_train_state_from_train_state(
     train_state = jax.tree_util.tree_map(lambda x, s: multihost_device_put(x, s), train_state, sharding)
 
     return train_state
+
+def copy_sharded_pytree(
+    model: nn.Module, 
+    pytree: PyTree, 
+):
+    # define copy func
+    def copy_func(x, sharding):
+        with jax.default_device(jax.devices('cpu')[0]):
+            x = multihost_device_get(x, sharding).copy()
+        return multihost_device_put(x, sharding)
+
+    # get shard spec
+    sharding = get_sharding_from_model(model, pytree)
+    assert sharding is not None
+
+    # copy sharded pytree
+    pytree = jax.tree_util.tree_map(
+        copy_func, 
+        pytree, 
+        sharding, 
+    )
+
+    return pytree

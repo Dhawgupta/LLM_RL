@@ -26,7 +26,7 @@ from JaxSeq.utils import jsonl_stream, convert_path, load_mesh, get_dtype, setup
 from LLM_RL.algorithms.ppo.base_interface import ppo_loss_fn, FixedKLController, AdaptiveKLController
 from LLM_RL.algorithms.ppo.gpt2.interface import GPT2Policy, GPT2PPOInference, GPT2PPOTrain
 from LLM_RL.algorithms.ppo.train import train_loop
-from LLM_RL.environment import TextEnv, TextHistory, Text, interact_environment, text_env_eval, TextTrajectory, TextTrajectoryChain
+from LLM_RL.environment import TextEnv, TextHistory, Text, interact_environment, text_env_eval, TextTrajectory, TextTrajectoryChain, TokenTrajectoryChain, TokenTrajectory
 from LLM_RL.heads.linear_head import load_train_state_from_config as load_head_train_state_from_config
 from LLM_RL.heads.linear_head import LinearHeadConfig
 from LLM_RL.algorithms.ppo.data import PPODataset, PPOIterableDataset
@@ -240,6 +240,7 @@ def main(
             output_dim=1, 
             use_bias=True, 
             initializer_range=0.0, 
+            bias_init=-17.63, 
         ), 
         model_dtype=jnp.float32, 
         optim_getter=value_head_optim_getter, 
@@ -321,18 +322,37 @@ def main(
         )
         summary_results = pull_logs(summary_results)
 
-        text_trajectory_chains = []
+        text_trajectories = []
+        token_trajectory_chains = []
         for interaction in interactions:
-            reward = [0.0]
+            rewards = [0.0]
             for transition in interaction:
-                reward.append(transition.reward)
-                reward.append(0.0)
-            text_trajectory = TextTrajectory(
-                text_history=interaction[-1].post_transition_history, 
-                reward=tuple(reward),
-                done=interaction[-1].done, 
-            )
-            text_trajectory_chains.append(TextTrajectoryChain(text_trajectory, None))
+                rewards.append(transition.reward)
+                rewards.append(0.0)
+
+            text_history = interaction[-1].post_transition_history
+            done = interaction[-1].done
+            while True:
+                text_trajectory = TextTrajectory(
+                    text_history=text_history, 
+                    reward=tuple(rewards),
+                    done=done, 
+                )
+                token_trajectory = TokenTrajectory.from_text_trajectory(text_trajectory, tokenizer)
+                if token_trajectory.tokens.shape[0] < max_input_length+max_output_length:
+                    break
+
+                # truncate one step
+                text_history = text_history[:-2]
+                last_r = rewards[-2]
+                rewards = rewards[:-2]
+                rewards[-2] += last_r * gamma
+                done = False
+
+            if token_trajectory.tokens.shape[0] == 0:
+                continue
+            text_trajectories.append(text_trajectory)
+            token_trajectory_chains.append(TokenTrajectoryChain(token_trajectory, None))
         
         conversations = []
         for word_var, interaction in zip(env.word_list, interactions):
@@ -340,8 +360,8 @@ def main(
             conversation = create_conversation_from_history(word_var, final_text_history, max_conversation_len=20)
             conversations.append(conversation)
         
-        ppo_data, all_kls = ppo_inference.get_ppo_data_from_text_trajectory_chain(
-            text_trajectory_chains, 
+        ppo_data, all_kls = ppo_inference.get_ppo_data_from_token_trajectory_chain(
+            token_trajectory_chains, 
             bsize=ppo_data_bsize, 
             max_length=max_input_length+max_output_length, 
             gamma=gamma, 
@@ -383,10 +403,10 @@ def main(
                 pkl.dump(ppo_dataset, f)
             # save text_trajectory_chains
             with open(get_enabled_save_path(
-                os.path.join(data_save_path, 'text_trajectory_chains.pkl'), 
+                os.path.join(data_save_path, 'token_trajectory_chains.pkl'), 
                 enabled=is_main_process, 
             ), 'wb') as f:
-                pkl.dump(text_trajectory_chains, f)
+                pkl.dump(token_trajectory_chains, f)
             # save raw_results
             with open(get_enabled_save_path(
                 os.path.join(data_save_path, 'interactions.pkl'), 

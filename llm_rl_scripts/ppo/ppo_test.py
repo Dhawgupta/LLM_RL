@@ -22,7 +22,7 @@ from LLM_RL.environment import TextEnv, TextHistory, Text, interact_environment,
 from LLM_RL.algorithms.ppo.gptj.interface import GPTJPolicy, GPTJPPOInference, GPTJPPOTrain
 from LLM_RL.heads.linear_head import load_train_state_from_config as load_head_train_state_from_config
 from LLM_RL.heads.linear_head import LinearHeadConfig
-from JaxSeq.shard_model import shard_params_from_params
+from JaxSeq.shard_model import shard_params_from_params, copy_sharded_pytree
 from flax.training.train_state import TrainState
 from LLM_RL.algorithms.ppo.data import PPODataset, PPOIterableDataset
 from LLM_RL.utils import get_tensor_stats_np
@@ -169,15 +169,19 @@ def main(
         fsdp=fsdp, 
         params_dtype=jnp.float32, 
     )
-    with jax.default_device(jax.devices('cpu')[0]):
-        initital_policy_params = jax.tree_util.tree_map(
-            lambda x: multihost_device_get(x, mesh=mesh).copy(), 
-            policy_train_state.params, 
-        )
-    initital_policy_params = shard_params_from_params(
+    initital_policy_params = copy_sharded_pytree(
         model=policy_model, 
-        params=initital_policy_params, 
+        pytree=policy_train_state.params, 
     )
+    # with jax.default_device(jax.devices('cpu')[0]):
+    #     initital_policy_params = jax.tree_util.tree_map(
+    #         lambda x: multihost_device_get(x, mesh=mesh).copy(), 
+    #         policy_train_state.params, 
+    #     )
+    # initital_policy_params = shard_params_from_params(
+    #     model=policy_model, 
+    #     params=initital_policy_params, 
+    # )
 
     loop_state = dict()
     if should_restore_loop_state and (model_load_mode in {ModelLoadMode.TRAIN_STATE, 
