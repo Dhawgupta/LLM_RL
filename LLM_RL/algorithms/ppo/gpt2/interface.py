@@ -115,10 +115,8 @@ class GPT2PPOTrain(PPOTrain):
                 )[:, :-1]
                 values = jnp.squeeze(values, axis=-1)
 
-                logits = model_output.logits
-                logits = logits.at[:, :, policy_model.config.unpadded_vocab_size:].set(float('-inf'))
+                logits = model_output.logits.astype(jnp.float32)
                 logprobs = -softmax_cross_entropy_with_integer_labels(logits[:, :-1], input_ids[:, 1:])
-                logprobs = jnp.where(attention_mask[:, 1:] == 1, logprobs, 0.0)
 
                 loss, info = loss_fn(
                     attention_mask[:, 1:], 
@@ -363,10 +361,8 @@ class GPT2PPOInference(PPOInference):
             )[:, :-1]
             values = jnp.squeeze(values, axis=-1)
 
-            logits = model_output.logits
-            logits = logits.at[:, :, policy_model.config.unpadded_vocab_size:].set(float('-inf'))
+            logits = model_output.logits.astype(jnp.float32)
             logprobs = -softmax_cross_entropy_with_integer_labels(logits[:, :-1], input_ids[:, 1:])
-            logprobs = jnp.where(attention_mask[:, 1:] == 1, logprobs, 0.0)
 
             loss, info = loss_fn(
                 attention_mask, 

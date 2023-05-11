@@ -254,8 +254,8 @@ class GPTJILQLTrain(ILQLTrain):
                 target_q1 = jnp.take_along_axis(target_q1_head_output[:, :-1], input_ids[:, 1:][..., None], axis=2).squeeze(2)
                 target_q2 = jnp.take_along_axis(target_q2_head_output[:, :-1], input_ids[:, 1:][..., None], axis=2).squeeze(2)
 
-                q1_logits = q1_head_output[:, :-1, :]
-                q2_logits = q2_head_output[:, :-1, :]
+                q1_logits = q1_head_output[:, :-1, :].astype(jnp.float32)
+                q2_logits = q2_head_output[:, :-1, :].astype(jnp.float32)
 
                 # get next token values
 
@@ -1073,8 +1073,8 @@ class GPTJInferenceFull(ILQLInferenceFull):
             target_q1 = jnp.take_along_axis(target_q1_head_output[:, :-1], input_ids[:, 1:][..., None], axis=2).squeeze(2)
             target_q2 = jnp.take_along_axis(target_q2_head_output[:, :-1], input_ids[:, 1:][..., None], axis=2).squeeze(2)
 
-            q1_logits = q1_head_output[:, :-1, :]
-            q2_logits = q2_head_output[:, :-1, :]
+            q1_logits = q1_head_output[:, :-1, :].astype(jnp.float32)
+            q2_logits = q2_head_output[:, :-1, :].astype(jnp.float32)
 
             # get next token values
 

@@ -112,7 +112,7 @@ def ppo_loss_fn(
     log_ratio = (logprobs - old_logprobs) * mask
     ratio = jnp.exp(log_ratio)
     # Unbiased KL-div estimates (`k3`). Ref: http://joschu.net/blog/kl-approx.html
-    approx_kl = jnp.mean((ratio - 1) - log_ratio)
+    approx_kl = jnp.sum((ratio - 1) - log_ratio) / n
 
     pg_loss1 = -old_advantages * ratio
     pg_loss2 = -old_advantages * jnp.clip(
@@ -501,14 +501,14 @@ class PPOInference(struct.PyTreeNode):
                 prng_key=new_key, 
             )
 
-            initial_policy_logits = forward_batch_output.initial_policy_raw_output.logits
+            initial_policy_logits = forward_batch_output.initial_policy_raw_output.logits.astype(jnp.float32)
             initial_policy_logprob = self.token_logprobs_from_logits(initial_policy_logits, tokens_batch)
             initial_policy_logprob = np.asarray(multihost_device_get(
                 initial_policy_logprob, 
                 mesh=self.initial_policy_model.config.mesh, 
             ))
 
-            policy_logits = forward_batch_output.policy_raw_output.logits
+            policy_logits = forward_batch_output.policy_raw_output.logits.astype(jnp.float32)
             policy_logprob = self.token_logprobs_from_logits(policy_logits, tokens_batch)
             policy_logprob = np.asarray(multihost_device_get(
                 policy_logprob, 
