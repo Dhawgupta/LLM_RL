@@ -5,7 +5,7 @@ from llm_rl_scripts.wordle.game import Vocabulary, WordleGame
 import random
 
 def reformat_history(text_history: TextHistory) -> TextHistory:
-    new_text_history = (Text('Welcome to the game of Wordle!\n', False),)
+    new_text_history = (Text('Wordle:\n', False),)
     for item in text_history:
         if item.is_action:
             new_text_history += (Text(' '.join(list(item.text))+'\n', True),)

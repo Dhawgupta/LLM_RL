@@ -52,7 +52,7 @@ def main(
         for item in tqdm(pool.imap_unordered(get_data_item, range(n_data)), total=n_data):
             data.append(
                 dict(
-                    sequence=[(text.text, float(text.is_action)) for text in item.text_history], 
+                    sequence=[(text.text, float(text.is_action)) for text in reformat_history(item.text_history)], 
                     reward=item.reward, 
                     done=item.done, 
                 )
