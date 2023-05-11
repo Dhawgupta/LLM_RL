@@ -18,11 +18,11 @@ from JaxSeq.generation_eval import generate_language, compute_metrics
 from transformers.generation import GenerationConfig
 from jaxtyping import PyTree
 import re
-from LLM_RL.environment import TextEnv, TextHistory, Text, interact_environment, text_env_eval, TextTrajectory, TextTrajectoryChain
+from LLM_RL.environment import TextEnv, TextHistory, Text, interact_environment, text_env_eval, TextTrajectory, TextTrajectoryChain, TokenTrajectory
 from LLM_RL.algorithms.ppo.gptj.interface import GPTJPolicy, GPTJPPOInference, GPTJPPOTrain
 from LLM_RL.heads.linear_head import load_train_state_from_config as load_head_train_state_from_config
 from LLM_RL.heads.linear_head import LinearHeadConfig
-from JaxSeq.shard_model import shard_params_from_params, copy_sharded_pytree
+from JaxSeq.shard_model import shard_params_from_params
 from flax.training.train_state import TrainState
 from LLM_RL.algorithms.ppo.data import PPODataset, PPOIterableDataset
 from LLM_RL.utils import get_tensor_stats_np
@@ -30,21 +30,13 @@ from functools import partial
 import numpy as np
 from JaxSeq.logs import label_logs, log, pull_logs
 import json
+import random
 from JaxSeq.utils import multihost_device_get
 
-class BitsTestEnv(TextEnv):
-    def __init__(self, n: int):
-        self.n = n
-
-    def step(self, text_history: TextHistory) -> Tuple[TextHistory, float, bool]:
-        try:
-            bits = list(map(int, text_history[-1].text.strip().split(' ')))
-        except:
-            bits = []
-        return text_history, float(sum(bits) > (self.n // 2))*10.0-4.5, True
-
-    def reset(self, seed: Optional[int]=None, options: Optional[Dict]=None) -> TextHistory:
-        return (Text(text='<|endoftext|>', is_action=False),)
+from llm_rl_scripts.wordle.env import ReformatWordleEnvironment, WordleEnvironment
+from llm_rl_scripts.wordle.game import Vocabulary
+from llm_rl_scripts.wordle.scripted_policies import RandomMixturePolicy
+from llm_rl_scripts.wordle.data import PolicyDataGenerator
 
 def main(
     model_load_mode: ModelLoadMode, 
@@ -169,19 +161,15 @@ def main(
         fsdp=fsdp, 
         params_dtype=jnp.float32, 
     )
-    initital_policy_params = copy_sharded_pytree(
+    with jax.default_device(jax.devices('cpu')[0]):
+        initital_policy_params = jax.tree_util.tree_map(
+            lambda x: multihost_device_get(x, mesh=mesh).copy(), 
+            policy_train_state.params, 
+        )
+    initital_policy_params = shard_params_from_params(
         model=policy_model, 
-        pytree=policy_train_state.params, 
+        params=initital_policy_params, 
     )
-    # with jax.default_device(jax.devices('cpu')[0]):
-    #     initital_policy_params = jax.tree_util.tree_map(
-    #         lambda x: multihost_device_get(x, mesh=mesh).copy(), 
-    #         policy_train_state.params, 
-    #     )
-    # initital_policy_params = shard_params_from_params(
-    #     model=policy_model, 
-    #     params=initital_policy_params, 
-    # )
 
     loop_state = dict()
     if should_restore_loop_state and (model_load_mode in {ModelLoadMode.TRAIN_STATE, 
@@ -196,7 +184,11 @@ def main(
         tokenizer=tokenizer, 
     )
 
-    env = BitsTestEnv(n=10)
+    vocab = Vocabulary.from_file(
+        vocab_file='vocab/wordle_official.txt', 
+        fill_cache=False, 
+    )
+    env = ReformatWordleEnvironment(WordleEnvironment(vocab))
     
     policy_prng = jax.random.PRNGKey(0)
     policy = GPTJPolicy(
@@ -293,9 +285,14 @@ def main(
         for raw_result in raw_results:
             text_trajectory = TextTrajectory(
                 text_history=raw_result[-1].post_transition_history, 
-                reward=[0.0, raw_result[-1].reward], 
+                reward=sum([[0.0, item.reward] for item in raw_result], []), 
                 done=raw_result[-1].done, 
             )
+            if TokenTrajectory.from_text_trajectory(text_trajectory, tokenizer).tokens.shape[0] >= max_input_length+max_output_length:
+                text_trajectory = text_trajectory._replace(
+                    text_history=text_trajectory.text_history[:2], 
+                    reward=text_trajectory.reward[:2], 
+                )
             text_trajectory_chains.append(TextTrajectoryChain(text_trajectory, None))
         
         ppo_data, all_kls = ppo_inference.get_ppo_data_from_text_trajectory_chain(

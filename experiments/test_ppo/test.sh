@@ -14,34 +14,62 @@ source ${PWD}/secrets.sh
 source ~/miniconda3/bin/activate
 conda activate LLM_RL
 
-# 4/27/2023
+# 5/6/2023
 
 export GCLOUD_PROJECT="civic-boulder-204700"
 export GCLOUD_TOKEN_PATH="${HOME}/.config/gcloud/civic-boulder-204700-V2.json"
 
-CUDA_VISIBLE_DEVICES=5 python -m llm_rl_scripts.ppo.ppo_test_multichain \
+CUDA_VISIBLE_DEVICES=3 python -m llm_rl_scripts.ppo.ppo_test \
     PARAMS \
-    gcs://rail-tpus-csnell-us/LLM_RL_outputs/ppo_test_multichain/exp.2023-04-23-23-52-26.325.e657cef4e23111edb66069ae2bcdca7b/best \
+    gcs://charlie-bucket2/LLM_RL_outputs/ppo_test/exp.2023-03-25-02-33-00.401/best \
     --exp-name None \
-    --outputs-path gcs://rail-tpus-csnell-us/LLM_RL_outputs/ppo_test_multichain/ \
-    --n-rollouts 512 \
+    --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/ppo_test/ \
     --train-bsize 1 \
-    --grad-accum-steps 512 \
     --rollout-bsize 1 \
     --ppo-data-bsize 1 \
     --n-rounds 100 \
     --epochs 4 \
-    --log-every 512 \
+    --log-every 4 \
     --weight-decay 1e-6 \
     --lr 3e-5 \
     --use-wandb \
-    --wandb-project "rlhf_multichain_binary_test" \
+    --wandb-project "rlhf_binary_test" \
+    --save-every-rounds 1 \
     --init-kl-coef 0.001 \
     --kl-target 0.1 \
     --kl-horizon 10000 \
-    --value-loss-coef 1.0 \
-    # --cliprange-value 100.0 \
-    # --save-every-rounds 1 \
+
+
+
+
+# 4/27/2023
+
+# export GCLOUD_PROJECT="civic-boulder-204700"
+# export GCLOUD_TOKEN_PATH="${HOME}/.config/gcloud/civic-boulder-204700-V2.json"
+
+# CUDA_VISIBLE_DEVICES=5 python -m llm_rl_scripts.ppo.ppo_test_multichain \
+#     PARAMS \
+#     gcs://rail-tpus-csnell-us/LLM_RL_outputs/ppo_test_multichain/exp.2023-04-23-23-52-26.325.e657cef4e23111edb66069ae2bcdca7b/best \
+#     --exp-name None \
+#     --outputs-path gcs://rail-tpus-csnell-us/LLM_RL_outputs/ppo_test_multichain/ \
+#     --n-rollouts 512 \
+#     --train-bsize 1 \
+#     --grad-accum-steps 512 \
+#     --rollout-bsize 1 \
+#     --ppo-data-bsize 1 \
+#     --n-rounds 100 \
+#     --epochs 4 \
+#     --log-every 512 \
+#     --weight-decay 1e-6 \
+#     --lr 3e-5 \
+#     --use-wandb \
+#     --wandb-project "rlhf_multichain_binary_test" \
+#     --init-kl-coef 0.001 \
+#     --kl-target 0.1 \
+#     --kl-horizon 10000 \
+#     --value-loss-coef 1.0 \
+#     # --cliprange-value 100.0 \
+#     # --save-every-rounds 1 \
 
 # CUDA_VISIBLE_DEVICES=3 python -m llm_rl_scripts.ppo.ppo_test \
 #     PARAMS \
