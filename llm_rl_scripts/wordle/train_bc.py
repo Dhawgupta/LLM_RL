@@ -8,7 +8,7 @@ import jax.numpy as jnp
 from JaxSeq.utils import BlockingStrategy, Padding, Truncation, get_weight_decay_mask, MapIterable, FileOpenIterable
 import os
 import optax
-from JaxSeq.models.gptj.interface import GPTJTrain, GPTJInference
+from JaxSeq.models.gptj.interface import GPTJTrainMask, GPTJInferenceMask
 from JaxSeq.models.gptj.load import load_train_state, ModelLoadMode
 import pickle as pkl
 from JaxSeq.data import MaskIterableDataset
@@ -35,6 +35,7 @@ def main(
     outputs_path: Optional[str]=None, 
 
     data_mesh_shape: int=1, 
+    fsdp_mesh_shape: int=1, 
     model_mesh_shape: int=-1, 
 
     use_wandb: bool=False, 
@@ -57,10 +58,11 @@ def main(
     embd_pdrop: float=0.05, 
 
     train_bsize: int=16, 
-    grad_accum_steps: int=1, 
+    grad_accum_steps: Optional[int]=None, 
 
-    gradient_checkpoint: bool=False, 
-    fsdp: bool=False, 
+    gradient_checkpointing: bool=False, 
+    gradient_checkpointing_policy: str='nothing_saveable', 
+
     bf16_activations: bool=False, 
 
     max_length: int=2048, 
@@ -103,7 +105,7 @@ def main(
     tokenizer = AutoTokenizer.from_pretrained('EleutherAI/gpt-j-6B')
     tokenizer.add_special_tokens({'pad_token': '<|pad|>'})
 
-    mesh = load_mesh((data_mesh_shape, model_mesh_shape), ('dp', 'mp'))
+    mesh = load_mesh((data_mesh_shape, fsdp_mesh_shape, model_mesh_shape), ('dp', 'fsdp', 'mp'))
     is_main_process = jax.process_index() == 0
     print(f"Mesh: {mesh}")
     print(f"Is main process: {is_main_process}")
@@ -128,8 +130,6 @@ def main(
             max_length=max_length, 
         ), 
     )
-
-    import IPython; IPython.embed()
 
     vocab = Vocabulary.from_file(
         vocab_file=vocab_file, 
@@ -173,10 +173,10 @@ def main(
         mesh=mesh, 
         prng_key=model_prng_key, 
         force_pad_embeddings=force_pad_embeddings, 
-        gradient_checkpoint=gradient_checkpoint, 
-        fsdp=fsdp, 
         params_dtype=jnp.float32, 
     )
+    model.config.gradient_checkpointing = gradient_checkpointing
+    model.config.gradient_checkpointing_policy = gradient_checkpointing_policy
     model.config.resid_pdrop = resid_pdrop
     model.config.embd_pdrop = embd_pdrop
     model.config.attn_pdrop = attn_pdrop
@@ -188,13 +188,13 @@ def main(
         with open(os.path.join(convert_path(model_load_path), 'loop_state.pkl'), 'rb') as f:
             loop_state = pkl.load(f)
     
-    trainer = GPTJTrain.load_train(
+    trainer = GPTJTrainMask.load_train(
         train_state=train_state, 
         model=model, 
         tokenizer=tokenizer, 
     )
 
-    inference = GPTJInference.load_inference(
+    inference = GPTJInferenceMask.load_inference(
         params=train_state.params, 
         model=model, 
         tokenizer=tokenizer, 
@@ -209,7 +209,7 @@ def main(
     )
 
     policy_prng = jax.random.PRNGKey(0)
-    def evaluator(inference: GPTJInference):
+    def evaluator(inference: GPTJInferenceMask):
         nonlocal policy_prng
         policy_prng, new_key = jax.random.split(policy_prng)
         policy = GPTJPolicy(
