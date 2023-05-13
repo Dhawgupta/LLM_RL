@@ -41,6 +41,7 @@ from llm_rl_scripts.wordle.data import PolicyDataGenerator
 def main(
     model_load_mode: ModelLoadMode, 
     model_load_path: str, 
+    vocab_file: str, 
 
     /,  # Mark the end of positional arguments.
 
@@ -62,11 +63,12 @@ def main(
     weight_decay: float=0.0, 
 
     train_bsize: int=32, 
-    grad_accum_steps: int=1, 
+    grad_accum_steps: Optional[int]=None, 
     rollout_bsize: int=32, 
     n_rollouts: int=128, 
     ppo_data_bsize: int=32, 
 
+    bf16_activations: bool=False, 
     gradient_checkpointing: bool=False, 
     gradient_checkpointing_policy: str='nothing_saveable', 
 
@@ -136,23 +138,26 @@ def main(
             re.escape("['ln_f']['scale']"), 
             "bias", 
         ))(params)
-        return optax.MultiSteps(
-            optax.adamw(
-                learning_rate=lr, 
-                b1=0.9, 
-                b2=0.95, 
-                eps=1e-8, 
-                weight_decay=weight_decay, 
-                mask=mask, 
-            ), 
-            every_k_schedule=grad_accum_steps, 
+        optim = optax.adamw(
+            learning_rate=lr, 
+            b1=0.9, 
+            b2=0.95, 
+            eps=1e-8, 
+            weight_decay=weight_decay, 
+            mask=mask, 
         )
+        if grad_accum_steps is not None:
+            optim = optax.MultiSteps(
+                optim, 
+                every_k_schedule=grad_accum_steps, 
+            )
+        return optim
 
     model_prng_key = jax.random.PRNGKey(2)
     policy_train_state, policy_model = load_train_state(
         model_load_mode=model_load_mode, 
         model_load_path=convert_path(model_load_path) if model_load_mode != ModelLoadMode.HF else model_load_path, 
-        model_dtype=jnp.float32, 
+        model_dtype=jnp.bfloat16 if bf16_activations else jnp.float32, 
         optim_getter=policy_optim_getter, 
         tokenizer=tokenizer, 
         mesh=mesh, 
@@ -162,6 +167,9 @@ def main(
     )
     policy_model.config.gradient_checkpointing = gradient_checkpointing
     policy_model.config.gradient_checkpointing_policy = gradient_checkpointing_policy
+    policy_model.config.resid_pdrop = 0.0
+    policy_model.config.embd_pdrop = 0.0
+    policy_model.config.attn_pdrop = 0.0
     with jax.default_device(jax.devices('cpu')[0]):
         initital_policy_params = jax.tree_util.tree_map(
             lambda x: multihost_device_get(x, mesh=mesh).copy(), 
@@ -186,7 +194,7 @@ def main(
     )
 
     vocab = Vocabulary.from_file(
-        vocab_file='vocab/wordle_official.txt', 
+        vocab_file=vocab_file, 
         fill_cache=False, 
     )
     env = ReformatWordleEnvironment(WordleEnvironment(vocab))
@@ -215,17 +223,20 @@ def main(
 
     def value_head_optim_getter(params: PyTree):
         mask = get_weight_decay_mask(("bias",))(params)
-        return optax.MultiSteps(
-            optax.adamw(
-                learning_rate=lr, 
-                b1=0.9, 
-                b2=0.95, 
-                eps=1e-8, 
-                weight_decay=weight_decay, 
-                mask=mask, 
-            ), 
-            every_k_schedule=grad_accum_steps, 
+        optim = optax.adamw(
+            learning_rate=lr, 
+            b1=0.9, 
+            b2=0.95, 
+            eps=1e-8, 
+            weight_decay=weight_decay, 
+            mask=mask, 
         )
+        if grad_accum_steps is not None:
+            optim = optax.MultiSteps(
+                optim, 
+                every_k_schedule=grad_accum_steps, 
+            )
+        return optim
     
     head_prng_key = jax.random.PRNGKey(3)
     value_head_train_state, value_head = load_head_train_state_from_config(
@@ -234,8 +245,9 @@ def main(
             output_dim=1, 
             use_bias=True, 
             initializer_range=0.0, 
+            bias_init=-4.1, 
         ), 
-        model_dtype=jnp.float32, 
+        model_dtype=jnp.bfloat16 if bf16_activations else jnp.float32, 
         optim_getter=value_head_optim_getter, 
         mesh=mesh, 
         prng_key=head_prng_key, 
@@ -285,7 +297,7 @@ def main(
         for raw_result in raw_results:
             text_trajectory = TextTrajectory(
                 text_history=raw_result[-1].post_transition_history, 
-                reward=sum([[0.0, item.reward] for item in raw_result], []), 
+                reward=sum([[item.reward, 0.0] for item in raw_result], [0.0]), 
                 done=raw_result[-1].done, 
             )
             if TokenTrajectory.from_text_trajectory(text_trajectory, tokenizer).tokens.shape[0] >= max_input_length+max_output_length:
