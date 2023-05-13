@@ -18,7 +18,7 @@ from JaxSeq.generation_eval import generate_language, compute_metrics
 from transformers.generation import GenerationConfig
 from jaxtyping import PyTree
 import re
-from LLM_RL.environment import TextEnv, TextHistory, Text, interact_environment, text_env_eval, TextTrajectory, TextTrajectoryChain, TokenTrajectory
+from LLM_RL.environment import TextEnv, TextHistory, Text, interact_environment, text_env_eval, TextTrajectory, TextTrajectoryChain, TokenTrajectory, text_history_to_str
 from LLM_RL.algorithms.ppo.gptj.interface import GPTJPolicy, GPTJPPOInference, GPTJPPOTrain
 from LLM_RL.heads.linear_head import load_train_state_from_config as load_head_train_state_from_config
 from LLM_RL.heads.linear_head import LinearHeadConfig
@@ -198,7 +198,7 @@ def main(
         vocab_file=vocab_file, 
         fill_cache=False, 
     )
-    env = ReformatWordleEnvironment(WordleEnvironment(vocab))
+    env = ReformatWordleEnvironment(WordleEnvironment(vocab, require_words_in_vocab=True, bad_word_reward=-10.0))
     
     policy_prng = jax.random.PRNGKey(0)
     policy = GPTJPolicy(
@@ -296,6 +296,11 @@ def main(
 
         text_trajectory_chains = []
         for raw_result in raw_results:
+            print('='*25)
+            print(text_history_to_str(raw_result[-1].post_transition_history))
+            print('='*25)
+            print(sum([[item.reward, 0.0] for item in raw_result], [0.0]))
+            print('='*25)
             text_trajectory = TextTrajectory(
                 text_history=raw_result[-1].post_transition_history, 
                 reward=sum([[item.reward, 0.0] for item in raw_result], [0.0]), 
@@ -313,7 +318,6 @@ def main(
                     )
                 else:
                     break
-
 
             text_trajectory_chains.append(TextTrajectoryChain(text_trajectory, None))
         

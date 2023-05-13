@@ -37,9 +37,10 @@ class ReformatWordleEnvironment(TextEnv):
         return reformat_history(self.env.reset(seed=seed, options=options))
 
 class WordleEnvironment(TextEnv):
-    def __init__(self, vocab: Vocabulary, require_words_in_vocab: bool = True):
+    def __init__(self, vocab: Vocabulary, require_words_in_vocab: bool = True, bad_word_reward: float = -1.0):
         self.vocab = vocab
         self.require_words_in_vocab = require_words_in_vocab
+        self.bad_word_reward = bad_word_reward
         self.reset()
     
     def step(self, text_history: TextHistory) -> Tuple[TextHistory, float, bool]:
@@ -50,5 +51,5 @@ class WordleEnvironment(TextEnv):
     
     def reset(self, seed: Optional[int] = None, options: Optional[Dict] = None) -> TextHistory:
         self.vocab.rng = random.Random(seed)
-        self.state = WordleGame.initialize(self.vocab, require_words_in_vocab=self.require_words_in_vocab)
+        self.state = WordleGame.initialize(self.vocab, require_words_in_vocab=self.require_words_in_vocab, bad_word_reward=self.bad_word_reward)
         return tuple()

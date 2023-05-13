@@ -197,37 +197,39 @@ class WordleGame:
         vocab: Vocabulary, 
         action_history: List[str], 
         require_words_in_vocab: bool=True, 
+        bad_word_reward: float=-1.0, 
     ):
         self.state = state
         self.vocab = vocab
         self.action_history = action_history
         self.require_words_in_vocab = require_words_in_vocab
+        self.bad_word_reward = bad_word_reward
     
     @classmethod
-    def initialize(cls, vocab: Vocabulary, require_words_in_vocab: bool=True):
+    def initialize(cls, vocab: Vocabulary, require_words_in_vocab: bool=True, bad_word_reward: float=-1.0):
         init_wordle = WordleState.initial_state()
-        return cls(init_wordle, vocab.update_vocab(init_wordle), action_history=[], require_words_in_vocab=require_words_in_vocab)
+        return cls(init_wordle, vocab.update_vocab(init_wordle), action_history=[], require_words_in_vocab=require_words_in_vocab, bad_word_reward=bad_word_reward)
     
     def next(self, action: str):
         if (len(action) != N_CHARS) or (not all([c in CHAR2IDX for c in action])) or (self.require_words_in_vocab and action not in self.vocab):
-            new_mdp = WordleGame(self.state, self.vocab, action_history=self.action_history+[action])
+            new_mdp = WordleGame(self.state, self.vocab, action_history=self.action_history+[action], require_words_in_vocab=self.require_words_in_vocab, bad_word_reward=self.bad_word_reward)
             return new_mdp, new_mdp.reward(), new_mdp.is_terminal()
         if self.is_terminal():
             return None
         word = self.vocab.get_random_word_filtered()
         new_state = self.state.transition_state(action, word)
-        new_mdp = WordleGame(new_state, self.vocab.update_vocab(new_state), action_history=self.action_history+[action])
+        new_mdp = WordleGame(new_state, self.vocab.update_vocab(new_state), action_history=self.action_history+[action], require_words_in_vocab=self.require_words_in_vocab, bad_word_reward=self.bad_word_reward)
         return new_mdp, new_mdp.reward(), new_mdp.is_terminal()
     
     def all_next(self, action: str):
         if (len(action) != N_CHARS) or (not all([c in CHAR2IDX for c in action])) or (self.require_words_in_vocab and action not in self.vocab):
-            return [(WordleGame(self.state, self.vocab, action_history=self.action_history+[action]), 1,)]
+            return [(WordleGame(self.state, self.vocab, action_history=self.action_history+[action], require_words_in_vocab=self.require_words_in_vocab, bad_word_reward=self.bad_word_reward), 1,)]
         if self.is_terminal():
             return []
         new_states = defaultdict(list)
         for word in self.vocab.filtered_vocab:
             new_states[self.state.transition_state(action, word)].append(word)
-        return [(WordleGame(new_state, self.vocab.update_vocab(new_state), action_history=self.action_history+[words[0]]), len(words)) for new_state, words in new_states.items()]
+        return [(WordleGame(new_state, self.vocab.update_vocab(new_state), action_history=self.action_history+[words[0]], require_words_in_vocab=self.require_words_in_vocab, bad_word_reward=self.bad_word_reward), len(words)) for new_state, words in new_states.items()]
     
     def __str__(self):
         all_action_strs = []
@@ -247,7 +249,7 @@ class WordleGame:
         return '\n'.join(all_action_strs)
     
     @classmethod
-    def from_str(cls, game_str: str, vocab: Optional[Vocabulary], require_words_in_vocab: bool=True):
+    def from_str(cls, game_str: str, vocab: Optional[Vocabulary], require_words_in_vocab: bool=True, bad_word_reward: float=-1.0):
         action_transitions = game_str.split('\n')
         if len(game_str) == 0:
             action_transitions = []
@@ -266,7 +268,7 @@ class WordleGame:
         if vocab is None:
             vocab = Vocabulary(list(filtered_actions), wordle_state)
         vocab = vocab.update_vocab(wordle_state)
-        return cls(state=wordle_state, vocab=vocab, action_history=list(actions), require_words_in_vocab=require_words_in_vocab)
+        return cls(state=wordle_state, vocab=vocab, action_history=list(actions), require_words_in_vocab=require_words_in_vocab, bad_word_reward=bad_word_reward)
 
     def transition_sequence(self):
         transition_strs = []
@@ -287,7 +289,7 @@ class WordleGame:
     
     def reward(self):
         if (len(self.action_history) > 0) and ((len(self.action_history[-1]) != N_CHARS) or (self.action_history[-1] not in self.vocab)):
-            return -1.0
+            return self.bad_word_reward
         return int(self.vocab.filtered_vocab_size() == 1 and self.vocab.filtered_vocab[0] in self.action_history) - 1
     
     def is_terminal(self):
