@@ -37,6 +37,7 @@ from llm_rl_scripts.wordle.env import ReformatWordleEnvironment, WordleEnvironme
 from llm_rl_scripts.wordle.game import Vocabulary
 from llm_rl_scripts.wordle.scripted_policies import RandomMixturePolicy
 from llm_rl_scripts.wordle.data import PolicyDataGenerator
+from dataclasses import replace
 
 def main(
     model_load_mode: ModelLoadMode, 
@@ -301,7 +302,8 @@ def main(
                 done=raw_result[-1].done, 
             )
             if TokenTrajectory.from_text_trajectory(text_trajectory, tokenizer).tokens.shape[0] >= max_input_length+max_output_length:
-                text_trajectory = text_trajectory._replace(
+                text_trajectory = replace(
+                    text_trajectory, 
                     text_history=text_trajectory.text_history[:2], 
                     reward=text_trajectory.reward[:2], 
                 )
