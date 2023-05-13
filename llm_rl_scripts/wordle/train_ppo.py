@@ -301,12 +301,20 @@ def main(
                 reward=sum([[item.reward, 0.0] for item in raw_result], [0.0]), 
                 done=raw_result[-1].done, 
             )
-            if TokenTrajectory.from_text_trajectory(text_trajectory, tokenizer).tokens.shape[0] >= max_input_length+max_output_length:
-                text_trajectory = replace(
-                    text_trajectory, 
-                    text_history=text_trajectory.text_history[:2], 
-                    reward=text_trajectory.reward[:2], 
-                )
+            while len(text_trajectory.text_history) > 1:
+                if TokenTrajectory.from_text_trajectory(text_trajectory, tokenizer).tokens.shape[0] >= max_input_length+max_output_length:
+                    new_reward = text_trajectory.reward[:-2]
+                    new_reward[-2] += sum(text_trajectory.reward[-2:]) * gamma
+                    text_trajectory = replace(
+                        text_trajectory, 
+                        text_history=text_trajectory.text_history[:-2], 
+                        reward=new_reward, 
+                        done=False, 
+                    )
+                else:
+                    break
+
+
             text_trajectory_chains.append(TextTrajectoryChain(text_trajectory, None))
         
         ppo_data, all_kls = ppo_inference.get_ppo_data_from_text_trajectory_chain(
