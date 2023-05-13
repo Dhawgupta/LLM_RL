@@ -46,6 +46,7 @@ def main(
     outputs_path: Optional[str]=None, 
 
     data_mesh_shape: int=1, 
+    fsdp_mesh_shape: int=1, 
     model_mesh_shape: int=-1, 
 
     use_wandb: bool=False, 
@@ -61,8 +62,8 @@ def main(
     train_bsize: int=32, 
     grad_accum_steps: int=1, 
 
-    gradient_checkpoint: bool=False, 
-    fsdp: bool=False, 
+    gradient_checkpointing: bool=False, 
+    gradient_checkpointing_policy: str='nothing_saveable', 
 
     max_length: int=512, 
 
@@ -99,7 +100,7 @@ def main(
     tokenizer = AutoTokenizer.from_pretrained('EleutherAI/gpt-j-6B')
     tokenizer.add_special_tokens({'pad_token': '<|pad|>'})
 
-    mesh = load_mesh((data_mesh_shape, model_mesh_shape), ('dp', 'mp'))
+    mesh = load_mesh((data_mesh_shape, fsdp_mesh_shape, model_mesh_shape), ('dp', 'fsdp', 'mp'))
     is_main_process = jax.process_index() == 0
     print(f"Mesh: {mesh}")
     print(f"Is main process: {is_main_process}")
@@ -177,10 +178,10 @@ def main(
         mesh=mesh, 
         prng_key=model_prng_key, 
         force_pad_embeddings=force_pad_embeddings, 
-        gradient_checkpoint=gradient_checkpoint, 
-        fsdp=fsdp, 
         params_dtype=jnp.float32, 
     )
+    base_train_state.config.gradient_checkpointing = gradient_checkpointing
+    base_train_state.config.gradient_checkpointing_policy = gradient_checkpointing_policy
     with jax.default_device(jax.devices('cpu')[0]):
         target_base_params = jax.tree_util.tree_map(
             lambda x: multihost_device_get(x, mesh=mesh).copy(), 
@@ -215,7 +216,6 @@ def main(
         mesh=mesh, 
         prng_key=q1_prng_key, 
         pad_to_output_dim=None, 
-        fsdp=fsdp, 
         params_dtype=jnp.float32, 
     )
     with jax.default_device(jax.devices('cpu')[0]):
@@ -243,7 +243,6 @@ def main(
         mesh=mesh, 
         prng_key=q2_prng_key, 
         pad_to_output_dim=None, 
-        fsdp=fsdp, 
         params_dtype=jnp.float32, 
     )
     with jax.default_device(jax.devices('cpu')[0]):
@@ -271,7 +270,6 @@ def main(
         mesh=mesh, 
         prng_key=v_prng_key, 
         pad_to_output_dim=None, 
-        fsdp=fsdp, 
         params_dtype=jnp.float32, 
     )
 

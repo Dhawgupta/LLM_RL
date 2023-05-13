@@ -464,9 +464,9 @@ class GPTJILQLInferenceSimple(ILQLInferenceSimple):
                 trace: bool=True, 
             ) -> Union[FlaxSampleOutput, FlaxGreedySearchOutput, FlaxBeamSearchOutput]:
                 # data parallel shard inputs
-                input_ids = with_named_sharding_constraint(input_ids, mesh, PS("dp", None))
-                attention_mask = with_named_sharding_constraint(attention_mask, mesh, PS("dp", None))
-                position_ids = with_named_sharding_constraint(position_ids, mesh, PS("dp", None))
+                input_ids = with_named_sharding_constraint(input_ids, mesh, PS(("dp", "fsdp"), None))
+                attention_mask = with_named_sharding_constraint(attention_mask, mesh, PS(("dp", "fsdp"), None))
+                position_ids = with_named_sharding_constraint(position_ids, mesh, PS(("dp", "fsdp"), None))
                 # NOTE: position_ids ignored by transformers
 
                 # generate from model
@@ -511,12 +511,12 @@ class GPTJILQLInferenceSimple(ILQLInferenceSimple):
             ), 
             out_shardings=ILQLSimpleForwardOutput(
                 base_raw_output=FlaxCausalLMOutput(
-                    logits=NamedSharding(mesh, PS("dp", None, None)) if dp_shard_logits else NamedSharding(mesh, PS()), 
+                    logits=NamedSharding(mesh, PS(("dp", "fsdp"), None, None)) if dp_shard_logits else NamedSharding(mesh, PS()), 
                     hidden_states=NamedSharding(mesh, PS()), # assume no sharding for hidden states
                     attentions=NamedSharding(mesh, PS()), # assume no sharding for attentions
                 ), 
-                q1=NamedSharding(mesh, PS("dp", None, None)) if dp_shard_logits else NamedSharding(mesh, PS()), 
-                q2=NamedSharding(mesh, PS("dp", None, None)) if dp_shard_logits else NamedSharding(mesh, PS()), 
+                q1=NamedSharding(mesh, PS(("dp", "fsdp"), None, None)) if dp_shard_logits else NamedSharding(mesh, PS()), 
+                q2=NamedSharding(mesh, PS(("dp", "fsdp"), None, None)) if dp_shard_logits else NamedSharding(mesh, PS()), 
                 v=NamedSharding(mesh, PS()), 
             ), 
         )
@@ -533,9 +533,9 @@ class GPTJILQLInferenceSimple(ILQLInferenceSimple):
             train: bool=False, 
         ) -> ILQLSimpleForwardOutput:
             # data parallel shard inputs
-            input_ids = with_named_sharding_constraint(input_ids, mesh, PS("dp", None))
-            attention_mask = with_named_sharding_constraint(attention_mask, mesh, PS("dp", None))
-            position_ids = with_named_sharding_constraint(position_ids, mesh, PS("dp", None))
+            input_ids = with_named_sharding_constraint(input_ids, mesh, PS(("dp", "fsdp"), None))
+            attention_mask = with_named_sharding_constraint(attention_mask, mesh, PS(("dp", "fsdp"), None))
+            position_ids = with_named_sharding_constraint(position_ids, mesh, PS(("dp", "fsdp"), None))
 
             # get logits
             new_key = None
@@ -593,9 +593,9 @@ class GPTJILQLInferenceSimple(ILQLInferenceSimple):
 
             # assert sharding on outputs
             if dp_shard_logits:
-                base_output = base_output.replace(logits=with_named_sharding_constraint(base_output.logits, mesh, PS("dp", None, None)))
-                q1 = with_named_sharding_constraint(q1, mesh, PS("dp", None, None))
-                q2 = with_named_sharding_constraint(q2, mesh, PS("dp", None, None))
+                base_output = base_output.replace(logits=with_named_sharding_constraint(base_output.logits, mesh, PS(("dp", "fsdp"), None, None)))
+                q1 = with_named_sharding_constraint(q1, mesh, PS(("dp", "fsdp"), None, None))
+                q2 = with_named_sharding_constraint(q2, mesh, PS(("dp", "fsdp"), None, None))
             return ILQLSimpleForwardOutput(
                 base_raw_output=base_output, 
                 q1=q1, 
@@ -700,9 +700,9 @@ class GPTJInferenceFull(ILQLInferenceFull):
                 trace: bool=True, 
             ) -> Union[FlaxSampleOutput, FlaxGreedySearchOutput, FlaxBeamSearchOutput]:
                 # data parallel shard inputs
-                input_ids = with_named_sharding_constraint(input_ids, mesh, PS("dp", None))
-                attention_mask = with_named_sharding_constraint(attention_mask, mesh, PS("dp", None))
-                position_ids = with_named_sharding_constraint(position_ids, mesh, PS("dp", None))
+                input_ids = with_named_sharding_constraint(input_ids, mesh, PS(("dp", "fsdp"), None))
+                attention_mask = with_named_sharding_constraint(attention_mask, mesh, PS(("dp", "fsdp"), None))
+                position_ids = with_named_sharding_constraint(position_ids, mesh, PS(("dp", "fsdp"), None))
                 # NOTE: position_ids ignored by transformers
 
                 # generate from model
@@ -751,20 +751,20 @@ class GPTJInferenceFull(ILQLInferenceFull):
             ), 
             out_shardings=ILQLFullForwardOutput(
                 base_raw_output=FlaxCausalLMOutput(
-                    logits=NamedSharding(mesh, PS("dp", None, None)) if dp_shard_logits else NamedSharding(mesh, PS()), 
+                    logits=NamedSharding(mesh, PS(("dp", "fsdp"), None, None)) if dp_shard_logits else NamedSharding(mesh, PS()), 
                     hidden_states=NamedSharding(mesh, PS()), # assume no sharding for hidden states
                     attentions=NamedSharding(mesh, PS()), # assume no sharding for attentions
                 ), 
                 target_base_raw_output=FlaxCausalLMOutput(
-                    logits=NamedSharding(mesh, PS("dp", None, None)) if dp_shard_logits else NamedSharding(mesh, PS()), 
+                    logits=NamedSharding(mesh, PS(("dp", "fsdp"), None, None)) if dp_shard_logits else NamedSharding(mesh, PS()), 
                     hidden_states=NamedSharding(mesh, PS()), # assume no sharding for hidden states
                     attentions=NamedSharding(mesh, PS()), # assume no sharding for attentions
                 ), 
-                q1=NamedSharding(mesh, PS("dp", None, None)) if dp_shard_logits else NamedSharding(mesh, PS()), 
-                q2=NamedSharding(mesh, PS("dp", None, None)) if dp_shard_logits else NamedSharding(mesh, PS()), 
+                q1=NamedSharding(mesh, PS(("dp", "fsdp"), None, None)) if dp_shard_logits else NamedSharding(mesh, PS()), 
+                q2=NamedSharding(mesh, PS(("dp", "fsdp"), None, None)) if dp_shard_logits else NamedSharding(mesh, PS()), 
                 v=NamedSharding(mesh, PS()), 
-                q1_target=NamedSharding(mesh, PS("dp", None, None)) if dp_shard_logits else NamedSharding(mesh, PS()), 
-                q2_target=NamedSharding(mesh, PS("dp", None, None)) if dp_shard_logits else NamedSharding(mesh, PS()), 
+                q1_target=NamedSharding(mesh, PS(("dp", "fsdp"), None, None)) if dp_shard_logits else NamedSharding(mesh, PS()), 
+                q2_target=NamedSharding(mesh, PS(("dp", "fsdp"), None, None)) if dp_shard_logits else NamedSharding(mesh, PS()), 
             ), 
         )
         def _forward(
@@ -783,9 +783,9 @@ class GPTJInferenceFull(ILQLInferenceFull):
             train: bool=False, 
         ) -> ILQLSimpleForwardOutput:
             # data parallel shard inputs
-            input_ids = with_named_sharding_constraint(input_ids, mesh, PS("dp", None))
-            attention_mask = with_named_sharding_constraint(attention_mask, mesh, PS("dp", None))
-            position_ids = with_named_sharding_constraint(position_ids, mesh, PS("dp", None))
+            input_ids = with_named_sharding_constraint(input_ids, mesh, PS(("dp", "fsdp"), None))
+            attention_mask = with_named_sharding_constraint(attention_mask, mesh, PS(("dp", "fsdp"), None))
+            position_ids = with_named_sharding_constraint(position_ids, mesh, PS(("dp", "fsdp"), None))
 
             # get logits
             new_key = None
@@ -882,11 +882,11 @@ class GPTJInferenceFull(ILQLInferenceFull):
 
             # assert sharding on outputs
             if dp_shard_logits:
-                base_output = base_output.replace(logits=with_named_sharding_constraint(base_output.logits, mesh, PS("dp", None, None)))
-                q1 = with_named_sharding_constraint(q1, mesh, PS("dp", None, None))
-                q2 = with_named_sharding_constraint(q2, mesh, PS("dp", None, None))
-                q1_target = with_named_sharding_constraint(q1_target, mesh, PS("dp", None, None))
-                q2_target = with_named_sharding_constraint(q2_target, mesh, PS("dp", None, None))
+                base_output = base_output.replace(logits=with_named_sharding_constraint(base_output.logits, mesh, PS(("dp", "fsdp"), None, None)))
+                q1 = with_named_sharding_constraint(q1, mesh, PS(("dp", "fsdp"), None, None))
+                q2 = with_named_sharding_constraint(q2, mesh, PS(("dp", "fsdp"), None, None))
+                q1_target = with_named_sharding_constraint(q1_target, mesh, PS(("dp", "fsdp"), None, None))
+                q2_target = with_named_sharding_constraint(q2_target, mesh, PS(("dp", "fsdp"), None, None))
             return ILQLFullForwardOutput(
                 base_raw_output=base_output, 
                 target_base_raw_output=target_base_output, 

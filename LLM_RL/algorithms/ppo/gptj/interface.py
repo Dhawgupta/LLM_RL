@@ -200,12 +200,12 @@ class GPTJPPOInference(PPOInference):
             ), 
             out_shardings=PPOForwardOutput(
                 initial_policy_raw_output=FlaxCausalLMOutput(
-                    logits=NamedSharding(mesh, PS("dp", None, None)) if dp_shard_logits else NamedSharding(mesh, PS()), 
+                    logits=NamedSharding(mesh, PS(("dp", "fsdp"), None, None)) if dp_shard_logits else NamedSharding(mesh, PS()), 
                     hidden_states=NamedSharding(mesh, PS()), # assume no sharding for hidden states
                     attentions=NamedSharding(mesh, PS()), # assume no sharding for attentions
                 ) if has_initial_policy else NamedSharding(mesh, PS()), 
                 policy_raw_output=FlaxCausalLMOutput(
-                    logits=NamedSharding(mesh, PS("dp", None, None)) if dp_shard_logits else NamedSharding(mesh, PS()), 
+                    logits=NamedSharding(mesh, PS(("dp", "fsdp"), None, None)) if dp_shard_logits else NamedSharding(mesh, PS()), 
                     hidden_states=NamedSharding(mesh, PS()), # assume no sharding for hidden states
                     attentions=NamedSharding(mesh, PS()), # assume no sharding for attentions
                 ), 
@@ -226,9 +226,9 @@ class GPTJPPOInference(PPOInference):
             train: bool=False, 
         ) -> PPOForwardOutput:
             # data parallel shard inputs
-            input_ids = with_named_sharding_constraint(input_ids, mesh, PS("dp", None))
-            attention_mask = with_named_sharding_constraint(attention_mask, mesh, PS("dp", None))
-            position_ids = with_named_sharding_constraint(position_ids, mesh, PS("dp", None))
+            input_ids = with_named_sharding_constraint(input_ids, mesh, PS(("dp", "fsdp"), None))
+            attention_mask = with_named_sharding_constraint(attention_mask, mesh, PS(("dp", "fsdp"), None))
+            position_ids = with_named_sharding_constraint(position_ids, mesh, PS(("dp", "fsdp"), None))
             
             new_key = None
             if prng_key is not None:
@@ -274,8 +274,8 @@ class GPTJPPOInference(PPOInference):
             # assert sharding on outputs
             if dp_shard_logits:
                 if has_initial_policy:
-                    initial_model_output = initial_model_output.replace(logits=with_named_sharding_constraint(initial_model_output.logits, mesh, PS("dp", None, None)))
-                model_output = model_output.replace(logits=with_named_sharding_constraint(model_output.logits, mesh, PS("dp", None, None)))
+                    initial_model_output = initial_model_output.replace(logits=with_named_sharding_constraint(initial_model_output.logits, mesh, PS(("dp", "fsdp"), None, None)))
+                model_output = model_output.replace(logits=with_named_sharding_constraint(model_output.logits, mesh, PS(("dp", "fsdp"), None, None)))
             return PPOForwardOutput(
                 initial_policy_raw_output=initial_model_output, 
                 policy_raw_output=model_output, 
@@ -319,14 +319,14 @@ class GPTJPPOInference(PPOInference):
         ) -> Tuple[jax.Array, PyTree]:
             assert loss_fn is not None, "loss_fn must be set to use eval_loss"
             # data parallel shard inputs
-            input_ids = with_named_sharding_constraint(input_ids, mesh, PS("dp", None))
-            attention_mask = with_named_sharding_constraint(attention_mask, mesh, PS("dp", None))
-            position_ids = with_named_sharding_constraint(position_ids, mesh, PS("dp", None))
-            should_take_action = with_named_sharding_constraint(should_take_action, mesh, PS("dp", None))
-            old_logprobs = with_named_sharding_constraint(old_logprobs, mesh, PS("dp", None))
-            old_values = with_named_sharding_constraint(old_values, mesh, PS("dp", None))
-            old_advantages = with_named_sharding_constraint(old_advantages, mesh, PS("dp", None))
-            old_returns = with_named_sharding_constraint(old_returns, mesh, PS("dp", None))
+            input_ids = with_named_sharding_constraint(input_ids, mesh, PS(("dp", "fsdp"), None))
+            attention_mask = with_named_sharding_constraint(attention_mask, mesh, PS(("dp", "fsdp"), None))
+            position_ids = with_named_sharding_constraint(position_ids, mesh, PS(("dp", "fsdp"), None))
+            should_take_action = with_named_sharding_constraint(should_take_action, mesh, PS(("dp", "fsdp"), None))
+            old_logprobs = with_named_sharding_constraint(old_logprobs, mesh, PS(("dp", "fsdp"), None))
+            old_values = with_named_sharding_constraint(old_values, mesh, PS(("dp", "fsdp"), None))
+            old_advantages = with_named_sharding_constraint(old_advantages, mesh, PS(("dp", "fsdp"), None))
+            old_returns = with_named_sharding_constraint(old_returns, mesh, PS(("dp", "fsdp"), None))
             
             new_key = None
             if prng_key is not None:

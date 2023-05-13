@@ -56,7 +56,6 @@ class LinearHeadConfig(HeadConfig):
         unpadded_output_dim: Optional[int]=None, 
         initializer_range: Optional[int]=None, 
         bias_init: Optional[float]=None, 
-        fsdp: bool=False, 
         mesh: Optional[jax.sharding.Mesh]=None, 
     ) -> None:
         self.input_dim = input_dim
@@ -64,14 +63,14 @@ class LinearHeadConfig(HeadConfig):
         self.use_bias = use_bias
         self.initializer_range = initializer_range
         self.bias_init = bias_init
-        self.fsdp = fsdp
         self.mesh = mesh
         self.unpadded_output_dim = unpadded_output_dim
         if self.unpadded_output_dim is None:
             self.unpadded_output_dim = self.output_dim
         super().__init__()
     
-    def get_partition_rules(self):
+    @staticmethod
+    def get_partition_rules():
         return [
             (re.escape("['dense']['kernel']"), PS()), 
             (re.escape("['dense']['bias']"), PS()), 
@@ -158,13 +157,11 @@ def load_train_state_from_config(
     mesh: Mesh, # should be shape (dp, mp)
     prng_key: jax.random.PRNGKeyArray, 
     pad_to_output_dim: Optional[int]=None, 
-    fsdp: bool=False, 
     params_dtype: Optional[Union[str, jnp.dtype]]=jnp.float32, 
 ) -> Tuple[TrainState, LinearHead]:
     
     model = LinearHead(model_config, dtype=model_dtype)
     model.config.mesh = mesh
-    model.config.fsdp = fsdp
     # shard params
     params = freeze(shard_params_from_config(model, prng_key, params_dtype=params_dtype))
     # pad outputs
@@ -183,7 +180,6 @@ def load_train_state(
     mesh: Mesh, # should be shape (dp, mp)
     prng_key: Optional[jax.random.PRNGKeyArray]=None, 
     pad_to_output_dim: Optional[int]=None, 
-    fsdp: bool=False, 
     params_dtype: Optional[Union[str, jnp.dtype]]=jnp.float32, 
 ) -> Tuple[TrainState, LinearHead]:
     
@@ -199,7 +195,6 @@ def load_train_state(
             mesh=mesh, 
             prng_key=prng_key, 
             pad_to_output_dim=pad_to_output_dim, 
-            fsdp=fsdp, 
             params_dtype=params_dtype, 
         )
     elif ModelLoadMode.match_load_mode(model_load_mode, ModelLoadMode.TRAIN_STATE):
@@ -208,7 +203,6 @@ def load_train_state(
             model_config = LinearHeadConfig.from_dict(json.load(f))
         model = LinearHead(model_config, dtype=model_dtype)
         model.config.mesh = mesh
-        model.config.fsdp = fsdp
         # shard and pad embeddings
         if pad_to_output_dim is None:
             # if no padding, just load train_state, shard as well
@@ -224,7 +218,6 @@ def load_train_state(
             model_config = LinearHeadConfig.from_dict(json.load(f))
         model = LinearHead(model_config, dtype=model_dtype)
         model.config.mesh = mesh
-        model.config.fsdp = fsdp
         # load params, shard params
         params = shard_train_state_from_checkpoint(model, os.path.join(model_load_path, 'train_state.msgpack'), optim_getter, just_params=True, train_state_dtype=params_dtype)
         # pad outputs
@@ -238,7 +231,6 @@ def load_train_state(
             model_config = LinearHeadConfig.from_dict(json.load(f))
         model = LinearHead(model_config, dtype=model_dtype)
         model.config.mesh = mesh
-        model.config.fsdp = fsdp
         # load params, shard params
         params = shard_params_from_checkpoint(model, os.path.join(model_load_path, 'params.msgpack'), params_dtype=params_dtype)
         # pad outputs
@@ -257,13 +249,11 @@ def load_params_from_config(
     mesh: Mesh, # should be shape (dp, mp)
     prng_key: jax.random.PRNGKeyArray, 
     pad_to_output_dim: Optional[int]=None, 
-    fsdp: bool=False, 
     params_dtype: Optional[Union[str, jnp.dtype]]=jnp.float32, 
 ) -> Tuple[PyTree, LinearHead]:
     
     model = LinearHead(model_config, dtype=model_dtype)
     model.config.mesh = mesh
-    model.config.fsdp = fsdp
     # shard params
     params = shard_params_from_config(model, prng_key, params_dtype=params_dtype)
     # pad outputs
@@ -279,7 +269,6 @@ def load_params(
     mesh: Mesh, # should be shape (dp, mp)
     prng_key: Optional[jax.random.PRNGKeyArray]=None, 
     pad_to_output_dim: Optional[int]=None, 
-    fsdp: bool=False, 
     params_dtype: Optional[Union[str, jnp.dtype]]=jnp.float32, 
 ) -> Tuple[PyTree, LinearHead]:
     
@@ -294,7 +283,6 @@ def load_params(
             mesh=mesh, 
             prng_key=prng_key, 
             pad_to_output_dim=pad_to_output_dim, 
-            fsdp=fsdp, 
             params_dtype=params_dtype, 
         )
     elif ModelLoadMode.match_load_mode(model_load_mode, ModelLoadMode.PARAMS):
@@ -303,7 +291,6 @@ def load_params(
             model_config = LinearHeadConfig.from_dict(json.load(f))
         model = LinearHead(model_config, dtype=model_dtype)
         model.config.mesh = mesh
-        model.config.fsdp = fsdp
         # load params, shard params
         params = shard_params_from_checkpoint(model, os.path.join(model_load_path, 'params.msgpack'), params_dtype=params_dtype)
         # pad outputs

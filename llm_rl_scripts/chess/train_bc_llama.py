@@ -33,6 +33,7 @@ def main(
     outputs_path: Optional[str]=None, 
 
     data_mesh_shape: int=1, 
+    fsdp_mesh_shape: int=1, 
     model_mesh_shape: int=-1, 
 
     use_wandb: bool=False, 
@@ -53,8 +54,8 @@ def main(
     train_bsize: int=16, 
     grad_accum_steps: Optional[int]=1, 
 
-    gradient_checkpoint: bool=False, 
-    fsdp: bool=False, 
+    gradient_checkpointing: bool=False, 
+    gradient_checkpointing_policy: str='nothing_saveable', 
     bf16_activations: bool=False, 
 
     max_input_length: int=128, 
@@ -97,7 +98,7 @@ def main(
     tokenizer.pad_token_id = tokenizer.unk_token_id
     tokenizer.add_special_tokens({'bos_token': '<s>', 'eos_token': '</s>'})
 
-    mesh = load_mesh((data_mesh_shape, model_mesh_shape), ('dp', 'mp'))
+    mesh = load_mesh((data_mesh_shape, fsdp_mesh_shape, model_mesh_shape), ('dp', 'fsdp', 'mp'))
     is_main_process = jax.process_index() == 0
     print(f"Mesh: {mesh}")
     print(f"Is main process: {is_main_process}")
@@ -172,10 +173,10 @@ def main(
         mesh=mesh, 
         model_prng_key=model_prng_key, 
         force_pad_embeddings=force_pad_embeddings, 
-        gradient_checkpoint=gradient_checkpoint, 
-        fsdp=fsdp, 
         params_dtype=jnp.float32, 
     )
+    model.config.gradient_checkpointing = gradient_checkpointing
+    model.config.gradient_checkpointing_policy = gradient_checkpointing_policy
 
     loop_state = dict()
     if should_restore_loop_state and (model_load_mode in {ModelLoadMode.TRAIN_STATE, 

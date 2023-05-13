@@ -385,7 +385,7 @@ class PPOInference(struct.PyTreeNode):
         logits: jax.Array, 
         input_ids: jax.Array, 
     ) -> jax.Array:
-        token_log_probs = -softmax_cross_entropy_with_integer_labels(logits[:, :-1], input_ids[:, 1:])
+        token_log_probs = -softmax_cross_entropy_with_integer_labels(logits[:, :-1].astype(jnp.float32), input_ids[:, 1:])
         return token_log_probs
     
     def forward(
@@ -501,14 +501,14 @@ class PPOInference(struct.PyTreeNode):
                 prng_key=new_key, 
             )
 
-            initial_policy_logits = forward_batch_output.initial_policy_raw_output.logits.astype(jnp.float32)
+            initial_policy_logits = forward_batch_output.initial_policy_raw_output.logits
             initial_policy_logprob = self.token_logprobs_from_logits(initial_policy_logits, tokens_batch)
             initial_policy_logprob = np.asarray(multihost_device_get(
                 initial_policy_logprob, 
                 mesh=self.initial_policy_model.config.mesh, 
             ))
 
-            policy_logits = forward_batch_output.policy_raw_output.logits.astype(jnp.float32)
+            policy_logits = forward_batch_output.policy_raw_output.logits
             policy_logprob = self.token_logprobs_from_logits(policy_logits, tokens_batch)
             policy_logprob = np.asarray(multihost_device_get(
                 policy_logprob, 

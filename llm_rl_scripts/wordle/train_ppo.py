@@ -48,6 +48,7 @@ def main(
     outputs_path: Optional[str]=None, 
 
     data_mesh_shape: int=1, 
+    fsdp_mesh_shape: int=1, 
     model_mesh_shape: int=-1, 
 
     use_wandb: bool=False, 
@@ -66,8 +67,8 @@ def main(
     n_rollouts: int=128, 
     ppo_data_bsize: int=32, 
 
-    gradient_checkpoint: bool=False, 
-    fsdp: bool=False, 
+    gradient_checkpointing: bool=False, 
+    gradient_checkpointing_policy: str='nothing_saveable', 
 
     max_input_length: int=512, 
     max_output_length: int=512, 
@@ -122,7 +123,7 @@ def main(
     tokenizer = AutoTokenizer.from_pretrained('EleutherAI/gpt-j-6B')
     tokenizer.add_special_tokens({'pad_token': '<|pad|>'})
 
-    mesh = load_mesh((data_mesh_shape, model_mesh_shape), ('dp', 'mp'))
+    mesh = load_mesh((data_mesh_shape, fsdp_mesh_shape, model_mesh_shape), ('dp', 'fsdp', 'mp'))
     is_main_process = jax.process_index() == 0
     print(f"Mesh: {mesh}")
     print(f"Is main process: {is_main_process}")
@@ -157,10 +158,10 @@ def main(
         mesh=mesh, 
         prng_key=model_prng_key, 
         force_pad_embeddings=force_pad_embeddings, 
-        gradient_checkpoint=gradient_checkpoint, 
-        fsdp=fsdp, 
         params_dtype=jnp.float32, 
     )
+    policy_model.config.gradient_checkpointing = gradient_checkpointing
+    policy_model.config.gradient_checkpointing_policy = gradient_checkpointing_policy
     with jax.default_device(jax.devices('cpu')[0]):
         initital_policy_params = jax.tree_util.tree_map(
             lambda x: multihost_device_get(x, mesh=mesh).copy(), 
@@ -239,7 +240,6 @@ def main(
         mesh=mesh, 
         prng_key=head_prng_key, 
         pad_to_output_dim=None, 
-        fsdp=fsdp, 
         params_dtype=jnp.float32, 
     )
 
