@@ -267,7 +267,7 @@ def train_loop(
             )
         
         bc_d = None
-        if bc_d is not None:
+        if bc_dataset is not None:
             prng_key, new_prng = jax.random.split(prng_key)
             bc_d = dataloader(new_prng, bc_dataset, bsize, truncate=True)
         

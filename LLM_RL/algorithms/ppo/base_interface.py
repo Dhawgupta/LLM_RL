@@ -193,7 +193,6 @@ class PPOTrain(struct.PyTreeNode):
         bc_data_input_training_mask: Optional[jax.Array]=None, 
         train: bool=True, 
     ) -> Tuple[PPOTrain, jax.Array, PyTree]:
-        
         # handle attention mask and position ids shifting
         attention_mask, position_ids = initialize_attn_mask_pos_ids(
             input_ids, 
@@ -202,12 +201,14 @@ class PPOTrain(struct.PyTreeNode):
             position_ids, 
         )
 
-        bc_data_input_attention_mask, bc_data_input_position_ids = initialize_attn_mask_pos_ids(
-            bc_data_input_ids, 
-            self.tokenizer.pad_token_id, 
-            bc_data_input_attention_mask, 
-            bc_data_input_position_ids, 
-        )
+        if bc_data_input_ids is not None:
+            bc_data_input_attention_mask, bc_data_input_position_ids = initialize_attn_mask_pos_ids(
+                bc_data_input_ids, 
+                self.tokenizer.pad_token_id, 
+                bc_data_input_attention_mask, 
+                bc_data_input_position_ids, 
+            )
+            assert bc_data_input_training_mask is not None
         
         policy_train_state, value_head_train_state, loss, logs = self._step(
             self.policy_train_state, 
@@ -699,12 +700,14 @@ class PPOInference(struct.PyTreeNode):
             position_ids, 
         )
 
-        bc_data_input_attention_mask, bc_data_input_position_ids = initialize_attn_mask_pos_ids(
-            bc_data_input_ids, 
-            self.tokenizer.pad_token_id, 
-            bc_data_input_attention_mask, 
-            bc_data_input_position_ids, 
-        )
+        if bc_data_input_ids is not None:
+            bc_data_input_attention_mask, bc_data_input_position_ids = initialize_attn_mask_pos_ids(
+                bc_data_input_ids, 
+                self.tokenizer.pad_token_id, 
+                bc_data_input_attention_mask, 
+                bc_data_input_position_ids, 
+            )
+            assert bc_data_input_training_mask is not None
 
         return self._eval_loss(
             self.policy_params, 

@@ -29,8 +29,8 @@ CUDA_VISIBLE_DEVICES=5 python -m llm_rl_scripts.wordle.train_ppo \
     --use-wandb \
     --wandb-project "LLM_RL_wordle_ppo" \
     --n-rollouts 512 \
-    --train-bsize 16 \
-    --grad-accum-steps 2 \
+    --train-bsize 8 \
+    --grad-accum-steps 4 \
     --rollout-bsize 64 \
     --ppo-data-bsize 64 \
     --n-rounds 1000 \
