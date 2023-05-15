@@ -38,7 +38,7 @@ CUDA_VISIBLE_DEVICES=5 python -m llm_rl_scripts.wordle.train_ppo \
     --log-every 32 \
     --weight-decay 1e-6 \
     --lr 3e-5 \
-    --init-kl-coef 100.0 \
+    --init-kl-coef 0.001 \
     --kl-target 0.1 \
     --kl-horizon 10000 \
     --value-loss-coef 1.0 \
