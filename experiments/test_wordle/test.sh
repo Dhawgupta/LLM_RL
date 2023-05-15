@@ -22,6 +22,7 @@ export GCLOUD_TOKEN_PATH="${HOME}/.config/gcloud/civic-boulder-204700-V2.json"
 CUDA_VISIBLE_DEVICES=5 python -m llm_rl_scripts.wordle.train_ppo \
     PARAMS \
     gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gptj_config_test2.2023-05-12-17-01-25.893.a16043b2f0e611ed890c5d20da9db470/step_237568/ \
+    gcs://charlie-bucket2/LLM_RL_data/wordle/bc_data1.jsonl \
     llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
     --exp-name None \
     --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_ppo_test1/ \
@@ -37,7 +38,7 @@ CUDA_VISIBLE_DEVICES=5 python -m llm_rl_scripts.wordle.train_ppo \
     --log-every 32 \
     --weight-decay 1e-6 \
     --lr 3e-5 \
-    --init-kl-coef 0.001 \
+    --init-kl-coef 100.0 \
     --kl-target 0.1 \
     --kl-horizon 10000 \
     --value-loss-coef 1.0 \

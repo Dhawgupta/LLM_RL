@@ -23,6 +23,7 @@ from LLM_RL.algorithms.ppo.base_interface import PPOPolicy
 import flax.linen as nn
 import os
 import jax.numpy as jnp
+from JaxSeq.data import MaskDataset, MaskIterableDataset
 
 def dump_state(
     policy_model: FlaxPreTrainedModel, 
@@ -141,6 +142,7 @@ def train_loop(
     wandb_run_name: Optional[str], 
     wandb_config: Optional[Dict[str, Any]], 
     is_main_process: Optional[bool]=None, 
+    bc_dataset: Optional[Union[MaskDataset, MaskIterableDataset]]=None, 
     **loop_state: Dict[Hashable, Any], 
 ) -> Tuple[PPOTrain, PPOInference, PPOPolicy]:
     assert (not use_wandb) or (use_wandb and wandb_project is not None)
@@ -264,10 +266,23 @@ def train_loop(
                 wandb_id=wandb_id, 
             )
         
+        bc_d = None
+        if bc_d is not None:
+            prng_key, new_prng = jax.random.split(prng_key)
+            bc_d = dataloader(new_prng, bc_dataset, bsize, truncate=True)
+        
         for epoch in tqdm(range(epochs)):
             prng_key, new_prng = jax.random.split(prng_key)
             d = dataloader(new_prng, dataset, bsize, truncate=True)
             for batch in tqdm(d, total=steps_per_epoch):
+                if bc_d is not None:
+                    try:
+                        bc_batch = next(bc_d)
+                    except StopIteration as e:
+                        prng_key, new_prng = jax.random.split(prng_key)
+                        bc_d = dataloader(new_prng, bc_dataset, bsize, truncate=True)
+                        bc_batch = next(bc_d)
+                    batch = {**batch, **{'bc_data_'+k: v for k, v in bc_batch.items()}}
                 
                 # step model and get training logs
                 if 'step' in loop_state and step < loop_state['step']:

@@ -168,9 +168,10 @@ class PPOTrain(struct.PyTreeNode):
     #     old_advantages: jax.Array, 
     #     old_returns: jax.Array, 
     #     prng_key: Optional[jax.random.PRNGKeyArray], 
-    #     cliprange_value: Union[float, jax.Array], 
-    #     cliprange: Union[float, jax.Array], 
-    #     value_loss_coef: Union[float, jax.Array], 
+    #     bc_data_input_ids: Optional[jax.Array], 
+    #     bc_data_input_attention_mask: Optional[jax.Array], 
+    #     bc_data_input_position_ids: Optional[jax.Array], 
+    #     bc_data_input_training_mask: Optional[jax.Array], 
     #     train: bool=True, 
     # ) -> Tuple[TrainState, TrainState, jax.Array, PyTree]:
     #     raise NotImplementedError
@@ -186,6 +187,10 @@ class PPOTrain(struct.PyTreeNode):
         prng_key: Optional[jax.random.PRNGKeyArray], 
         attention_mask: Optional[jax.Array]=None, 
         position_ids: Optional[jax.Array]=None, 
+        bc_data_input_ids: Optional[jax.Array]=None, 
+        bc_data_input_attention_mask: Optional[jax.Array]=None, 
+        bc_data_input_position_ids: Optional[jax.Array]=None, 
+        bc_data_input_training_mask: Optional[jax.Array]=None, 
         train: bool=True, 
     ) -> Tuple[PPOTrain, jax.Array, PyTree]:
         
@@ -209,6 +214,10 @@ class PPOTrain(struct.PyTreeNode):
             old_advantages, 
             old_returns, 
             prng_key, 
+            bc_data_input_ids, 
+            bc_data_input_attention_mask, 
+            bc_data_input_position_ids, 
+            bc_data_input_training_mask, 
             train, 
         )
 
@@ -375,6 +384,10 @@ class PPOInference(struct.PyTreeNode):
     #     old_advantages: jax.Array, 
     #     old_returns: jax.Array, 
     #     prng_key: Optional[jax.random.PRNGKeyArray], 
+    #     bc_data_input_ids: Optional[jax.Array], 
+    #     bc_data_input_attention_mask: Optional[jax.Array], 
+    #     bc_data_input_position_ids: Optional[jax.Array], 
+    #     bc_data_input_training_mask: Optional[jax.Array], 
     #     train: bool=False, 
     # ) -> Tuple[jax.Array, PyTree]:
     #     raise NotImplementedError
@@ -664,6 +677,10 @@ class PPOInference(struct.PyTreeNode):
         attention_mask: Optional[jax.Array]=None, 
         position_ids: Optional[jax.Array]=None, 
         prng_key: Optional[jax.random.PRNGKeyArray]=None, 
+        bc_data_input_ids: Optional[jax.Array]=None, 
+        bc_data_input_attention_mask: Optional[jax.Array]=None, 
+        bc_data_input_position_ids: Optional[jax.Array]=None, 
+        bc_data_input_training_mask: Optional[jax.Array]=None, 
         train: bool=False, 
     ) -> Tuple[jax.Array, PyTree]:
         
@@ -687,28 +704,32 @@ class PPOInference(struct.PyTreeNode):
             old_advantages, 
             old_returns, 
             prng_key, 
+            bc_data_input_ids, 
+            bc_data_input_attention_mask, 
+            bc_data_input_position_ids, 
+            bc_data_input_training_mask, 
             train, 
         )
 
-    def eval_loss_from_ppo_data(
-        self, 
-        ppo_data: List[PPOData], 
-        blocking_strategy: BlockingStrategy=BlockingStrategy(padding=Padding.RIGHT, truncation=Truncation.RIGHT, max_length=None), 
-        prng_key: Optional[jax.random.PRNGKeyArray]=None, 
-        train: bool=False, 
-    ) -> Tuple[jax.Array, PyTree]:
+    # def eval_loss_from_ppo_data(
+    #     self, 
+    #     ppo_data: List[PPOData], 
+    #     blocking_strategy: BlockingStrategy=BlockingStrategy(padding=Padding.RIGHT, truncation=Truncation.RIGHT, max_length=None), 
+    #     prng_key: Optional[jax.random.PRNGKeyArray]=None, 
+    #     train: bool=False, 
+    # ) -> Tuple[jax.Array, PyTree]:
         
-        ppo_data_batch_dict = PPOData.block(
-            ppo_data, 
-            blocking_strategy, 
-            self.tokenizer, 
-        )
+    #     ppo_data_batch_dict = PPOData.block(
+    #         ppo_data, 
+    #         blocking_strategy, 
+    #         self.tokenizer, 
+    #     )
 
-        return self.eval_loss(
-            **ppo_data_batch_dict, 
-            prng_key=prng_key, 
-            train=train, 
-        )
+    #     return self.eval_loss(
+    #         **ppo_data_batch_dict, 
+    #         prng_key=prng_key, 
+    #         train=train, 
+    #     )
 
 class PPOPolicy(BatchedTextPolicy):
     def set_params(self, policy_params: PyTree) -> None:

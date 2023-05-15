@@ -5,7 +5,7 @@ from transformers import AutoTokenizer
 from JaxSeq.utils import jsonl_stream, convert_path, load_mesh, get_dtype, setup_experiment_save
 import jax
 import jax.numpy as jnp
-from JaxSeq.utils import BlockingStrategy, Padding, Truncation, uuid_name, jsonl_load, get_weight_decay_mask, create_path, get_enabled_save_path
+from JaxSeq.utils import BlockingStrategy, Padding, Truncation, uuid_name, jsonl_load, get_weight_decay_mask, create_path, get_enabled_save_path, MapIterable, FileOpenIterable
 import os
 import optax
 from JaxSeq.models.gptj.interface import GPTJTrain, GPTJInference
@@ -32,16 +32,18 @@ from JaxSeq.logs import label_logs, log, pull_logs
 import json
 import random
 from JaxSeq.utils import multihost_device_get
-
+from JaxSeq.data import MaskIterableDataset
 from llm_rl_scripts.wordle.env import ReformatWordleEnvironment, WordleEnvironment
 from llm_rl_scripts.wordle.game import Vocabulary
 from llm_rl_scripts.wordle.scripted_policies import RandomMixturePolicy
 from llm_rl_scripts.wordle.data import PolicyDataGenerator
 from dataclasses import replace
+from JaxSeq.models.gptj.interface import loss_fn_mask
 
 def main(
     model_load_mode: ModelLoadMode, 
     model_load_path: str, 
+    bc_data_path: str, 
     vocab_file: str, 
 
     /,  # Mark the end of positional arguments.
@@ -111,6 +113,7 @@ def main(
     cliprange_value: float=0.2, 
     cliprange: float=0.2, 
     value_loss_coef: float=1.0, 
+    bc_loss_weight: float=1.0, 
 
     force_pad_embeddings: bool=False, 
 
@@ -130,6 +133,17 @@ def main(
     is_main_process = jax.process_index() == 0
     print(f"Mesh: {mesh}")
     print(f"Is main process: {is_main_process}")
+
+    # load data
+    bc_data = MaskIterableDataset.blocked_from_str_segments_iterable(
+        MapIterable(lambda x: [(tokenizer.bos_token, 0.0)]+x['sequence']+[(tokenizer.eos_token, 1.0)], FileOpenIterable(convert_path(bc_data_path), 'r', pipe=jsonl_stream)), 
+        tokenizer, 
+        blocking_strategy=BlockingStrategy(
+            padding=Padding.RIGHT, 
+            truncation=Truncation.LEFT, 
+            max_length=max_input_length+max_output_length, 
+        ), 
+    )
 
     def policy_optim_getter(params: PyTree):
         mask = get_weight_decay_mask((
@@ -267,6 +281,8 @@ def main(
         value_head_model=value_head, 
         tokenizer=tokenizer, 
         loss_fn=loss_f, 
+        bc_loss_fn=loss_fn_mask, 
+        bc_loss_weight=bc_loss_weight,  
     )
 
     ppo_trainer = GPTJPPOTrain.load_train(
@@ -276,6 +292,8 @@ def main(
         value_head_model=value_head, 
         tokenizer=tokenizer, 
         loss_fn=loss_f, 
+        bc_loss_fn=loss_fn_mask, 
+        bc_loss_weight=bc_loss_weight,  
     )
 
     if use_adaptive_kl:
@@ -431,6 +449,7 @@ def main(
         wandb_run_name=exp_name, 
         wandb_config=None, 
         is_main_process=is_main_process, 
+        bc_dataset=bc_data, 
         **loop_state, 
     )
 

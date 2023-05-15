@@ -33,6 +33,8 @@ class GPTJPPOTrain(PPOTrain):
         value_head_model: nn.Module, 
         tokenizer: PreTrainedTokenizerBase, 
         loss_fn: Callable, 
+        bc_loss_fn: Optional[Callable]=None, 
+        bc_loss_weight: float=0.0, 
     ) -> GPTJPPOTrain:
         mesh = policy_model.config.mesh
         assert mesh is not None
@@ -47,6 +49,10 @@ class GPTJPPOTrain(PPOTrain):
             in_shardings=(
                 jax.tree_util.tree_map(lambda ps: NamedSharding(mesh, ps), policy_train_state_partition_spec), 
                 jax.tree_util.tree_map(lambda ps: NamedSharding(mesh, ps), value_head_train_state_partition_spec), 
+                NamedSharding(mesh, PS()), 
+                NamedSharding(mesh, PS()), 
+                NamedSharding(mesh, PS()), 
+                NamedSharding(mesh, PS()), 
                 NamedSharding(mesh, PS()), 
                 NamedSharding(mesh, PS()), 
                 NamedSharding(mesh, PS()), 
@@ -76,17 +82,26 @@ class GPTJPPOTrain(PPOTrain):
             old_advantages: jax.Array, 
             old_returns: jax.Array, 
             prng_key: Optional[jax.random.PRNGKeyArray], 
+            bc_data_input_ids: Optional[jax.Array], 
+            bc_data_input_attention_mask: Optional[jax.Array], 
+            bc_data_input_position_ids: Optional[jax.Array], 
+            bc_data_input_training_mask: Optional[jax.Array], 
             train: bool=True, 
         ) -> Tuple[TrainState, TrainState, jax.Array, PyTree]:
             # data parallel shard inputs
-            input_ids = with_named_sharding_constraint(input_ids, mesh, PS('dp', None))
-            attention_mask = with_named_sharding_constraint(attention_mask, mesh, PS('dp', None))
-            position_ids = with_named_sharding_constraint(position_ids, mesh, PS('dp', None))
-            should_take_action = with_named_sharding_constraint(should_take_action, mesh, PS('dp', None))
-            old_logprobs = with_named_sharding_constraint(old_logprobs, mesh, PS('dp', None))
-            old_values = with_named_sharding_constraint(old_values, mesh, PS('dp', None))
-            old_advantages = with_named_sharding_constraint(old_advantages, mesh, PS('dp', None))
-            old_returns = with_named_sharding_constraint(old_returns, mesh, PS('dp', None))
+            input_ids = with_named_sharding_constraint(input_ids, mesh, PS(('dp', 'fsdp'), None))
+            attention_mask = with_named_sharding_constraint(attention_mask, mesh, PS(('dp', 'fsdp'), None))
+            position_ids = with_named_sharding_constraint(position_ids, mesh, PS(('dp', 'fsdp'), None))
+            should_take_action = with_named_sharding_constraint(should_take_action, mesh, PS(('dp', 'fsdp'), None))
+            old_logprobs = with_named_sharding_constraint(old_logprobs, mesh, PS(('dp', 'fsdp'), None))
+            old_values = with_named_sharding_constraint(old_values, mesh, PS(('dp', 'fsdp'), None))
+            old_advantages = with_named_sharding_constraint(old_advantages, mesh, PS(('dp', 'fsdp'), None))
+            old_returns = with_named_sharding_constraint(old_returns, mesh, PS(('dp', 'fsdp'), None))
+            if bc_loss_fn is not None:
+                bc_data_input_ids = with_named_sharding_constraint(bc_data_input_ids, mesh, PS(('dp', 'fsdp'), None))
+                bc_data_input_attention_mask = with_named_sharding_constraint(bc_data_input_attention_mask, mesh, PS(('dp', 'fsdp'), None))
+                bc_data_input_position_ids = with_named_sharding_constraint(bc_data_input_position_ids, mesh, PS(('dp', 'fsdp'), None))
+                bc_data_input_training_mask = with_named_sharding_constraint(bc_data_input_training_mask, mesh, PS(('dp', 'fsdp'), None))
             
             # define loss function
             def grad_loss(policy_params: PyTree, value_head_params: PyTree, prng_key: jax.random.PRNGKeyArray):
@@ -129,12 +144,31 @@ class GPTJPPOTrain(PPOTrain):
                     old_returns, 
                 )
                 return loss, info
+            
+            # define bc loss function
+            def grad_bc_loss(policy_params: PyTree, prng_key: Optional[jax.random.PRNGKeyArray]):
+                loss, info = bc_loss_fn(
+                    policy_model, 
+                    policy_params, 
+                    bc_data_input_ids, 
+                    bc_data_input_attention_mask, 
+                    bc_data_input_position_ids, 
+                    bc_data_input_training_mask, 
+                    prng_key, 
+                    train, 
+                )
+                return loss, info
+
             # take loss
+            new_key = None
+            if prng_key is not None:
+                prng_key, new_key = jax.random.split(prng_key)
             (loss, info), (policy_grads, value_head_grads) = jax.value_and_grad(grad_loss, has_aux=True, argnums=(0, 1))(
                 policy_train_state.params, 
                 value_head_train_state.params, 
                 prng_key, 
             )
+
             # assert shard gradients
             policy_grads = jax.tree_util.tree_map(
                 lambda x, ps: with_named_sharding_constraint(x, mesh, ps), 
@@ -146,6 +180,31 @@ class GPTJPPOTrain(PPOTrain):
                 value_head_grads, 
                 value_head_train_state_partition_spec.params, 
             )
+
+            if bc_loss_fn is not None:
+                new_key = None
+                if prng_key is not None:
+                    prng_key, new_key = jax.random.split(prng_key)
+                (bc_loss, bc_info), bc_grads = jax.value_and_grad(grad_bc_loss, has_aux=True, argnums=0)(
+                    policy_train_state.params, 
+                    new_key, 
+                )
+
+                info = {'ppo': info, 'bc': bc_info}
+                loss = loss + bc_loss * bc_loss_weight
+
+                bc_grads = jax.tree_util.tree_map(
+                    lambda x, ps: with_named_sharding_constraint(x, mesh, ps), 
+                    bc_grads, 
+                    policy_train_state_partition_spec.params, 
+                )
+
+                policy_grads = jax.tree_util.tree_map(
+                    lambda x, y: x + y * bc_loss_weight, 
+                    policy_grads, 
+                    bc_grads, 
+                )
+
             # update params and optim state
             policy_train_state = policy_train_state.apply_gradients(grads=policy_grads)
             value_head_train_state = value_head_train_state.apply_gradients(grads=value_head_grads)
@@ -174,6 +233,8 @@ class GPTJPPOInference(PPOInference):
         tokenizer: PreTrainedTokenizerBase, 
         loss_fn: Optional[Callable], 
         dp_shard_logits: bool=True, 
+        bc_loss_fn: Optional[Callable]=None, 
+        bc_loss_weight: float=0.0, 
     ) -> GPTJPPOInference:
         mesh = policy_model.config.mesh
         assert mesh is not None
@@ -297,6 +358,10 @@ class GPTJPPOInference(PPOInference):
                 NamedSharding(mesh, PS()), 
                 NamedSharding(mesh, PS()), 
                 NamedSharding(mesh, PS()), 
+                NamedSharding(mesh, PS()), 
+                NamedSharding(mesh, PS()), 
+                NamedSharding(mesh, PS()), 
+                NamedSharding(mesh, PS()), 
             ), 
             out_shardings=(
                 NamedSharding(mesh, PS()), 
@@ -315,6 +380,10 @@ class GPTJPPOInference(PPOInference):
             old_advantages: jax.Array, 
             old_returns: jax.Array, 
             prng_key: Optional[jax.random.PRNGKeyArray], 
+            bc_data_input_ids: Optional[jax.Array], 
+            bc_data_input_attention_mask: Optional[jax.Array], 
+            bc_data_input_position_ids: Optional[jax.Array], 
+            bc_data_input_training_mask: Optional[jax.Array], 
             train: bool=False, 
         ) -> Tuple[jax.Array, PyTree]:
             assert loss_fn is not None, "loss_fn must be set to use eval_loss"
@@ -327,6 +396,11 @@ class GPTJPPOInference(PPOInference):
             old_values = with_named_sharding_constraint(old_values, mesh, PS(("dp", "fsdp"), None))
             old_advantages = with_named_sharding_constraint(old_advantages, mesh, PS(("dp", "fsdp"), None))
             old_returns = with_named_sharding_constraint(old_returns, mesh, PS(("dp", "fsdp"), None))
+            if bc_data_input_ids is not None:
+                bc_data_input_ids = with_named_sharding_constraint(bc_data_input_ids, mesh, PS(("dp", "fsdp"), None))
+                bc_data_input_attention_mask = with_named_sharding_constraint(bc_data_input_attention_mask, mesh, PS(("dp", "fsdp"), None))
+                bc_data_input_position_ids = with_named_sharding_constraint(bc_data_input_position_ids, mesh, PS(("dp", "fsdp"), None))
+                bc_data_input_training_mask = with_named_sharding_constraint(bc_data_input_training_mask, mesh, PS(("dp", "fsdp"), None))
             
             new_key = None
             if prng_key is not None:
@@ -365,6 +439,22 @@ class GPTJPPOInference(PPOInference):
                 old_advantages, 
                 old_returns, 
             )
+
+            if bc_loss_fn is not None:
+                bc_loss, bc_info = bc_loss_fn(
+                    policy_model, 
+                    policy_params, 
+                    bc_data_input_ids, 
+                    bc_data_input_attention_mask, 
+                    bc_data_input_position_ids, 
+                    bc_data_input_training_mask, 
+                    prng_key, 
+                    train, 
+                )
+
+                info = {'ppo': info, 'bc': bc_info}
+                loss = loss + bc_loss * bc_loss_weight
+
             return loss, info
     
         return cls(
