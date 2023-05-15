@@ -48,7 +48,8 @@ CUDA_VISIBLE_DEVICES=5 python -m llm_rl_scripts.wordle.train_ppo \
     --model-mesh-shape 1 \
     \
     --bf16-activations \
-    --no-save-best
+    --no-save-best \
+    --bc-loss-weight 1.0
 
 
 
