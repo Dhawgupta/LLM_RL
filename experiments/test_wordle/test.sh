@@ -49,7 +49,7 @@ CUDA_VISIBLE_DEVICES=5 python -m llm_rl_scripts.wordle.train_ppo \
     \
     --bf16-activations \
     --no-save-best \
-    --bc-loss-weight 10.0
+    --bc-loss-weight 1.0
 
 
 

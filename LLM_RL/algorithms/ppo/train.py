@@ -231,6 +231,11 @@ def train_loop(
                 **{**loop_state, 'best_perf': best_perf}, 
             )
 
+    bc_d = None
+    if bc_dataset is not None:
+        prng_key, new_prng = jax.random.split(prng_key)
+        bc_d = dataloader(new_prng, bc_dataset, bc_bsize, truncate=True)
+    
     # begin training loop
     for round in tqdm(range(n_rounds)):
 
@@ -268,11 +273,6 @@ def train_loop(
                 steps_per_epoch=steps_per_epoch, 
                 wandb_id=wandb_id, 
             )
-        
-        bc_d = None
-        if bc_dataset is not None:
-            prng_key, new_prng = jax.random.split(prng_key)
-            bc_d = dataloader(new_prng, bc_dataset, bc_bsize, truncate=True)
         
         for epoch in tqdm(range(epochs)):
             prng_key, new_prng = jax.random.split(prng_key)
