@@ -190,7 +190,7 @@ class GPTJPPOTrain(PPOTrain):
                     new_key, 
                 )
 
-                info = {'ppo': info, 'bc': bc_info}
+                info = {'ppo': info, 'bc': bc_info, 'total_loss': loss + bc_loss * bc_loss_weight}
                 loss = loss + bc_loss * bc_loss_weight
 
                 bc_grads = jax.tree_util.tree_map(
@@ -452,7 +452,7 @@ class GPTJPPOInference(PPOInference):
                     train, 
                 )
 
-                info = {'ppo': info, 'bc': bc_info}
+                info = {'ppo': info, 'bc': bc_info, 'total_loss': loss + bc_loss * bc_loss_weight}
                 loss = loss + bc_loss * bc_loss_weight
 
             return loss, info
