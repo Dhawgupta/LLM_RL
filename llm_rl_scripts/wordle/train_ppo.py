@@ -66,6 +66,7 @@ def main(
     weight_decay: float=0.0, 
 
     train_bsize: int=32, 
+    train_bc_bsize: Optional[int]=None, 
     grad_accum_steps: Optional[int]=None, 
     rollout_bsize: int=32, 
     n_rollouts: int=128, 
@@ -450,6 +451,7 @@ def main(
         wandb_config=None, 
         is_main_process=is_main_process, 
         bc_dataset=bc_data, 
+        bc_bsize=train_bc_bsize, 
         **loop_state, 
     )
 

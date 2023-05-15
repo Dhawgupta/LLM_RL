@@ -143,11 +143,14 @@ def train_loop(
     wandb_config: Optional[Dict[str, Any]], 
     is_main_process: Optional[bool]=None, 
     bc_dataset: Optional[Union[MaskDataset, MaskIterableDataset]]=None, 
+    bc_bsize: Optional[int]=None, 
     **loop_state: Dict[Hashable, Any], 
 ) -> Tuple[PPOTrain, PPOInference, PPOPolicy]:
     assert (not use_wandb) or (use_wandb and wandb_project is not None)
     if is_main_process is None:
         is_main_process = is_main_process
+    if bc_bsize is None:
+        bc_bsize = bsize
     
     # initalize wandb
     wandb_id = loop_state.get('wandb_id', None)
@@ -269,7 +272,7 @@ def train_loop(
         bc_d = None
         if bc_dataset is not None:
             prng_key, new_prng = jax.random.split(prng_key)
-            bc_d = dataloader(new_prng, bc_dataset, bsize, truncate=True)
+            bc_d = dataloader(new_prng, bc_dataset, bc_bsize, truncate=True)
         
         for epoch in tqdm(range(epochs)):
             prng_key, new_prng = jax.random.split(prng_key)
@@ -280,7 +283,7 @@ def train_loop(
                         bc_batch = next(bc_d)
                     except StopIteration as e:
                         prng_key, new_prng = jax.random.split(prng_key)
-                        bc_d = dataloader(new_prng, bc_dataset, bsize, truncate=True)
+                        bc_d = dataloader(new_prng, bc_dataset, bc_bsize, truncate=True)
                         bc_batch = next(bc_d)
                     batch = {**batch, **{'bc_data_'+k: v for k, v in bc_batch.items()}}
                 
