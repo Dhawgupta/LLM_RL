@@ -201,6 +201,13 @@ class PPOTrain(struct.PyTreeNode):
             attention_mask, 
             position_ids, 
         )
+
+        bc_data_input_attention_mask, bc_data_input_position_ids = initialize_attn_mask_pos_ids(
+            bc_data_input_ids, 
+            self.tokenizer.pad_token_id, 
+            bc_data_input_attention_mask, 
+            bc_data_input_position_ids, 
+        )
         
         policy_train_state, value_head_train_state, loss, logs = self._step(
             self.policy_train_state, 
@@ -690,6 +697,13 @@ class PPOInference(struct.PyTreeNode):
             self.tokenizer.pad_token_id, 
             attention_mask, 
             position_ids, 
+        )
+
+        bc_data_input_attention_mask, bc_data_input_position_ids = initialize_attn_mask_pos_ids(
+            bc_data_input_ids, 
+            self.tokenizer.pad_token_id, 
+            bc_data_input_attention_mask, 
+            bc_data_input_position_ids, 
         )
 
         return self._eval_loss(
