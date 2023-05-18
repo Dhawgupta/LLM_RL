@@ -19,29 +19,27 @@ conda activate LLM_RL
 export GCLOUD_PROJECT="civic-boulder-204700"
 export GCLOUD_TOKEN_PATH="${HOME}/.config/gcloud/civic-boulder-204700-V2.json"
 
-CUDA_VISIBLE_DEVICES=5 python -m llm_rl_scripts.wordle.train_ppo \
+CUDA_VISIBLE_DEVICES=5 python -m llm_rl_scripts.wordle.train_ilql \
     PARAMS \
     gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gptj_config_test2.2023-05-12-17-01-25.893.a16043b2f0e611ed890c5d20da9db470/step_237568/ \
     gcs://charlie-bucket2/LLM_RL_data/wordle/bc_data1.jsonl \
+    gcs://charlie-bucket2/LLM_RL_data/wordle/bc_data_eval1.jsonl \
     llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
     --exp-name None \
-    --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_ppo_test1/ \
+    --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_ilql_test1/ \
     --use-wandb \
-    --wandb-project "LLM_RL_wordle_ppo" \
-    --n-rollouts 512 \
+    --wandb-project "LLM_RL_wordle_ilql" \
     --train-bsize 8 \
     --grad-accum-steps 4 \
-    --rollout-bsize 64 \
-    --ppo-data-bsize 64 \
-    --n-rounds 1000 \
-    --epochs 4 \
-    --log-every 32 \
+    --policy-bsize 64 \
+    --policy-n-rollouts 512 \
+    --eval-loss-bsize 8 \
+    --eval-loss-batches 64 \
+    --epochs 1000 \
+    --log-every 64 \
+    --eval-every-steps 1024 \
     --weight-decay 1e-6 \
     --lr 3e-5 \
-    --init-kl-coef 0.001 \
-    --kl-target 0.1 \
-    --kl-horizon 10000 \
-    --value-loss-coef 1.0 \
     \
     --data-mesh-shape -1 \
     --fsdp-mesh-shape 1 \
@@ -49,7 +47,39 @@ CUDA_VISIBLE_DEVICES=5 python -m llm_rl_scripts.wordle.train_ppo \
     \
     --bf16-activations \
     --no-save-best \
-    --bc-loss-weight 10.0
+    --beta 16.0
+
+# CUDA_VISIBLE_DEVICES=5 python -m llm_rl_scripts.wordle.train_ppo \
+#     PARAMS \
+#     gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gptj_config_test2.2023-05-12-17-01-25.893.a16043b2f0e611ed890c5d20da9db470/step_237568/ \
+#     gcs://charlie-bucket2/LLM_RL_data/wordle/bc_data1.jsonl \
+#     llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+#     --exp-name None \
+#     --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_ppo_test1/ \
+#     --use-wandb \
+#     --wandb-project "LLM_RL_wordle_ppo" \
+#     --n-rollouts 512 \
+#     --train-bsize 8 \
+#     --grad-accum-steps 4 \
+#     --rollout-bsize 64 \
+#     --ppo-data-bsize 64 \
+#     --n-rounds 1000 \
+#     --epochs 4 \
+#     --log-every 32 \
+#     --weight-decay 1e-6 \
+#     --lr 3e-5 \
+#     --init-kl-coef 0.001 \
+#     --kl-target 0.1 \
+#     --kl-horizon 10000 \
+#     --value-loss-coef 1.0 \
+#     \
+#     --data-mesh-shape -1 \
+#     --fsdp-mesh-shape 1 \
+#     --model-mesh-shape 1 \
+#     \
+#     --bf16-activations \
+#     --no-save-best \
+#     --bc-loss-weight 10.0
 
 
 
