@@ -628,11 +628,11 @@ class ILQLInferenceFull(struct.PyTreeNode):
         prng_key: Optional[jax.random.PRNGKeyArray]=None, 
         train: bool=True, 
     ) -> Tuple[jax.Array, PyTree]:
-        input_attention_mask, input_position_ids = initialize_attn_mask_pos_ids(
+        attention_mask, position_ids = initialize_attn_mask_pos_ids(
             input_ids, 
             self.tokenizer.pad_token_id, 
-            input_attention_mask, 
-            input_position_ids, 
+            attention_mask, 
+            position_ids, 
         )
 
         if next_token_ids is not None:
