@@ -223,8 +223,8 @@ def main(
         force_pad_embeddings=force_pad_embeddings, 
         params_dtype=jnp.float32, 
     )
-    base_train_state.config.gradient_checkpointing = gradient_checkpointing
-    base_train_state.config.gradient_checkpointing_policy = gradient_checkpointing_policy
+    base_model.config.gradient_checkpointing = gradient_checkpointing
+    base_model.config.gradient_checkpointing_policy = gradient_checkpointing_policy
     with jax.default_device(jax.devices('cpu')[0]):
         target_base_params = jax.tree_util.tree_map(
             lambda x: multihost_device_get(x, mesh=mesh).copy(), 

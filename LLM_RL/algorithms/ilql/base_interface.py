@@ -621,11 +621,11 @@ class ILQLInferenceFull(struct.PyTreeNode):
         dones: jax.Array, # [batch]
         next_token_ids: Optional[jax.Array], # [batch, n_time]
         next_dones: Optional[jax.Array], # [batch]
-        prng_key: Optional[jax.random.PRNGKeyArray], 
         attention_mask: Optional[jax.Array]=None, 
         position_ids: Optional[jax.Array]=None, 
         next_tokens_attention_mask: Optional[jax.Array]=None, 
         next_tokens_position_ids: Optional[jax.Array]=None, 
+        prng_key: Optional[jax.random.PRNGKeyArray]=None, 
         train: bool=True, 
     ) -> Tuple[jax.Array, PyTree]:
         input_attention_mask, input_position_ids = initialize_attn_mask_pos_ids(
