@@ -1082,7 +1082,6 @@ class GPTJInferenceFull(ILQLInferenceFull):
                 # just run vf on last token to save some flops
                 last_next_token_idxs = (next_tokens_attention_mask.shape[1]-1)-jnp.argmax(jnp.flip(next_tokens_attention_mask, axis=1).astype(jnp.int32), axis=1)
                 final_next_token_h = next_token_base_model_output.hidden_states[-1][jnp.arange(0, input_ids.shape[0], dtype=jnp.int32), last_next_token_idxs, :]
-
                 new_key = None
                 if prng_key is not None:
                     prng_key, new_key = jax.random.split(prng_key)
@@ -1091,14 +1090,14 @@ class GPTJInferenceFull(ILQLInferenceFull):
                     final_next_token_h, 
                     train=train, 
                     rngs={'dropout': new_key} if prng_key is not None else None, 
-                ).sqeueze(1)
+                ).squeeze(1)
                 v_final = next_token_v_head_output * (1 - next_dones.astype(jnp.float32))
             else:
                 last_action_idxs = (should_take_action.shape[1]-1)-jnp.argmax(jnp.flip(should_take_action, axis=1).astype(jnp.int32), axis=1)+1
                 last_token_idxs = (attention_mask.shape[1]-1)-jnp.argmax(jnp.flip(attention_mask, axis=1).astype(jnp.int32), axis=1)
                 final_state_idxs = ((1 - dones) * last_action_idxs + dones * last_token_idxs).astype(jnp.int32)
-                final_v = v_full[jnp.arange(0, should_take_action.shape[0], dtype=jnp.int32), final_state_idxs]
-                final_v = final_v * (1 - dones)
+                v_final = v_full[jnp.arange(0, should_take_action.shape[0], dtype=jnp.int32), final_state_idxs]
+                v_final = v_final * (1 - dones)
 
             loss, info = loss_fn(
                 q1, 
