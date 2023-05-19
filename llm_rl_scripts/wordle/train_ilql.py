@@ -426,7 +426,7 @@ def main(
         logs = pull_logs(interaction_summary_results)
         log(logs, use_wandb and is_main_process)
 
-        return loss_results['loss'], {'interaction': logs, 'loss': loss_results}
+        return loss_results['losses']['total_loss'], {'interaction': logs, 'loss': loss_results}
     
     train_prng = jax.random.PRNGKey(1)
     save_dtype = jnp.bfloat16 if save_bf16 else jnp.float32
