@@ -41,7 +41,8 @@ class GPTJValueRLInference(ValueRLInference):
         mesh = base_model.config.mesh
         assert mesh is not None
         assert mesh == q_head_model.config.mesh
-        assert mesh == v_head_model.config.mesh
+        if v_head_model is not None:
+            assert mesh == v_head_model.config.mesh
         assert (pi_beta_model is None and pi_beta_params is None) or (pi_beta_model is not None and pi_beta_params is not None)
         
         pi_beta_params_partition_spec = None

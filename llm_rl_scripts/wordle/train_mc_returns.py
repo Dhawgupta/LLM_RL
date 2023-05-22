@@ -19,8 +19,8 @@ from jaxtyping import PyTree
 import re
 from LLM_RL.environment import TextEnv, TextHistory, Text, interact_environment, text_env_eval, TextTrajectory, TextTrajectoryChain, TokenTrajectoryChain, text_history_to_str
 from LLM_RL.algorithms.value_rl_base.gptj.interface import GPTJValuePolicy, GPTJValueRLInference
-from LLM_RL.heads.mlp_head import load_train_state_from_config as load_head_train_state_from_config
-from LLM_RL.heads.mlp_head import MLPHeadConfig
+from LLM_RL.heads.linear_head import load_train_state_from_config as load_head_train_state_from_config
+from LLM_RL.heads.linear_head import LinearHeadConfig
 from JaxSeq.shard_model import shard_params_from_params, copy_sharded_pytree
 from flax.training.train_state import TrainState
 from LLM_RL.utils import get_tensor_stats_np
@@ -28,7 +28,7 @@ from functools import partial
 import numpy as np
 from JaxSeq.logs import label_logs, log, pull_logs
 import json
-from LLM_RL.heads.mlp_head import load_train_state as load_head_train_state, ModelLoadMode as HeadModelLoadMode
+from LLM_RL.heads.linear_head import load_train_state as load_head_train_state, ModelLoadMode as HeadModelLoadMode
 from LLM_RL.algorithms.mc_returns.train import train_loop, eval_loss
 from LLM_RL.algorithms.mc_returns.data import MCData, MCDataset, MCIterableDataset
 from LLM_RL.algorithms.mc_returns.gptj.interface import GPTJMCTrain, GPTJMCInference
@@ -225,13 +225,13 @@ def main(
 
     q_prng_key = jax.random.PRNGKey(4)
     q_head_train_state, q_head = load_head_train_state_from_config(
-        model_config=MLPHeadConfig(
+        model_config=LinearHeadConfig(
             input_dim=base_model.config.n_embd, 
             hidden_dim=base_model.config.n_embd, 
             output_dim=base_model.config.vocab_size, 
             use_bias=True, 
-            layer2_initializer_range=0.0, 
-            layer2_bias_init=0.0, 
+            initializer_range=0.0, 
+            bias_init=-4.1, 
         ), 
         model_dtype=jnp.bfloat16 if bf16_activations else jnp.float32, 
         optim_getter=value_head_optim_getter, 
