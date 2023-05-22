@@ -20,6 +20,7 @@ from JaxSeq.utils import block_sequences, BlockingStrategy, Padding, Truncation
 from transformers.generation import FlaxBeamSearchOutput, FlaxGreedySearchOutput, FlaxSampleOutput
 from JaxSeq.models.base_interface import GenerationFromStrOutput, Inference
 from LLM_RL.environment import BatchedTextPolicy
+from LLM_RL.algorithms.value_rl_base.base_interface import ValueRLForwardOutput, ValueRLInference
 
 # loss function
 
@@ -236,232 +237,14 @@ class ILQLTrain(struct.PyTreeNode):
             q2_target_head_params=q2_target_head_params, 
         ), loss, logs
 
-class ILQLSimpleForwardOutput(NamedTuple):
-    base_raw_output: FlaxCausalLMOutput
-    q1: jax.Array
-    q2: jax.Array
-    v: jax.Array
+class ILQLForwardOutput(NamedTuple):
+    output: ValueRLForwardOutput
+    target_output: ValueRLForwardOutput
 
-class ILQLInferenceSimple(struct.PyTreeNode):
-    pi_beta_params: Optional[PyTree]
-    base_params: PyTree
-    q1_head_params: PyTree
-    q2_head_params: PyTree
-    v_head_params: PyTree
-    pi_beta_model: Optional[FlaxPreTrainedModel] = struct.field(pytree_node=False)
-    base_model: FlaxPreTrainedModel = struct.field(pytree_node=False)
-    q_head_model: nn.Module = struct.field(pytree_node=False)
-    v_head_model: nn.Module = struct.field(pytree_node=False)
-    tokenizer: PreTrainedTokenizerBase = struct.field(pytree_node=False)
-    _generate: Callable = struct.field(pytree_node=False)
-    _forward: Callable = struct.field(pytree_node=False)
-
-    # def _generate(
-    #     pi_beta_params: PyTree, 
-    #     base_params: PyTree, 
-    #     q1_head_params: PyTree, 
-    #     q2_head_params: PyTree, 
-    #     v_head_params: PyTree, 
-    #     input_ids: jax.Array, 
-    #     attention_mask: jax.Array, 
-    #     position_ids: jax.Array, 
-    #     prng_key: Optional[jax.random.PRNGKeyArray]=None, 
-    #     generation_config: Optional[FrozenDict]=None, 
-    #     trace: bool=True, 
-    # ) -> Union[FlaxSampleOutput, FlaxGreedySearchOutput, FlaxBeamSearchOutput]
-    
-    # def _forward(
-    #     base_params: PyTree, 
-    #     q1_head_params: PyTree, 
-    #     q2_head_params: PyTree, 
-    #     v_head_params: PyTree, 
-    #     input_ids: jax.Array, 
-    #     attention_mask: jax.Array, 
-    #     position_ids: jax.Array, 
-    #     prng_key: Optional[jax.random.PRNGKeyArray]=None, 
-    #     output_attentions: Optional[bool]=None, 
-    #     train: bool=False, 
-    # ) -> ILQLSimpleForwardOutput:
-    #     raise NotImplementedError
-
-    def generate(
-        self, 
-        input_ids: jax.Array, 
-        prng_key: Optional[jax.random.PRNGKeyArray], 
-        generation_config: Optional[GenerationConfig]=None, 
-        attention_mask: Optional[jax.Array]=None, 
-        position_ids: Optional[jax.Array]=None, 
-        trace: bool=True, 
-    ) -> Union[FlaxSampleOutput, FlaxGreedySearchOutput, FlaxBeamSearchOutput]:
-        if self.pi_beta_params is None:
-            raise NotImplementedError
-        
-        attention_mask, position_ids = initialize_attn_mask_pos_ids(
-            input_ids, 
-            self.tokenizer.pad_token_id, 
-            attention_mask, 
-            position_ids, 
-        )
-
-        return self._generate(
-            self.pi_beta_params, 
-            self.base_params, 
-            self.q1_head_params, 
-            self.q2_head_params, 
-            self.v_head_params, 
-            input_ids, 
-            attention_mask, 
-            position_ids, 
-            prng_key, 
-            freeze(generation_config.to_dict()) if generation_config is not None else None, 
-            trace, 
-        )
-    
-    def generate_from_str(
-        self, 
-        input_strs: List[str], 
-        prng_key: Optional[jax.random.PRNGKeyArray], 
-        blocking_strategy: BlockingStrategy=BlockingStrategy(padding=Padding.LEFT, truncation=Truncation.LEFT, max_length=None), 
-        generation_config: Optional[GenerationConfig]=None, 
-        input_token_process: Optional[Callable[[List[int]], List[int]]]=None, 
-        target_token_process: Optional[Callable[[List[int]], List[int]]]=None, 
-        trace: bool=True, 
-    ) -> GenerationFromStrOutput:
-        if input_token_process is None:
-            input_token_process = lambda x: x
-        if target_token_process is None:
-            target_token_process = lambda x: x
-        # tokenize
-        tokens = [input_token_process(self.tokenizer.encode(item)) for item in input_strs]
-        tokens = block_sequences(tokens, self.tokenizer.pad_token_id, np.int32, blocking_strategy)
-        # generate
-        outputs = self.generate(
-            jnp.asarray(tokens), 
-            prng_key, 
-            generation_config=generation_config, 
-            trace=trace
-        )
-        # process outputs
-        output_sequences = list(map(target_token_process, outputs.sequences.tolist()))
-        output_scores = None
-        if isinstance(outputs, FlaxBeamSearchOutput):
-            output_scores = np.asarray(outputs.scores)
-        # decode tokens
-        output_strs = self.tokenizer.batch_decode(output_sequences, skip_special_tokens=True)
-        return GenerationFromStrOutput(output_strs, output_scores)
-    
-    def forward(
-        self, 
-        input_ids: jax.Array, 
-        attention_mask: Optional[jax.Array]=None, 
-        position_ids: Optional[jax.Array]=None, 
-        output_attentions: Optional[bool]=None, 
-        train: bool=False, 
-        prng_key: Optional[jax.random.PRNGKeyArray]=None, 
-    ) -> ILQLSimpleForwardOutput:
-        attention_mask, position_ids = initialize_attn_mask_pos_ids(
-            input_ids, 
-            self.tokenizer.pad_token_id, 
-            attention_mask, 
-            position_ids, 
-        )
-
-        return self._forward(
-            self.base_params, 
-            self.q1_head_params, 
-            self.q2_head_params, 
-            self.v_head_params, 
-            input_ids, 
-            attention_mask, 
-            position_ids, 
-            prng_key, 
-            output_attentions, 
-            train, 
-        )
-    
-    def forward_from_str(
-        self, 
-        input_strs: List[str], 
-        blocking_strategy: BlockingStrategy=BlockingStrategy(padding=Padding.RIGHT, truncation=Truncation.RIGHT, max_length=None), 
-        output_attentions: Optional[bool]=None, 
-        output_hidden_states: Optional[bool]=None, 
-        train: bool=False, 
-        prng_key: Optional[jax.random.PRNGKeyArray]=None, 
-        input_token_process: Optional[Callable[[List[int]], List[int]]]=None, 
-    ) -> FlaxCausalLMOutput:
-        if input_token_process is None:
-            input_token_process = lambda x: x
-        # tokenize
-        tokens = [input_token_process(self.tokenizer.encode(item)) for item in input_strs]
-        tokens = block_sequences(tokens, self.tokenizer.pad_token_id, np.int32, blocking_strategy)
-        # forward
-        outputs = self.forward(
-            jnp.asarray(tokens), 
-            output_attentions=output_attentions, 
-            output_hidden_states=output_hidden_states, 
-            train=train, 
-            prng_key=prng_key, 
-        )
-        return outputs
-
-class ILQLFullForwardOutput(NamedTuple):
-    base_raw_output: FlaxCausalLMOutput
-    target_base_raw_output: Optional[FlaxCausalLMOutput]
-    q1: jax.Array
-    q2: jax.Array
-    v: jax.Array
-    q1_target: jax.Array
-    q2_target: jax.Array
-
-class ILQLInferenceFull(struct.PyTreeNode):
-    pi_beta_params: Optional[PyTree]
-    base_params: PyTree
-    target_base_params: Optional[PyTree]
-    q1_head_params: PyTree
-    q2_head_params: PyTree
-    v_head_params: PyTree
-    q1_target_head_params: PyTree
-    q2_target_head_params: PyTree
-    pi_beta_model: Optional[FlaxPreTrainedModel] = struct.field(pytree_node=False)
-    base_model: FlaxPreTrainedModel = struct.field(pytree_node=False)
-    q_head_model: nn.Module = struct.field(pytree_node=False)
-    v_head_model: nn.Module = struct.field(pytree_node=False)
-    tokenizer: PreTrainedTokenizerBase = struct.field(pytree_node=False)
-    _generate: Callable = struct.field(pytree_node=False)
-    _forward: Callable = struct.field(pytree_node=False)
+class ILQLInference(struct.PyTreeNode):
+    value_inference: ValueRLInference
+    target_value_inference: ValueRLInference
     _eval_loss: Callable = struct.field(pytree_node=False)
-
-    # def _generate(
-    #     pi_beta_params: PyTree, 
-    #     base_params: PyTree, 
-    #     target_base_params: Optional[PyTree], 
-    #     v_head_params: PyTree, 
-    #     q1_target_head_params: PyTree, 
-    #     q2_target_head_params: PyTree, 
-    #     input_ids: jax.Array, 
-    #     attention_mask: jax.Array, 
-    #     position_ids: jax.Array, 
-    #     prng_key: Optional[jax.random.PRNGKeyArray]=None, 
-    #     generation_config: Optional[FrozenDict]=None, 
-    #     trace: bool=True, 
-    # )
-    
-    # def _forward(
-    #     base_params: PyTree, 
-    #     target_base_params: Optional[PyTree], 
-    #     q1_head_params: PyTree, 
-    #     q2_head_params: PyTree, 
-    #     v_head_params: PyTree, 
-    #     q1_target_head_params: PyTree, 
-    #     q2_target_head_params: PyTree, 
-    #     input_ids: jax.Array, 
-    #     attention_mask: jax.Array, 
-    #     position_ids: jax.Array, 
-    #     prng_key: Optional[jax.random.PRNGKeyArray]=None, 
-    #     output_attentions: Optional[bool]=None, 
-    #     train: bool=False, 
-    # ) -> ILQLForwardOutput:
-    #     raise NotImplementedError
 
     # def _eval_loss(
     #     base_params: PyTree, 
@@ -497,30 +280,16 @@ class ILQLInferenceFull(struct.PyTreeNode):
         attention_mask: Optional[jax.Array]=None, 
         position_ids: Optional[jax.Array]=None, 
         trace: bool=True, 
+        target_generate: bool=True, 
     ) -> Union[FlaxSampleOutput, FlaxGreedySearchOutput, FlaxBeamSearchOutput]:
-        if self.pi_beta_params is None:
-            raise NotImplementedError
-        
-        attention_mask, position_ids = initialize_attn_mask_pos_ids(
+        obj = self.target_value_inference if target_generate else self.value_inference
+        return obj.generate(
             input_ids, 
-            self.tokenizer.pad_token_id, 
-            attention_mask, 
-            position_ids, 
-        )
-
-        return self._generate(
-            self.pi_beta_params, 
-            self.base_params, 
-            self.target_base_params, 
-            self.v_head_params, 
-            self.q1_target_head_params, 
-            self.q2_target_head_params, 
-            input_ids, 
-            attention_mask, 
-            position_ids, 
             prng_key, 
-            freeze(generation_config.to_dict()) if generation_config is not None else None, 
-            trace, 
+            generation_config=generation_config, 
+            attention_mask=attention_mask, 
+            position_ids=position_ids, 
+            trace=trace, 
         )
     
     def generate_from_str(
@@ -532,29 +301,18 @@ class ILQLInferenceFull(struct.PyTreeNode):
         input_token_process: Optional[Callable[[List[int]], List[int]]]=None, 
         target_token_process: Optional[Callable[[List[int]], List[int]]]=None, 
         trace: bool=True, 
+        target_generate: bool=True, 
     ) -> GenerationFromStrOutput:
-        if input_token_process is None:
-            input_token_process = lambda x: x
-        if target_token_process is None:
-            target_token_process = lambda x: x
-        # tokenize
-        tokens = [input_token_process(self.tokenizer.encode(item)) for item in input_strs]
-        tokens = block_sequences(tokens, self.tokenizer.pad_token_id, np.int32, blocking_strategy)
-        # generate
-        outputs = self.generate(
-            jnp.asarray(tokens), 
+        obj = self.target_value_inference if target_generate else self.value_inference
+        return obj.generate_from_str(
+            input_strs, 
             prng_key, 
+            blocking_strategy=blocking_strategy, 
             generation_config=generation_config, 
-            trace=trace
+            input_token_process=input_token_process, 
+            target_token_process=target_token_process, 
+            trace=trace, 
         )
-        # process outputs
-        output_sequences = list(map(target_token_process, outputs.sequences.tolist()))
-        output_scores = None
-        if isinstance(outputs, FlaxBeamSearchOutput):
-            output_scores = np.asarray(outputs.scores)
-        # decode tokens
-        output_strs = self.tokenizer.batch_decode(output_sequences, skip_special_tokens=True)
-        return GenerationFromStrOutput(output_strs, output_scores)
     
     def forward(
         self, 
@@ -564,28 +322,24 @@ class ILQLInferenceFull(struct.PyTreeNode):
         output_attentions: Optional[bool]=None, 
         train: bool=False, 
         prng_key: Optional[jax.random.PRNGKeyArray]=None, 
-    ) -> ILQLFullForwardOutput:
-        attention_mask, position_ids = initialize_attn_mask_pos_ids(
-            input_ids, 
-            self.tokenizer.pad_token_id, 
-            attention_mask, 
-            position_ids, 
-        )
-
-        return self._forward(
-            self.base_params, 
-            self.target_base_params, 
-            self.q1_head_params, 
-            self.q2_head_params, 
-            self.v_head_params, 
-            self.q1_target_head_params, 
-            self.q2_target_head_params, 
-            input_ids, 
-            attention_mask, 
-            position_ids, 
-            prng_key, 
-            output_attentions, 
-            train, 
+    ) -> ILQLForwardOutput:
+        return ILQLForwardOutput(
+            output=self.value_inference.forward(
+                input_ids, 
+                attention_mask=attention_mask, 
+                position_ids=position_ids, 
+                output_attentions=output_attentions, 
+                train=train, 
+                prng_key=prng_key, 
+            ), 
+            target_output=self.target_value_inference.forward(
+                input_ids, 
+                attention_mask=attention_mask, 
+                position_ids=position_ids, 
+                output_attentions=output_attentions, 
+                train=train, 
+                prng_key=prng_key, 
+            ), 
         )
     
     def forward_from_str(
@@ -597,21 +351,27 @@ class ILQLInferenceFull(struct.PyTreeNode):
         train: bool=False, 
         prng_key: Optional[jax.random.PRNGKeyArray]=None, 
         input_token_process: Optional[Callable[[List[int]], List[int]]]=None, 
-    ) -> FlaxCausalLMOutput:
-        if input_token_process is None:
-            input_token_process = lambda x: x
-        # tokenize
-        tokens = [input_token_process(self.tokenizer.encode(item)) for item in input_strs]
-        tokens = block_sequences(tokens, self.tokenizer.pad_token_id, np.int32, blocking_strategy)
-        # forward
-        outputs = self.forward(
-            jnp.asarray(tokens), 
-            output_attentions=output_attentions, 
-            output_hidden_states=output_hidden_states, 
-            train=train, 
-            prng_key=prng_key, 
+    ) -> ILQLForwardOutput:
+        return ILQLForwardOutput(
+            output=self.value_inference.forward_from_str(
+                input_strs, 
+                blocking_strategy=blocking_strategy, 
+                output_attentions=output_attentions, 
+                output_hidden_states=output_hidden_states, 
+                train=train, 
+                prng_key=prng_key, 
+                input_token_process=input_token_process, 
+            ), 
+            target_output=self.target_value_inference.forward_from_str(
+                input_strs, 
+                blocking_strategy=blocking_strategy, 
+                output_attentions=output_attentions, 
+                output_hidden_states=output_hidden_states, 
+                train=train, 
+                prng_key=prng_key, 
+                input_token_process=input_token_process, 
+            ), 
         )
-        return outputs
     
     def eval_loss(
         self, 
@@ -628,9 +388,16 @@ class ILQLInferenceFull(struct.PyTreeNode):
         prng_key: Optional[jax.random.PRNGKeyArray]=None, 
         train: bool=False, 
     ) -> Tuple[jax.Array, PyTree]:
+        if self.value_inference.v_head_params is None or self.value_inference.v_head_model is None:
+            raise NotImplementedError
+        if self.value_inference.q2_head_params is None:
+            raise NotImplementedError
+        if self.target_value_inference.q2_head_params is None:
+            raise NotImplementedError
+
         attention_mask, position_ids = initialize_attn_mask_pos_ids(
             input_ids, 
-            self.tokenizer.pad_token_id, 
+            self.value_inference.tokenizer.pad_token_id, 
             attention_mask, 
             position_ids, 
         )
@@ -638,7 +405,7 @@ class ILQLInferenceFull(struct.PyTreeNode):
         if next_token_ids is not None:
             next_tokens_attention_mask, next_tokens_position_ids = initialize_attn_mask_pos_ids(
                 next_token_ids, 
-                self.tokenizer.pad_token_id, 
+                self.value_inference.tokenizer.pad_token_id, 
                 next_tokens_attention_mask, 
                 next_tokens_position_ids, 
             )
@@ -647,13 +414,13 @@ class ILQLInferenceFull(struct.PyTreeNode):
             assert next_tokens_position_ids is None
         
         loss, logs = self._eval_loss(
-            self.base_params, 
-            self.target_base_params, 
-            self.q1_head_params, 
-            self.q2_head_params, 
-            self.v_head_params, 
-            self.q1_target_head_params, 
-            self.q2_target_head_params, 
+            self.value_inference.base_params, 
+            self.target_value_inference.base_params, 
+            self.value_inference.q1_head_params, 
+            self.value_inference.q2_head_params, 
+            self.value_inference.v_head_params, 
+            self.target_value_inference.q1_head_params, 
+            self.target_value_inference.q2_head_params, 
             input_ids, 
             attention_mask, 
             position_ids, 
@@ -671,8 +438,4 @@ class ILQLInferenceFull(struct.PyTreeNode):
         return loss, logs
     
     def eval_loss_from_str(self, *args, **kwargs):
-        raise NotImplementedError
-
-class ILQLPolicy(BatchedTextPolicy):
-    def set_params(self, policy_params: PyTree) -> None:
         raise NotImplementedError

@@ -469,7 +469,7 @@ class GPTJPPOInference(PPOInference):
             _eval_loss=_eval_loss, 
         )
 
-class GPTJPolicy(PPOPolicy):
+class GPTJPPOPolicy(PPOPolicy):
     def __init__(
         self, 
         inference: GPTJInference, 

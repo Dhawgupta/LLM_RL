@@ -478,7 +478,7 @@ class GPT2PPOInference(PPOInference):
             _eval_loss=_eval_loss, 
         )
 
-class GPT2Policy(PPOPolicy):
+class GPT2PPOPolicy(PPOPolicy):
     def __init__(
         self, 
         inference: GPT2Inference, 
