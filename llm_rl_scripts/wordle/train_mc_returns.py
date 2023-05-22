@@ -5,7 +5,7 @@ from transformers import AutoTokenizer
 from JaxSeq.utils import jsonl_stream, convert_path, load_mesh, get_dtype, setup_experiment_save
 import jax
 import jax.numpy as jnp
-from JaxSeq.utils import BlockingStrategy, Padding, Truncation, uuid_name, jsonl_load, get_weight_decay_mask, create_path, get_enabled_save_path
+from JaxSeq.utils import BlockingStrategy, Padding, Truncation, uuid_name, jsonl_load, get_weight_decay_mask, create_path, get_enabled_save_path, MapIterable, jsonl_stream, FileOpenIterable
 import os
 import optax
 from JaxSeq.models.gptj.interface import GPTJTrain, GPTJInference
@@ -119,13 +119,7 @@ def main(
     print(f"Mesh: {mesh}")
     print(f"Is main process: {is_main_process}")
 
-    with open(convert_path(train_data_path), 'r') as f:
-        raw_train_data = jsonl_load(f)
-    with open(convert_path(eval_data_path), 'r') as f:
-        raw_eval_data = jsonl_load(f)
-    
-    mc_train_data = []
-    for item in raw_train_data:
+    def map_data_item(item):
         text_trajectory_chain = TextTrajectoryChain(
             text_trajectory=TextTrajectory(
                 text_history=[Text(text, bool(is_action)) for text, is_action in item['sequence']], 
@@ -135,39 +129,26 @@ def main(
             next=None, 
         )
         token_trajectory_chain = TokenTrajectoryChain.from_text_trajectory_chain(text_trajectory_chain, tokenizer)
-        mc_train_data.append(MCData.from_token_trajectory_chain(token_trajectory_chain, gamma=gamma))
-    
-    train_dataset = MCDataset.from_mc_data_list(
-        mc_train_data, 
+        return MCData.from_token_trajectory_chain(token_trajectory_chain, gamma=gamma)
+
+    train_dataset = MCIterableDataset.from_mc_data_iterable(
+        MapIterable(map_data_item, FileOpenIterable(convert_path(train_data_path), 'r', pipe=jsonl_stream)), 
         tokenizer, 
         BlockingStrategy(
             padding=Padding.RIGHT, 
             truncation=Truncation.RIGHT, 
             max_length=max_length, 
-        )
+        ), 
     )
-    
-    mc_eval_data = []
-    for item in raw_eval_data:
-        text_trajectory_chain = TextTrajectoryChain(
-            text_trajectory=TextTrajectory(
-                text_history=[Text(text, bool(is_action)) for text, is_action in item['sequence']], 
-                reward=[0.0]+item['reward'], 
-                done=item['done'], 
-            ), 
-            next=None, 
-        )
-        token_trajectory_chain = TokenTrajectoryChain.from_text_trajectory_chain(text_trajectory_chain, tokenizer)
-        mc_eval_data.append(MCData.from_token_trajectory_chain(token_trajectory_chain, gamma=gamma))
-    
-    eval_dataset = MCDataset.from_mc_data_list(
-        mc_eval_data, 
+
+    eval_dataset = MCIterableDataset.from_mc_data_iterable(
+        MapIterable(map_data_item, FileOpenIterable(convert_path(eval_data_path), 'r', pipe=jsonl_stream)), 
         tokenizer, 
         BlockingStrategy(
             padding=Padding.RIGHT, 
             truncation=Truncation.RIGHT, 
             max_length=max_length, 
-        )
+        ), 
     )
 
     def policy_optim_getter(params: PyTree):

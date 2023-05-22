@@ -19,7 +19,7 @@ conda activate LLM_RL
 export GCLOUD_PROJECT="civic-boulder-204700"
 export GCLOUD_TOKEN_PATH="${HOME}/.config/gcloud/civic-boulder-204700-V2.json"
 
-CUDA_VISIBLE_DEVICES=5 python -m llm_rl_scripts.wordle.train_mc_returns \
+python -m llm_rl_scripts.wordle.train_mc_returns \
     PARAMS \
     gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gptj_config_test2.2023-05-12-17-01-25.893.a16043b2f0e611ed890c5d20da9db470/step_237568/ \
     gcs://charlie-bucket2/LLM_RL_data/wordle/bc_data1.jsonl \
@@ -48,7 +48,37 @@ CUDA_VISIBLE_DEVICES=5 python -m llm_rl_scripts.wordle.train_mc_returns \
     --bf16-activations \
     --no-save-best \
     --beta 16.0 \
-    --gamma 0.99
+    --gamma 1.0
+
+# python -m llm_rl_scripts.wordle.train_ilql \
+#     PARAMS \
+#     gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gptj_config_test2.2023-05-12-17-01-25.893.a16043b2f0e611ed890c5d20da9db470/step_237568/ \
+#     gcs://charlie-bucket2/LLM_RL_data/wordle/bc_data1.jsonl \
+#     gcs://charlie-bucket2/LLM_RL_data/wordle/bc_data_eval1.jsonl \
+#     llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+#     --exp-name None \
+#     --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_ilql_test1/ \
+#     --use-wandb \
+#     --wandb-project "LLM_RL_wordle_ilql" \
+#     --train-bsize 8 \
+#     --grad-accum-steps 4 \
+#     --policy-bsize 64 \
+#     --policy-n-rollouts 512 \
+#     --eval-loss-bsize 8 \
+#     --eval-loss-batches 64 \
+#     --epochs 1000 \
+#     --log-every 64 \
+#     --eval-every-steps 1024 \
+#     --weight-decay 1e-6 \
+#     --lr 3e-5 \
+#     \
+#     --data-mesh-shape -1 \
+#     --fsdp-mesh-shape 1 \
+#     --model-mesh-shape 1 \
+#     \
+#     --bf16-activations \
+#     --no-save-best \
+#     --beta 16.0
 
 # 4/13/2023
 

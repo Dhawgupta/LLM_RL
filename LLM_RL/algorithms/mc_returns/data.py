@@ -67,7 +67,7 @@ class MCData(NamedTuple):
         should_take_action = token_trajectory_chain.token_trajectory.is_action[1:]
         returns = np.zeros_like(should_take_action, dtype=np.float32)
         returns[should_take_action] = rtgs_sequence[:should_take_action.sum()]
-        # all_rewards = np.concatenate([token_trajectory.reward[1:] for token_trajectory in token_trajectory_chain.to_list()], axis=0)
+        
         return cls(
             input_ids=token_trajectory_chain.token_trajectory.tokens, 
             should_take_action=should_take_action, 
@@ -104,12 +104,12 @@ class MCDataset(Dataset):
     @classmethod
     def from_mc_data_list(
         cls, 
-        ilql_data_list: List[MCData], 
+        mc_data_list: List[MCData], 
         tokenizer: PreTrainedTokenizerBase, 
         blocking_strategy: BlockingStrategy, 
     ) -> MCDataset:
         
-        data = MCData.block(ilql_data_list, blocking_strategy, tokenizer)
+        data = MCData.block(mc_data_list, blocking_strategy, tokenizer)
 
         return cls(**data)
 
@@ -118,7 +118,7 @@ class _MCIteratorDataset:
         self.mc_data = mc_data
 
     def __next__(self):
-        item = next(self.ilql_data)
+        item = next(self.mc_data)
         return {
             'input_ids': jnp.asarray(item['input_ids'], dtype=jnp.int32), 
             'should_take_action': jnp.asarray(item['should_take_action'], dtype=jnp.bool_), 
