@@ -49,6 +49,7 @@ def mc_loss(
     logs = dict(
         losses=dict(
             total_loss=loss, 
+            q_loss=q_loss, 
             q_cql_loss=q_cql_loss, 
         ), 
         q=get_tensor_stats(qsa_selected, mask=a_mask, n=n), 

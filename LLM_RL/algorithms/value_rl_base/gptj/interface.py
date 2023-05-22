@@ -72,10 +72,10 @@ class GPTJValueRLInference(ValueRLInference):
                 pjit, 
                 static_argnames=('generation_config', 'trace'), 
                 in_shardings=(
-                    jax.tree_util.tree_map(lambda ps: NamedSharding(mesh, ps), pi_beta_params_partition_spec), 
+                    NamedSharding(mesh, PS()) if pi_beta_params_partition_spec is None else jax.tree_util.tree_map(lambda ps: NamedSharding(mesh, ps), pi_beta_params_partition_spec), 
                     jax.tree_util.tree_map(lambda ps: NamedSharding(mesh, ps), base_params_partition_spec), 
                     jax.tree_util.tree_map(lambda ps: NamedSharding(mesh, ps), q1_head_params_partition_spec), 
-                    jax.tree_util.tree_map(lambda ps: NamedSharding(mesh, ps), q2_head_params_partition_spec), 
+                    NamedSharding(mesh, PS()) if q2_head_params_partition_spec is None else jax.tree_util.tree_map(lambda ps: NamedSharding(mesh, ps), q2_head_params_partition_spec), 
                     NamedSharding(mesh, PS()), 
                     NamedSharding(mesh, PS()), 
                     NamedSharding(mesh, PS()), 
@@ -84,7 +84,7 @@ class GPTJValueRLInference(ValueRLInference):
                 out_shardings=NamedSharding(mesh, PS()), 
             )
             def _generate(
-                pi_beta_params: PyTree, 
+                pi_beta_params: Optional[PyTree], 
                 base_params: PyTree, 
                 q1_head_params: PyTree, 
                 q2_head_params: Optional[PyTree], 
@@ -114,7 +114,7 @@ class GPTJValueRLInference(ValueRLInference):
                 return output
         else:
             def _generate(
-                pi_beta_params: PyTree, 
+                pi_beta_params: Optional[PyTree], 
                 base_params: PyTree, 
                 q1_head_params: PyTree, 
                 q2_head_params: Optional[PyTree], 
@@ -133,8 +133,8 @@ class GPTJValueRLInference(ValueRLInference):
             in_shardings=(
                 jax.tree_util.tree_map(lambda ps: NamedSharding(mesh, ps), base_params_partition_spec), 
                 jax.tree_util.tree_map(lambda ps: NamedSharding(mesh, ps), q1_head_params_partition_spec), 
-                jax.tree_util.tree_map(lambda ps: NamedSharding(mesh, ps), q2_head_params_partition_spec), 
-                jax.tree_util.tree_map(lambda ps: NamedSharding(mesh, ps), v_head_params_partition_spec), 
+                NamedSharding(mesh, PS()) if q2_head_params_partition_spec is None else jax.tree_util.tree_map(lambda ps: NamedSharding(mesh, ps), q2_head_params_partition_spec), 
+                NamedSharding(mesh, PS()) if v_head_params_partition_spec is None else jax.tree_util.tree_map(lambda ps: NamedSharding(mesh, ps), v_head_params_partition_spec), 
                 NamedSharding(mesh, PS()), 
                 NamedSharding(mesh, PS()), 
                 NamedSharding(mesh, PS()), 
