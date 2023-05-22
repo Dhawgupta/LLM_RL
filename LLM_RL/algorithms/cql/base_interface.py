@@ -257,8 +257,6 @@ class CQLInference(ILQLInference):
         prng_key: Optional[jax.random.PRNGKeyArray]=None, 
         train: bool=False, 
     ) -> Tuple[jax.Array, PyTree]:
-        if self.value_inference.v_head_params is None or self.value_inference.v_head_model is None:
-            raise NotImplementedError
         if self.value_inference.q2_head_params is None:
             raise NotImplementedError
         if self.target_value_inference.q2_head_params is None:

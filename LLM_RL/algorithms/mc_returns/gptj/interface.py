@@ -145,7 +145,7 @@ class GPTJMCTrain(MCTrain):
 
         return cls(
             base_train_state=base_train_state, 
-            q1_head_train_state=q_head_train_state, 
+            q_head_train_state=q_head_train_state, 
             base_model=base_model, 
             q_head_model=q_head_model, 
             tokenizer=tokenizer, 
