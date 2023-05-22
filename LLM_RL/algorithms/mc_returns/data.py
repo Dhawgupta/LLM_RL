@@ -57,7 +57,7 @@ class MCData(NamedTuple):
             should_take_action = token_trajectory.is_action[1:]
             rewards = token_trajectory.reward[1:]
             filtered_rewards = rewards[should_take_action]
-            filtered_rewards_chain.append(filtered_rewards_chain)
+            filtered_rewards_chain.append(filtered_rewards)
             should_take_action_chain.append(should_take_action)
         filtered_rewards_chain = np.concatenate(filtered_rewards_chain, axis=0)
         should_take_action_chain = np.concatenate(should_take_action_chain, axis=0)
