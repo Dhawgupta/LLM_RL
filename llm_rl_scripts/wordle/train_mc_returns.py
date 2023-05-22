@@ -201,7 +201,7 @@ def main(
     base_model.config.gradient_checkpointing_policy = gradient_checkpointing_policy
     pi_beta_params = copy_sharded_pytree(
         model=base_model, 
-        py_tree=base_train_state.params, 
+        pytree=base_train_state.params, 
     )
 
     q_prng_key = jax.random.PRNGKey(4)
