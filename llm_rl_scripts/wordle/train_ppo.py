@@ -19,7 +19,7 @@ from transformers.generation import GenerationConfig
 from jaxtyping import PyTree
 import re
 from LLM_RL.environment import TextEnv, TextHistory, Text, interact_environment, text_env_eval, TextTrajectory, TextTrajectoryChain, TokenTrajectory, text_history_to_str
-from LLM_RL.algorithms.ppo.gptj.interface import GPTJPolicy, GPTJPPOInference, GPTJPPOTrain
+from LLM_RL.algorithms.ppo.gptj.interface import GPTJPPOPolicy, GPTJPPOInference, GPTJPPOTrain
 from LLM_RL.heads.linear_head import load_train_state_from_config as load_head_train_state_from_config
 from LLM_RL.heads.linear_head import LinearHeadConfig
 from JaxSeq.shard_model import shard_params_from_params
@@ -216,7 +216,7 @@ def main(
     env = ReformatWordleEnvironment(WordleEnvironment(vocab, require_words_in_vocab=True, bad_word_reward=-10.0))
     
     policy_prng = jax.random.PRNGKey(0)
-    policy = GPTJPolicy(
+    policy = GPTJPPOPolicy(
         inference=policy_inference, 
         prng_key=policy_prng, 
         generation_config=GenerationConfig(
@@ -303,7 +303,7 @@ def main(
         kl_controller = FixedKLController(kl_coef=init_kl_coef)
 
     data_round = 0
-    def ppo_dataset_loader(ppo_inference: GPTJPPOInference, policy: GPTJPolicy) -> PPODataset:
+    def ppo_dataset_loader(ppo_inference: GPTJPPOInference, policy: GPTJPPOPolicy) -> PPODataset:
         nonlocal data_round
         raw_results, summary_results = text_env_eval(
             env=env, 

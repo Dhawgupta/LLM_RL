@@ -12,27 +12,26 @@ from JaxSeq.models.gptj.interface import GPTJTrain, GPTJInference
 from JaxSeq.models.gptj.load import load_train_state, ModelLoadMode
 import pickle as pkl
 from JaxSeq.data import Seq2SeqDataset
-from LLM_RL.algorithms.ilql.base_interface import ilql_loss, ILQLTrain
+from LLM_RL.algorithms.mc_returns.base_interface import mc_loss, MCTrain
 from JaxSeq.generation_eval import generate_language, compute_metrics
 from transformers.generation import GenerationConfig
 from jaxtyping import PyTree
 import re
 from LLM_RL.environment import TextEnv, TextHistory, Text, interact_environment, text_env_eval, TextTrajectory, TextTrajectoryChain, TokenTrajectoryChain, text_history_to_str
-from LLM_RL.algorithms.ilql.gptj.interface import GPTJILQLInference, GPTJILQLTrain
 from LLM_RL.algorithms.value_rl_base.gptj.interface import GPTJValuePolicy, GPTJValueRLInference
 from LLM_RL.heads.mlp_head import load_train_state_from_config as load_head_train_state_from_config
 from LLM_RL.heads.mlp_head import MLPHeadConfig
-from JaxSeq.shard_model import shard_params_from_params
+from JaxSeq.shard_model import shard_params_from_params, copy_sharded_pytree
 from flax.training.train_state import TrainState
-from LLM_RL.algorithms.ilql.data import ILQLDataset, ILQLIterableDataset
 from LLM_RL.utils import get_tensor_stats_np
 from functools import partial
 import numpy as np
 from JaxSeq.logs import label_logs, log, pull_logs
 import json
 from LLM_RL.heads.mlp_head import load_train_state as load_head_train_state, ModelLoadMode as HeadModelLoadMode
-from LLM_RL.algorithms.ilql.train import train_loop, eval_loss
-from LLM_RL.algorithms.ilql.data import ILQLData, ILQLDataset, ILQLIterableDataset
+from LLM_RL.algorithms.mc_returns.train import train_loop, eval_loss
+from LLM_RL.algorithms.mc_returns.data import MCData, MCDataset, MCIterableDataset
+from LLM_RL.algorithms.mc_returns.gptj.interface import GPTJMCTrain, GPTJMCInference
 from JaxSeq.utils import multihost_device_get
 from llm_rl_scripts.wordle.env import ReformatWordleEnvironment, WordleEnvironment
 from llm_rl_scripts.wordle.game import Vocabulary
@@ -105,15 +104,8 @@ def main(
     should_restore_loop_state: bool=False, 
 
     beta: float=16.0, 
-
-    detach_q1: bool=False, 
-    detach_q2: bool=False, 
-    detach_v: bool=False, 
-    polyak_alpha: float=0.005, 
-    hard_update_every: Optional[int]=None, 
-
+    detach_q: bool=False, 
     gamma: float=0.99, 
-    tau: float=0.7, 
     cql_weight: float=0.01, 
 ):
     input_args = locals()
@@ -132,7 +124,7 @@ def main(
     with open(convert_path(eval_data_path), 'r') as f:
         raw_eval_data = jsonl_load(f)
     
-    ilql_train_data = []
+    mc_train_data = []
     for item in raw_train_data:
         text_trajectory_chain = TextTrajectoryChain(
             text_trajectory=TextTrajectory(
@@ -143,10 +135,10 @@ def main(
             next=None, 
         )
         token_trajectory_chain = TokenTrajectoryChain.from_text_trajectory_chain(text_trajectory_chain, tokenizer)
-        ilql_train_data.append(ILQLData.from_token_trajectory_chain(token_trajectory_chain))
+        mc_train_data.append(MCData.from_token_trajectory_chain(token_trajectory_chain, gamma=gamma))
     
-    train_dataset = ILQLDataset.from_ilql_data_list(
-        ilql_train_data, 
+    train_dataset = MCDataset.from_mc_data_list(
+        mc_train_data, 
         tokenizer, 
         BlockingStrategy(
             padding=Padding.RIGHT, 
@@ -155,7 +147,7 @@ def main(
         )
     )
     
-    ilql_eval_data = []
+    mc_eval_data = []
     for item in raw_eval_data:
         text_trajectory_chain = TextTrajectoryChain(
             text_trajectory=TextTrajectory(
@@ -166,10 +158,10 @@ def main(
             next=None, 
         )
         token_trajectory_chain = TokenTrajectoryChain.from_text_trajectory_chain(text_trajectory_chain, tokenizer)
-        ilql_eval_data.append(ILQLData.from_token_trajectory_chain(token_trajectory_chain))
+        mc_eval_data.append(MCData.from_token_trajectory_chain(token_trajectory_chain, gamma=gamma))
     
-    eval_dataset = ILQLDataset.from_ilql_data_list(
-        ilql_eval_data, 
+    eval_dataset = MCDataset.from_mc_data_list(
+        mc_eval_data, 
         tokenizer, 
         BlockingStrategy(
             padding=Padding.RIGHT, 
@@ -226,27 +218,13 @@ def main(
     )
     base_model.config.gradient_checkpointing = gradient_checkpointing
     base_model.config.gradient_checkpointing_policy = gradient_checkpointing_policy
-    with jax.default_device(jax.devices('cpu')[0]):
-        target_base_params = jax.tree_util.tree_map(
-            lambda x: multihost_device_get(x, mesh=mesh).copy(), 
-            base_train_state.params, 
-        )
-    target_base_params = shard_params_from_params(
+    pi_beta_params = copy_sharded_pytree(
         model=base_model, 
-        params=target_base_params, 
-    )
-    with jax.default_device(jax.devices('cpu')[0]):
-        pi_beta_params = jax.tree_util.tree_map(
-            lambda x: multihost_device_get(x, mesh=mesh).copy(), 
-            base_train_state.params, 
-        )
-    pi_beta_params = shard_params_from_params(
-        model=base_model, 
-        params=pi_beta_params, 
+        py_tree=base_train_state.params, 
     )
 
-    q1_prng_key = jax.random.PRNGKey(4)
-    q1_head_train_state, q_head = load_head_train_state_from_config(
+    q_prng_key = jax.random.PRNGKey(4)
+    q_head_train_state, q_head = load_head_train_state_from_config(
         model_config=MLPHeadConfig(
             input_dim=base_model.config.n_embd, 
             hidden_dim=base_model.config.n_embd, 
@@ -258,61 +236,7 @@ def main(
         model_dtype=jnp.bfloat16 if bf16_activations else jnp.float32, 
         optim_getter=value_head_optim_getter, 
         mesh=mesh, 
-        prng_key=q1_prng_key, 
-        pad_to_output_dim=None, 
-        params_dtype=jnp.float32, 
-    )
-    with jax.default_device(jax.devices('cpu')[0]):
-        q1_target_head_params = jax.tree_util.tree_map(
-            lambda x: multihost_device_get(x, mesh=mesh).copy(), 
-            q1_head_train_state.params, 
-        )
-    q1_target_head_params = shard_params_from_params(
-        model=q_head, 
-        params=q1_target_head_params, 
-    )
-
-    q2_prng_key = jax.random.PRNGKey(5)
-    q2_head_train_state, _ = load_head_train_state_from_config(
-        model_config=MLPHeadConfig(
-            input_dim=base_model.config.n_embd, 
-            hidden_dim=base_model.config.n_embd, 
-            output_dim=base_model.config.vocab_size, 
-            use_bias=True, 
-            layer2_initializer_range=0.0, 
-            layer2_bias_init=0.0, 
-        ), 
-        model_dtype=jnp.bfloat16 if bf16_activations else jnp.float32, 
-        optim_getter=value_head_optim_getter, 
-        mesh=mesh, 
-        prng_key=q2_prng_key, 
-        pad_to_output_dim=None, 
-        params_dtype=jnp.float32, 
-    )
-    with jax.default_device(jax.devices('cpu')[0]):
-        q2_target_head_params = jax.tree_util.tree_map(
-            lambda x: multihost_device_get(x, mesh=mesh).copy(), 
-            q2_head_train_state.params, 
-        )
-    q2_target_head_params = shard_params_from_params(
-        model=q_head, 
-        params=q2_target_head_params, 
-    )
-
-    v_prng_key = jax.random.PRNGKey(6)
-    v_head_train_state, v_head = load_head_train_state_from_config(
-        model_config=MLPHeadConfig(
-            input_dim=base_model.config.n_embd, 
-            hidden_dim=base_model.config.n_embd, 
-            output_dim=1, 
-            use_bias=True, 
-            layer2_initializer_range=0.0, 
-            layer2_bias_init=0.0, 
-        ), 
-        model_dtype=jnp.bfloat16 if bf16_activations else jnp.float32, 
-        optim_getter=value_head_optim_getter, 
-        mesh=mesh, 
-        prng_key=v_prng_key, 
+        prng_key=q_prng_key, 
         pad_to_output_dim=None, 
         params_dtype=jnp.float32, 
     )
@@ -324,58 +248,29 @@ def main(
         with open(os.path.join(convert_path(model_load_path), 'loop_state.pkl'), 'rb') as f:
             loop_state = pkl.load(f)
     
-    loss_fn = partial(ilql_loss, gamma=gamma, tau=tau, cql_weight=cql_weight)
+    loss_fn = partial(mc_loss, cql_weight=cql_weight)
 
-    train = GPTJILQLTrain.load_train(
+    train = GPTJMCTrain.load_train(
         base_train_state=base_train_state, 
-        target_base_params=target_base_params, 
-        q1_head_train_state=q1_head_train_state, 
-        q2_head_train_state=q2_head_train_state, 
-        v_head_train_state=v_head_train_state, 
-        q1_target_head_params=q1_target_head_params, 
-        q2_target_head_params=q2_target_head_params, 
+        q_head_train_state=q_head_train_state, 
         base_model=base_model, 
         q_head_model=q_head, 
-        v_head_model=v_head, 
         tokenizer=tokenizer, 
         loss_fn=loss_fn, 
-        detach_q1=detach_q1, 
-        detach_q2=detach_q2, 
-        detach_v=detach_v, 
-        polyak_alpha=polyak_alpha, 
-        hard_update_every=hard_update_every, 
+        detach_q=detach_q, 
     )
 
-    inference = GPTJILQLInference.load_inference(
-        value_inference=GPTJValueRLInference.load_inference(
-            pi_beta_params=pi_beta_params, 
-            base_params=base_train_state.params, 
-            q1_head_params=q1_head_train_state.params, 
-            q2_head_params=q2_head_train_state.params, 
-            v_head_params=v_head_train_state.params, 
-            pi_beta_model=base_model, 
-            base_model=base_model, 
-            q_head_model=q_head, 
-            v_head_model=v_head, 
-            tokenizer=tokenizer, 
-            beta=beta, 
-            dp_shard_logits=True, 
-        ), 
-        target_value_inference=GPTJValueRLInference.load_inference(
-            pi_beta_params=pi_beta_params, 
-            base_params=target_base_params, 
-            q1_head_params=q1_target_head_params, 
-            q2_head_params=q2_target_head_params, 
-            v_head_params=None, 
-            pi_beta_model=base_model, 
-            base_model=base_model, 
-            q_head_model=q_head, 
-            v_head_model=None, 
-            tokenizer=tokenizer, 
-            beta=beta, 
-            dp_shard_logits=True, 
-        ), 
+    inference = GPTJMCInference.load_inference(
+        pi_beta_params=pi_beta_params, 
+        base_params=base_train_state.params, 
+        q_head_params=q_head_train_state.params, 
+        pi_beta_model=base_model, 
+        base_model=base_model, 
+        q_head_model=q_head, 
+        tokenizer=tokenizer, 
         loss_fn=loss_fn, 
+        beta=beta, 
+        dp_shard_logits=True, 
     )
     
     vocab = Vocabulary.from_file(
@@ -393,7 +288,7 @@ def main(
     )
 
     policy_prng = jax.random.PRNGKey(0)
-    def evaluate(inference: GPTJILQLInference):
+    def evaluate(inference: GPTJMCInference):
         nonlocal policy_prng
         policy_prng, new_key = jax.random.split(policy_prng)
         policy = GPTJValuePolicy(

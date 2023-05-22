@@ -255,7 +255,7 @@ class GPTJValueRLInference(ValueRLInference):
             _forward=_forward,
         )
 
-class GPTJILQLPolicy(ValueRLPolicy):
+class GPTJValuePolicy(ValueRLPolicy):
     def __init__(
         self, 
         inference: ValueRLInference, 
