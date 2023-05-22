@@ -208,7 +208,6 @@ def main(
     q_head_train_state, q_head = load_head_train_state_from_config(
         model_config=LinearHeadConfig(
             input_dim=base_model.config.n_embd, 
-            hidden_dim=base_model.config.n_embd, 
             output_dim=base_model.config.vocab_size, 
             use_bias=True, 
             initializer_range=0.0, 
