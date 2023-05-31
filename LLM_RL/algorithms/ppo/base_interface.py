@@ -674,6 +674,43 @@ class PPOInference(struct.PyTreeNode):
             use_advantage_whitening=use_advantage_whitening, 
         )
     
+    def get_ppo_data_from_text_trajectory_chain_iterble(
+        self, 
+        text_trajectory_chains: List[TokenTrajectoryChain], 
+        bsize: int, 
+        max_length: Optional[int]=None, 
+        train: bool=False, 
+        prng_key: Optional[jax.random.PRNGKeyArray]=None, 
+        token_process: Optional[Callable[[List[int]], List[int]]]=None, 
+        verbose: bool=True, 
+        *, 
+        gamma: Union[float, jax.Array], 
+        lam: Union[float, jax.Array], 
+        kl_weight: Union[float, jax.Array], 
+        use_advantage_whitening: bool=True, 
+    ) -> Tuple[List[PPOData], np.ndarray]:
+        
+        token_trajectory_chains = [
+            TokenTrajectoryChain.from_text_trajectory_chain(
+                item, 
+                self.tokenizer, 
+                token_process=token_process, 
+            ) for item in text_trajectory_chains
+        ]
+
+        return self.get_ppo_data_from_token_trajectory_chain(
+            token_trajectory_chains=token_trajectory_chains, 
+            bsize=bsize, 
+            max_length=max_length, 
+            train=train, 
+            prng_key=prng_key, 
+            verbose=verbose, 
+            gamma=gamma, 
+            lam=lam, 
+            kl_weight=kl_weight, 
+            use_advantage_whitening=use_advantage_whitening, 
+        )
+    
     def eval_loss(
         self, 
         input_ids: jax.Array, 
