@@ -205,6 +205,32 @@ def interact_environment(
             )
     return transitions_batch
 
+def text_env_eval_chess_positions(
+    positions: List[str],
+    policy: Union[TextPolicy, BatchedTextPolicy], 
+    n_rollouts: int, 
+    initial_text_history: Optional[TextHistory]=None, # only allow one initial_text_history here
+    seed_generator: Optional[Iterator[int]]=None, 
+    env_options: Optional[Dict]=None, # only allow one env_options here
+    interaction_callback: Optional[Callable[[List[Tuple[TextHistory, TextHistory, TextHistory, float, bool]]], None]]=None, 
+    bsize: int=1, 
+    verbose: bool=True,
+):
+    for position in positions:
+        env = FenChessHistoryEnvSingleTurn(initial_history=initial_text_history, from_position=position)
+        interactions, results_summary = text_env_eval(
+            env,
+            policy,
+            n_rollouts,
+            initial_text_history=initial_text_history,
+            seed_generator=seed_generator,
+            env_options=env_options,
+            interaction_callback=interaction_callback,
+            bsize=bsize,
+            verbose=verbose,
+        )
+    
+
 def text_env_eval(
     env: Union[TextEnv, BatchedTextEnv], 
     policy: Union[TextPolicy, BatchedTextPolicy], 

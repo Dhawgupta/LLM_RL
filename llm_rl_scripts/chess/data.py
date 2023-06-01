@@ -2,9 +2,13 @@ import numpy as np
 from google.cloud import storage
 import os
 import io
-from LLM_RL.environment import Text, TextTrajectory, TextTrajectoryChain
+from LLM_RL.environment import Text, TextTrajectory, TextTrajectoryChain, TokenTrajectoryChain
 import json
 from llm_rl_scripts.chess.env import preprocess_move, preprocess_state
+import random
+import chess
+from IPython import embed
+from tqdm.auto import tqdm
 
 # cwd = os.getcwd()
 # key_path = os.path.join(cwd, "rail-tpus.json")
@@ -13,7 +17,7 @@ from llm_rl_scripts.chess.env import preprocess_move, preprocess_state
 client = storage.Client.from_service_account_json("/nfs/nfs1/users/isadoracw/rail-tpus.json")
 
 bucket_name = "rail-tpus-isadora"
-blob_name = "queen_rook_unopposed/queen_rook_unopposed/rl_train.jsonl"
+blob_name = "queen_rook_unopposed/queen_rook_unopposed/train_unshuffled.jsonl"
 
 def get_data_from_bucket(bucket_name, blob_name):
     bucket = client.get_bucket(bucket_name)
@@ -23,22 +27,106 @@ def get_data_from_bucket(bucket_name, blob_name):
     blob_data = blob_data.split("\n")
     return blob_data
 
-def chess_text_transition_from_json(data, scaling=1):
-    # lst = list(f)
-    for obj in data:
-        # print(obj)
-        if obj == "":
-            continue
-        result =  json.loads(obj)
-        from_state = Text(preprocess_state(result["from_state"]), False)
-        action = Text(preprocess_move(result["action"]), True) 
-        to_state = Text(preprocess_state(result["to_state"]), False)
-        next_action = Text(preprocess_move(result["next_action"]), True)
+# def chess_text_trajectory_chain_from_json(data, scaling=1):
+#     # lst = list(f)
+#     for obj in data:
+#         # print(obj)
+#         if obj == "":
+#             continue
+#         result =  json.loads(obj)
+#         from_state = Text(preprocess_state(result["from_state"]), False)
+#         action = Text(preprocess_move(result["action"]), True) 
+#         to_state = Text(preprocess_state(result["to_state"]), False)
+#         next_action = Text(preprocess_move(result["next_action"]), True)
 
-        curr_trajectory = TextTrajectory([from_state, action], [0, scaling*result["reward"]], result["done"])
-        next_trajectory = TextTrajectory([to_state, next_action], [0, scaling*result["next_reward"]], result["next_done"])
-        yield TextTrajectoryChain(curr_trajectory, [next_trajectory])
+#         curr_trajectory = TextTrajectory([from_state, action], [0, scaling*result["reward"]], result["done"])
+#         next_trajectory = TextTrajectoryChain(TextTrajectory([to_state, next_action], [0, scaling*result["next_reward"]], result["next_done"]))
+#         yield TextTrajectoryChain(curr_trajectory, next_trajectory)
 
-data = get_data_from_bucket(bucket_name, blob_name)
-data = list(chess_text_transition_from_json(data))
-print(data[:10])
+def chess_text_trajectory_chain_from_json(data, scaling=1):
+    idx = 0
+    text_trajectory_chains = []
+    while idx < len(data):
+        trajectories = []
+        done = False
+        while not done and idx < len(data):
+            if data[idx] == "":
+                # print("here!")
+                # embed()
+                idx += 1
+                break
+            result = json.loads(data[idx])
+            state = Text(preprocess_state(result["from_state"]), False)
+            action = Text(preprocess_move(result["action"]), True)
+            trajectory = TextTrajectory([state, action], [0, scaling*result["reward"]], result["done"])
+            trajectories.append(trajectory)
+            done = result["done"]
+            idx += 1
+            
+            if len(trajectories) == 200:
+                break
+        
+        if not trajectories:
+            break
+        chain = None
+        for text_trajectory in trajectories[::-1]:
+            chain = TextTrajectoryChain(
+                text_trajectory=text_trajectory, 
+                next=chain, 
+            )
+        # print(chain)
+        text_trajectory_chains.append(chain)
+    random.shuffle(text_trajectory_chains)
+    return text_trajectory_chains
+            # if not result["done"]:
+            # data.append(result) 
+
+def chess_trajectory_chain_from_npy(actions, states, done, reward):
+    text_trajectory_chains = []
+    init_state = chess.Board().fen()
+    for game_idx in tqdm(range(len(actions))):
+        trajectories = []
+        move_idx = 0
+        while not done[game_idx][move_idx]:
+            if move_idx == 0:
+                state = Text(preprocess_state(init_state), False)
+            else:
+                state = Text(preprocess_state(states[game_idx][move_idx - 1]), False)
+            action = Text(preprocess_move(actions[game_idx][move_idx]), True)
+            trajectory = TextTrajectory([state, action], [0, reward[game_idx][move_idx]], done[game_idx][move_idx])
+            trajectories.append(trajectory)
+            move_idx += 1
+    chain = None
+    for text_trajectory in trajectories[::-1]:
+        chain = TextTrajectoryChain(
+            text_trajectory=text_trajectory, 
+            next=chain, 
+        )
+        text_trajectory_chains.append(chain)
+        
+    random.shuffle(text_trajectory_chains)
+    return text_trajectory_chains
+
+def get_dataset(dataset_path):
+    actions = np.load(os.path.join(dataset_path, "actions.npy"), mmap_mode="r")
+    states = np.load(os.path.join(dataset_path, "states.npy"), mmap_mode="r")
+    done = np.load(os.path.join(dataset_path, "done.npy"), mmap_mode="r")
+    reward = np.load(os.path.join(dataset_path, "reward.npy"), mmap_mode="r")
+    return actions, states, done, reward
+
+dataset_path = os.path.join("/nfs/nfs1/users/isadoracw/ILQL5/src/environments/chess/complete_background_generated/")
+actions, states, done, reward = get_dataset(dataset_path)
+text_trajectory_chains = chess_trajectory_chain_from_npy(actions[:100], states, done, reward)
+print(text_trajectory_chains[:10])
+# data = get_data_from_bucket(bucket_name, blob_name)
+# chains = chess_text_trajectory_chain_from_json(data)
+# # chains[:10]
+# print(chains[:10])
+# # token_trajectory_chains = [
+#             TokenTrajectoryChain.from_text_trajectory_chain(
+#                 item, 
+#                 self.tokenizer, 
+#                 token_process=token_process, 
+#             ) for item in data
+#         ]
+# print(data[:10])

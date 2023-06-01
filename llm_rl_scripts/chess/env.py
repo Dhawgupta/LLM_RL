@@ -5,6 +5,7 @@ import os
 import numpy as np
 from LLM_RL.environment import TextEnv, Text, TextHistory
 from typing import Optional, Dict
+import chess
 
 CHESS_ENGINE_PATH = os.environ.get("CHESS_ENGINE_PATH", convert_path("stockfish/stockfish-ubuntu-20.04-x86-64-avx2"))
 
@@ -16,6 +17,9 @@ def postprocess_move(move: str):
 
 def preprocess_state(state: str):
     return " ".join(state) + "\n"
+
+def preprocess_state_og(state: str):
+    return " ".join(state)
 
 def postprocess_state(state: str):
     return state.replace("  ", "__temp__").replace(" ", "").replace("__temp__", " ").strip()
@@ -181,3 +185,46 @@ class FenChessHistoryEnvSingleTurn(TextEnv):
     def copy(self):
         return FenChessHistoryEnvSingleTurn(self.initial_history, self.max_moves, self.from_position)
 
+class FenChessHistoryEnv(TextEnv):
+    def __init__(self, max_moves=400, from_position=None):
+        super().__init__()
+        self.chess_env = ChessEnv(fen=True, from_position=from_position)
+        self.from_position = from_position
+        self.max_moves = max_moves
+        self.from_position = from_position
+        # self.initial_history = initial_history
+
+    def reset(self, seed: Optional[int] = None, options: Optional[Dict] = None):
+        self.init_state, _ = self.chess_env.reset()
+        self.num_moves_made = 0
+        return (Text(preprocess_state_og(self.init_state), False),)
+
+    def step(self, text_history: TextHistory):
+        assert text_history[-1].is_action
+        action = text_history[-1].text
+        action = postprocess_move(action)
+        st, reward, done, opp_mv = self.chess_env.step(action) 
+        new_state = Text(preprocess_state_og(st), False)
+        self.num_moves_made += 1
+        if self.num_moves_made > self.max_moves:
+            done = 1
+        return (new_state,), reward, done
+    
+    def copy(self):
+        return FenChessHistoryEnv( self.max_moves, self.from_position)
+
+def large_piece_random_endgame(pieces:str):
+    """Provide a string like 'kQK' to represent a black king, white queen, 
+    and white king on the board"""
+    board = chess.Board()
+    while True:
+        board.clear()
+        possible_squares = np.arange(0, 64)
+        for piece in pieces:
+            p = chess.Piece.from_symbol(piece)
+            square = np.random.choice(possible_squares)
+            board.set_piece_at(square, p)
+            possible_squares = possible_squares[possible_squares != square]
+        fen = board.fen()
+        if board.is_valid() and not board.is_check():
+            return fen

@@ -29,9 +29,23 @@ import numpy as np
 from JaxSeq.logs import label_logs, log, pull_logs
 import json
 from JaxSeq.utils import multihost_device_get
-from llm_rl_scripts.chess.data import chess_text_trajectory_chain_from_json, get_data_from_bucket
-from google.cloud import storage
+from IPython import embed
 
+from llm_rl_scripts.chess.env import FenChessHistoryEnv, FenChessHistoryEnvSingleTurn
+
+class BitsTestEnv(TextEnv):
+    def __init__(self, n: int):
+        self.n = n
+
+    def step(self, text_history: TextHistory) -> Tuple[TextHistory, float, bool]:
+        try:
+            bits = list(map(int, text_history[-1].text.strip().split(' ')))
+        except:
+            bits = []
+        return text_history, float(sum(bits) > (self.n // 2))*10.0, True
+
+    def reset(self, seed: Optional[int]=None, options: Optional[Dict]=None) -> TextHistory:
+        return (Text(text='<|endoftext|>', is_action=False),)
 
 def main(
     model_load_mode: ModelLoadMode, 
@@ -46,18 +60,18 @@ def main(
     fsdp_mesh_shape: int=1, 
     model_mesh_shape: int=-1, 
 
-    use_wandb: bool=True, 
+    use_wandb: bool=False, 
     wandb_project: Optional[str]=None, 
 
     n_rounds: int=1, 
     epochs: int=1, 
     max_steps: Optional[int]=None, 
     
-    lr: float=1e-5, 
-    weight_decay: float=0.0, 
+    lr: float=1e-7, 
+    weight_decay: float=0.001, 
 
     train_bsize: int=32, 
-    grad_accum_steps: int=1, 
+    grad_accum_steps: int=4, 
     rollout_bsize: int=32, 
     n_rollouts: int=128, 
     ppo_data_bsize: int=32, 
@@ -185,7 +199,7 @@ def main(
         tokenizer=tokenizer, 
     )
 
-    # env = FenChessEnvSingleTurn()
+    env = FenChessHistoryEnv()
     
     policy_prng = jax.random.PRNGKey(0)
     policy = GPT2PPOPolicy(
@@ -265,36 +279,41 @@ def main(
         kl_controller = AdaptiveKLController(init_kl_coef=init_kl_coef, target=kl_target, horizon=kl_horizon)
     else:
         kl_controller = FixedKLController(kl_coef=init_kl_coef)
+
+    data_round = 0
+    def ppo_dataset_loader(ppo_inference: GPT2PPOInference, policy: GPT2PPOPolicy) -> PPODataset:
+        nonlocal data_round
+        raw_results, summary_results = text_env_eval(
+            env=env, 
+            policy=policy, 
+            n_rollouts=n_rollouts, 
+            bsize=rollout_bsize, 
+        )
+        summary_results = pull_logs(summary_results)
+
+        text_trajectory_chains = []
+        for raw_result in raw_results:
+            curr_chain = []
+            for transition in raw_result:
+                try: 
+                    text_trajectory = TextTrajectory(
+                        text_history=transition.post_action_history, 
+                        reward=[0.0, transition.reward], 
+                        done=transition.done, 
+                    )
+                    curr_chain.append(text_trajectory)
+                except:
+                    embed()
+            
+            chain = None
+            for text_trajectory in curr_chain[::-1]:
+                chain = TextTrajectoryChain(
+                    text_trajectory=text_trajectory, 
+                    next=chain, 
+                )
+            
+            text_trajectory_chains.append(chain)
         
-    def ppo_dataset_loader(ppo_inference:GPT2PPOInference, policy):
-        client = storage.Client.from_service_account_json("/nfs/nfs1/users/isadoracw/rail-tpus.json")
-
-        bucket_name = "rail-tpus-isadora"
-        blob_name = "queen_rook_unopposed/queen_rook_unopposed/train_unshuffled.jsonl"
-        data = get_data_from_bucket(bucket_name, blob_name)
-        text_trajectory_chains = chess_text_trajectory_chain_from_json(data)
-        # print(type(text_trajectory_chains))
-
-    # data_round = 0
-    # def ppo_dataset_loader(ppo_inference: GPT2PPOInference, policy: GPT2Policy) -> PPODataset:
-    #     nonlocal data_round
-    #     raw_results, summary_results = text_env_eval(
-    #         env=env, 
-    #         policy=policy, 
-    #         n_rollouts=n_rollouts, 
-    #         bsize=rollout_bsize, 
-    #     )
-    #     summary_results = pull_logs(summary_results)
-
-        # text_trajectory_chains = []
-        # for raw_result in raw_results:
-        #     text_trajectory = TextTrajectory(
-        #         text_history=raw_result[-1].post_transition_history, 
-        #         reward=(0.0, raw_result[-1].reward), 
-        #         done=raw_result[-1].done, 
-        #     )
-        #     text_trajectory_chains.append(TextTrajectoryChain(text_trajectory, None))
-        print(" congrats! you are done loading data!!")
         ppo_data, all_kls = ppo_inference.get_ppo_data_from_text_trajectory_chain(
             text_trajectory_chains, 
             bsize=ppo_data_bsize, 
@@ -313,17 +332,17 @@ def main(
             BlockingStrategy(Padding.RIGHT, Truncation.RIGHT, max_input_length+max_output_length), 
         )
 
-        # logs = dict(
-        #     policy=dict(
-        #         initial_policy_kl=get_tensor_stats_np(all_kls, np.ones(all_kls.shape), all_kls.size), 
-        #         sqrt_initial_policy_kl=np.sqrt(mean_kl), 
-        #         kl_ctrl_value=kl_controller.value, 
-        #     ), 
-        #     env_interaction=summary_results, 
-        # )
+        logs = dict(
+            policy=dict(
+                initial_policy_kl=get_tensor_stats_np(all_kls, np.ones(all_kls.shape), all_kls.size), 
+                sqrt_initial_policy_kl=np.sqrt(mean_kl), 
+                kl_ctrl_value=kl_controller.value, 
+            ), 
+            env_interaction=summary_results, 
+        )
 
-        # logs = pull_logs(label_logs(logs, 'data_collection', {'round': data_round}))
-        # log(logs, use_wandb and is_main_process)
+        logs = pull_logs(label_logs(logs, 'data_collection', {'round': data_round}))
+        log(logs, use_wandb and is_main_process)
 
         if save_dir is not None and save_ppo_dataset:
             print('saving ppo dataset ...')
@@ -360,10 +379,10 @@ def main(
 
         return ppo_dataset
 
-    outputs_path = convert_path(f"/nfs/nfs1/users/isadoracw/LLM_RL/outputs/chess/{exp_name}")
+    outputs_path = convert_path(f"outputs/chess/{exp_name}/")
     save_dir, exp_name = setup_experiment_save(
         exp_name=exp_name, 
-        outputs_path=outputs_path, 
+        outputs_path=convert_path(outputs_path), 
         input_args=input_args, 
         script__file__=__file__, 
         is_main_process=is_main_process, 
