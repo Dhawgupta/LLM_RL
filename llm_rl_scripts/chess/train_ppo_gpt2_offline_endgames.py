@@ -71,7 +71,7 @@ def main(
     max_output_length: int=512, 
 
     log_every: int=256, 
-    eval_every_steps: Optional[int]=None, 
+    eval_every_steps: Optional[int]=256, 
     eval_every_epochs: Optional[int]=None, 
     eval_every_rounds: Optional[int]=None, 
     eval_at_beginning: bool=False, 
@@ -265,14 +265,20 @@ def main(
         kl_controller = AdaptiveKLController(init_kl_coef=init_kl_coef, target=kl_target, horizon=kl_horizon)
     else:
         kl_controller = FixedKLController(kl_coef=init_kl_coef)
-        
-    def ppo_dataset_loader(ppo_inference:GPT2PPOInference, policy):
-        client = storage.Client.from_service_account_json("/nfs/nfs1/users/isadoracw/rail-tpus.json")
+    
+    client = storage.Client.from_service_account_json("/nfs/nfs1/users/isadoracw/rail-tpus.json")
 
-        bucket_name = "rail-tpus-isadora"
-        blob_name = "queen_rook_unopposed/queen_rook_unopposed/train_unshuffled.jsonl"
-        data = get_data_from_bucket(bucket_name, blob_name)
-        text_trajectory_chains = chess_text_trajectory_chain_from_json(data)
+    bucket_name = "rail-tpus-isadora"
+    blob_name = "queen_rook_unopposed/queen_rook_unopposed/train_unshuffled.jsonl"
+    data = get_data_from_bucket(bucket_name, blob_name)
+    text_trajectory_chains = chess_text_trajectory_chain_from_json(data)
+    n_rounds = len(text_trajectory_chains) // 256
+    data_round = 0
+    def ppo_dataset_loader(ppo_inference:GPT2PPOInference, policy, num_to_sample=256):
+        nonlocal data_round
+        # num_to_sample = len(text_trajectory_chains) // n_rounds
+        chains_for_round = text_trajectory_chains[data_round*num_to_sample:(data_round+1)*num_to_sample]
+        
         # print(type(text_trajectory_chains))
 
     # data_round = 0
@@ -296,7 +302,7 @@ def main(
         #     text_trajectory_chains.append(TextTrajectoryChain(text_trajectory, None))
         print(" congrats! you are done loading data!!")
         ppo_data, all_kls = ppo_inference.get_ppo_data_from_text_trajectory_chain(
-            text_trajectory_chains, 
+            chains_for_round, 
             bsize=ppo_data_bsize, 
             max_length=max_input_length+max_output_length, 
             gamma=gamma, 
@@ -360,7 +366,7 @@ def main(
 
         return ppo_dataset
 
-    outputs_path = convert_path(f"/nfs/nfs1/users/isadoracw/LLM_RL/outputs/chess/{exp_name}")
+    outputs_path = f"/nfs/nfs1/users/isadoracw/LLM_RL/outputs/chess/{exp_name}"
     save_dir, exp_name = setup_experiment_save(
         exp_name=exp_name, 
         outputs_path=outputs_path, 

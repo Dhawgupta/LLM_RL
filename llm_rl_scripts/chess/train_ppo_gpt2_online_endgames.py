@@ -85,21 +85,21 @@ def main(
     max_output_length: int=512, 
 
     log_every: int=256, 
-    eval_every_steps: Optional[int]=None, 
+    eval_every_steps: Optional[int]=256, 
     eval_every_epochs: Optional[int]=None, 
-    eval_every_rounds: Optional[int]=None, 
-    eval_at_beginning: bool=False, 
+    eval_every_rounds: Optional[int]=2, 
+    eval_at_beginning: bool=True, 
     eval_at_end: bool=True, 
 
     save_every_steps: Optional[int]=None, 
     save_every_epochs: Optional[int]=None, 
-    save_every_rounds: Optional[int]=None, 
+    save_every_rounds: Optional[int]=10, 
     save_at_beginning: bool=False, 
-    save_at_end: bool=False, 
+    save_at_end: bool=True, 
     save_best: bool=True, 
     max_checkpoints: Optional[int]=None, 
     save_train_state: bool=True, 
-    save_ppo_dataset: bool=True, 
+    save_ppo_dataset: bool=False, 
     save_bf16: bool=True, 
 
     policy_do_sample: bool=True, 
@@ -282,6 +282,7 @@ def main(
 
     data_round = 0
     def ppo_dataset_loader(ppo_inference: GPT2PPOInference, policy: GPT2PPOPolicy) -> PPODataset:
+        print("collecting data ...")
         nonlocal data_round
         # position = large_piece_random_endgame("kQK")
         positions = [large_piece_random_endgame("kQK"), large_piece_random_endgame("kRK"), \
@@ -350,6 +351,7 @@ def main(
 
         if save_dir is not None and save_ppo_dataset:
             print('saving ppo dataset ...')
+            print(save_dir)
             data_save_path = os.path.join(save_dir, 'data_saves', f'{data_round}')
             if is_main_process:
                 create_path(data_save_path)
@@ -386,7 +388,7 @@ def main(
     outputs_path = convert_path(f"outputs/chess/{exp_name}/")
     save_dir, exp_name = setup_experiment_save(
         exp_name=exp_name, 
-        outputs_path=convert_path(outputs_path), 
+        outputs_path=outputs_path, 
         input_args=input_args, 
         script__file__=__file__, 
         is_main_process=is_main_process, 

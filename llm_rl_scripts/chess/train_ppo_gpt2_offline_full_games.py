@@ -71,10 +71,10 @@ def main(
     max_output_length: int=512, 
 
     log_every: int=256, 
-    eval_every_steps: Optional[int]=None, 
+    eval_every_steps: Optional[int]=256, 
     eval_every_epochs: Optional[int]=None, 
     eval_every_rounds: Optional[int]=None, 
-    eval_at_beginning: bool=False, 
+    eval_at_beginning: bool=True, 
     eval_at_end: bool=True, 
 
     save_every_steps: Optional[int]=None, 
