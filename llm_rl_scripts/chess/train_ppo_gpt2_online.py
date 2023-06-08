@@ -85,13 +85,13 @@ def main(
     max_output_length: int=512, 
 
     log_every: int=256, 
-    eval_every_steps: Optional[int]=None, 
+    eval_every_steps: Optional[int]=256, 
     eval_every_epochs: Optional[int]=None, 
     eval_every_rounds: Optional[int]=None, 
-    eval_at_beginning: bool=False, 
+    eval_at_beginning: bool=True, 
     eval_at_end: bool=True, 
 
-    save_every_steps: Optional[int]=None, 
+    save_every_steps: Optional[int]=256, 
     save_every_epochs: Optional[int]=None, 
     save_every_rounds: Optional[int]=None, 
     save_at_beginning: bool=False, 
@@ -99,7 +99,7 @@ def main(
     save_best: bool=True, 
     max_checkpoints: Optional[int]=None, 
     save_train_state: bool=True, 
-    save_ppo_dataset: bool=True, 
+    save_ppo_dataset: bool=False, 
     save_bf16: bool=True, 
 
     policy_do_sample: bool=True, 
@@ -379,7 +379,7 @@ def main(
 
         return ppo_dataset
 
-    outputs_path = convert_path(f"outputs/chess/{exp_name}/")
+    outputs_path = f"/nfs/nfs1/users/isadoracw/LLM_RL/outputs/chess/{exp_name}/"
     save_dir, exp_name = setup_experiment_save(
         exp_name=exp_name, 
         outputs_path=convert_path(outputs_path), 

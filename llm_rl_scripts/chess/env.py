@@ -1,10 +1,11 @@
 import chess
 from stockfish import Stockfish
+from tqdm.auto import tqdm
 from LLM_RL.utils import convert_path
 import os
 import numpy as np
-from LLM_RL.environment import TextEnv, Text, TextHistory
-from typing import Optional, Dict
+from LLM_RL.environment import BatchedTextPolicy, TextEnv, Text, TextHistory, TextPolicy, interact_environment
+from typing import Callable, Dict, List, NamedTuple, Optional, Tuple, Union, Any, Iterator
 import chess
 
 CHESS_ENGINE_PATH = os.environ.get("CHESS_ENGINE_PATH", convert_path("stockfish/stockfish-ubuntu-20.04-x86-64-avx2"))
@@ -228,3 +229,87 @@ def large_piece_random_endgame(pieces:str):
         fen = board.fen()
         if board.is_valid() and not board.is_check():
             return fen
+
+def text_env_eval_chess_positions(
+    positions: List[str],
+    policy: Union[TextPolicy, BatchedTextPolicy], 
+    n_rollouts: int, 
+    initial_text_history: Optional[TextHistory]=None, # only allow one initial_text_history here
+    seed_generator: Optional[Iterator[int]]=None, 
+    env_options: Optional[Dict]=None, # only allow one env_options here
+    interaction_callback: Optional[Callable[[List[Tuple[TextHistory, TextHistory, TextHistory, float, bool]]], None]]=None, 
+    bsize: int=1, 
+    verbose: bool=True,
+):
+    interactions, rs, dones = [], [], []
+    victories, percent_illegals, episode_length = [], [], []
+    for position in positions:
+        env = FenChessHistoryEnv(from_position=position)
+        env_interactions = []
+        for _ in tqdm(range((n_rollouts+(bsize-1))//bsize), disable=not verbose):
+            actual_bsize = min(n_rollouts-len(env_interactions), bsize)
+            npad = bsize - actual_bsize
+            interaction_batch = interact_environment(
+                env, 
+                policy, 
+                initial_text_history=initial_text_history, 
+                env_seed=[None]*actual_bsize if seed_generator is None else [next(seed_generator) for _ in range(actual_bsize)], 
+                env_options=[env_options]*actual_bsize, 
+                bsize=actual_bsize,
+                npad=npad,
+            )
+            
+            for interaction in interaction_batch:
+                env_interactions.append(interaction)
+                
+                # collect some metrics about how the chess agent did
+                rewards = [x.reward for x in interaction]
+                victories.append(1 if 1 in rewards else 0)
+                num_illegal = sum([1 if x.reward == -1 and i < len(rewards) - 1 else 0 for i, x in enumerate(interaction)])
+                percent_illegal = num_illegal / len(rewards) * 100
+                percent_illegals.append(percent_illegal)
+                episode_length.append(len(rewards))
+                
+                # collect the rewards and dones
+                rs.append(sum(map(lambda x: x.reward, interaction)))
+                dones.append(interaction[-1].done)
+                if interaction_callback is not None:
+                    interaction_callback(interaction)
+        interactions.extend(env_interactions)
+    
+    rs = np.asarray(rs, dtype=np.float32)
+    dones = np.asarray(dones, dtype=np.float32)
+    results_summary = dict(
+        reward=dict(
+            mean=np.mean(rs), 
+            std=np.std(rs), 
+            min=np.min(rs), 
+            max=np.max(rs), 
+        ), 
+        done=dict(
+            mean=np.mean(dones), 
+            std=np.std(dones), 
+            min=np.min(dones), 
+            max=np.max(dones), 
+        ), 
+        victories=dict(
+            mean=np.mean(victories),
+            std=np.std(victories),
+            min=np.min(victories),
+            max=np.max(victories),
+        ),
+        percent_illegals=dict(
+            mean=np.mean(percent_illegals),
+            std=np.std(percent_illegals),
+            min=np.min(percent_illegals),
+            max=np.max(percent_illegals),
+        ),
+        episode_length=dict(
+            mean=np.mean(episode_length),
+            std=np.std(episode_length),
+            min=np.min(episode_length),
+            max=np.max(episode_length),
+        ),
+    )
+    
+    return interactions, results_summary

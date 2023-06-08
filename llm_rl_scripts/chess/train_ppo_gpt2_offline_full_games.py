@@ -29,9 +29,9 @@ import numpy as np
 from JaxSeq.logs import label_logs, log, pull_logs
 import json
 from JaxSeq.utils import multihost_device_get
-from llm_rl_scripts.chess.data import chess_text_trajectory_chain_from_json, get_data_from_bucket
+from llm_rl_scripts.chess.data import chess_text_trajectory_chain_from_json, chess_trajectory_chain_from_npy, get_data_from_bucket, get_dataset
 from google.cloud import storage
-
+from IPython import embed
 
 def main(
     model_load_mode: ModelLoadMode, 
@@ -49,7 +49,7 @@ def main(
     use_wandb: bool=True, 
     wandb_project: Optional[str]=None, 
 
-    n_rounds: int=1, 
+    n_rounds: int=100, 
     epochs: int=1, 
     max_steps: Optional[int]=None, 
     
@@ -77,15 +77,15 @@ def main(
     eval_at_beginning: bool=True, 
     eval_at_end: bool=True, 
 
-    save_every_steps: Optional[int]=None, 
+    save_every_steps: Optional[int]=1024, 
     save_every_epochs: Optional[int]=None, 
     save_every_rounds: Optional[int]=None, 
     save_at_beginning: bool=False, 
     save_at_end: bool=False, 
     save_best: bool=True, 
-    max_checkpoints: Optional[int]=None, 
+    max_checkpoints: Optional[int]=10, 
     save_train_state: bool=True, 
-    save_ppo_dataset: bool=True, 
+    save_ppo_dataset: bool=False, 
     save_bf16: bool=True, 
 
     policy_do_sample: bool=True, 
@@ -265,38 +265,19 @@ def main(
         kl_controller = AdaptiveKLController(init_kl_coef=init_kl_coef, target=kl_target, horizon=kl_horizon)
     else:
         kl_controller = FixedKLController(kl_coef=init_kl_coef)
-        
-    def ppo_dataset_loader(ppo_inference:GPT2PPOInference, policy):
-        client = storage.Client.from_service_account_json("/nfs/nfs1/users/isadoracw/rail-tpus.json")
-
-        bucket_name = "rail-tpus-isadora"
-        blob_name = "queen_rook_unopposed/queen_rook_unopposed/train_unshuffled.jsonl"
-        data = get_data_from_bucket(bucket_name, blob_name)
-        text_trajectory_chains = chess_text_trajectory_chain_from_json(data)
-        # print(type(text_trajectory_chains))
-
-    # data_round = 0
-    # def ppo_dataset_loader(ppo_inference: GPT2PPOInference, policy: GPT2Policy) -> PPODataset:
-    #     nonlocal data_round
-    #     raw_results, summary_results = text_env_eval(
-    #         env=env, 
-    #         policy=policy, 
-    #         n_rollouts=n_rollouts, 
-    #         bsize=rollout_bsize, 
-    #     )
-    #     summary_results = pull_logs(summary_results)
-
-        # text_trajectory_chains = []
-        # for raw_result in raw_results:
-        #     text_trajectory = TextTrajectory(
-        #         text_history=raw_result[-1].post_transition_history, 
-        #         reward=(0.0, raw_result[-1].reward), 
-        #         done=raw_result[-1].done, 
-        #     )
-        #     text_trajectory_chains.append(TextTrajectoryChain(text_trajectory, None))
-        print(" congrats! you are done loading data!!")
+    
+    dataset_path = os.path.join("/nfs/nfs1/users/isadoracw/ILQL5/src/environments/chess/complete_background_generated/")
+    actions, states, done, reward = get_dataset(dataset_path)
+    text_trajectory_chains = chess_trajectory_chain_from_npy(actions, states, done, reward)
+    print("there are this many chains: ", len(text_trajectory_chains))
+    data_round = 0
+    def ppo_dataset_loader(ppo_inference:GPT2PPOInference, policy, num_to_sample=256):
+        nonlocal data_round
+        # num_to_sample = len(text_trajectory_chains) // n_rounds
+        chains_for_round = text_trajectory_chains[data_round*num_to_sample:(data_round+1)*num_to_sample]
+        print(f"you have loaded {len(chains_for_round)} chains for this round")
         ppo_data, all_kls = ppo_inference.get_ppo_data_from_text_trajectory_chain(
-            text_trajectory_chains, 
+            chains_for_round, 
             bsize=ppo_data_bsize, 
             max_length=max_input_length+max_output_length, 
             gamma=gamma, 
@@ -312,7 +293,7 @@ def main(
             tokenizer, 
             BlockingStrategy(Padding.RIGHT, Truncation.RIGHT, max_input_length+max_output_length), 
         )
-
+        print("data converted to PPO dataset!")
         # logs = dict(
         #     policy=dict(
         #         initial_policy_kl=get_tensor_stats_np(all_kls, np.ones(all_kls.shape), all_kls.size), 
@@ -343,18 +324,18 @@ def main(
             ), 'wb') as f:
                 pkl.dump(text_trajectory_chains, f)
             # save raw_results
-            with open(get_enabled_save_path(
-                os.path.join(data_save_path, 'raw_results.pkl'), 
-                enabled=is_main_process, 
-            ), 'wb') as f:
-                pkl.dump(raw_results, f)
+            # with open(get_enabled_save_path(
+            #     os.path.join(data_save_path, 'raw_results.pkl'), 
+            #     enabled=is_main_process, 
+            # ), 'wb') as f:
+            #     pkl.dump(raw_results, f)
             # save summary_results
-            with open(get_enabled_save_path(
-                os.path.join(data_save_path, 'summary_results.json'), 
-                enabled=is_main_process, 
-            ), 'w') as f:
-                json.dump(summary_results, f)
-            print('done saving ppo dataset.')
+            # with open(get_enabled_save_path(
+            #     os.path.join(data_save_path, 'summary_results.json'), 
+            #     enabled=is_main_process, 
+            # ), 'w') as f:
+            #     json.dump(summary_results, f)
+            # print('done saving ppo dataset.')
         
         data_round += 1
 

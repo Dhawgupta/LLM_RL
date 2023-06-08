@@ -77,15 +77,15 @@ def main(
     eval_at_beginning: bool=False, 
     eval_at_end: bool=True, 
 
-    save_every_steps: Optional[int]=None, 
+    save_every_steps: Optional[int]=2500, 
     save_every_epochs: Optional[int]=None, 
     save_every_rounds: Optional[int]=None, 
     save_at_beginning: bool=False, 
     save_at_end: bool=False, 
     save_best: bool=True, 
-    max_checkpoints: Optional[int]=None, 
+    max_checkpoints: Optional[int]=20, 
     save_train_state: bool=True, 
-    save_ppo_dataset: bool=True, 
+    save_ppo_dataset: bool=False, 
     save_bf16: bool=True, 
 
     policy_do_sample: bool=True, 
@@ -300,7 +300,7 @@ def main(
         #         done=raw_result[-1].done, 
         #     )
         #     text_trajectory_chains.append(TextTrajectoryChain(text_trajectory, None))
-        print(" congrats! you are done loading data!!")
+        print("congrats! you are done loading data!!")
         ppo_data, all_kls = ppo_inference.get_ppo_data_from_text_trajectory_chain(
             chains_for_round, 
             bsize=ppo_data_bsize, 
@@ -349,18 +349,18 @@ def main(
             ), 'wb') as f:
                 pkl.dump(text_trajectory_chains, f)
             # save raw_results
-            with open(get_enabled_save_path(
-                os.path.join(data_save_path, 'raw_results.pkl'), 
-                enabled=is_main_process, 
-            ), 'wb') as f:
-                pkl.dump(raw_results, f)
+            # with open(get_enabled_save_path(
+            #     os.path.join(data_save_path, 'raw_results.pkl'), 
+            #     enabled=is_main_process, 
+            # ), 'wb') as f:
+            #     pkl.dump(raw_results, f)
             # save summary_results
-            with open(get_enabled_save_path(
-                os.path.join(data_save_path, 'summary_results.json'), 
-                enabled=is_main_process, 
-            ), 'w') as f:
-                json.dump(summary_results, f)
-            print('done saving ppo dataset.')
+            # with open(get_enabled_save_path(
+            #     os.path.join(data_save_path, 'summary_results.json'), 
+            #     enabled=is_main_process, 
+            # ), 'w') as f:
+            #     json.dump(summary_results, f)
+            # print('done saving ppo dataset.')
         
         data_round += 1
 

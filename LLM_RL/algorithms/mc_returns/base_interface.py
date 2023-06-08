@@ -12,6 +12,7 @@ import flax.linen as nn
 from jaxtyping import PyTree
 from JaxSeq.models.base_interface import initialize_attn_mask_pos_ids
 from LLM_RL.algorithms.ilql.base_interface import get_query_indicators, ValueRLInference
+from IPython import embed
 
 # loss function
 

@@ -30,8 +30,10 @@ from JaxSeq.logs import label_logs, log, pull_logs
 import json
 from JaxSeq.utils import multihost_device_get
 from IPython import embed
+from llm_rl_scripts.chess.data import get_random_positions_not_in_test
+from tqdm.auto import tqdm
 
-from llm_rl_scripts.chess.env import FenChessHistoryEnv, FenChessHistoryEnvSingleTurn, large_piece_random_endgame
+from llm_rl_scripts.chess.env import FenChessHistoryEnv, FenChessHistoryEnvSingleTurn, large_piece_random_endgame, text_env_eval_chess_positions
 
 class BitsTestEnv(TextEnv):
     def __init__(self, n: int):
@@ -75,6 +77,7 @@ def main(
     rollout_bsize: int=32, 
     n_rollouts: int=128, 
     ppo_data_bsize: int=32, 
+    num_pos_per_setup: int=4,
 
     gradient_checkpointing: bool=False, 
     gradient_checkpointing_policy: str='nothing_saveable', 
@@ -97,9 +100,9 @@ def main(
     save_at_beginning: bool=False, 
     save_at_end: bool=True, 
     save_best: bool=True, 
-    max_checkpoints: Optional[int]=None, 
+    max_checkpoints: Optional[int]=20, 
     save_train_state: bool=True, 
-    save_ppo_dataset: bool=False, 
+    save_ppo_dataset: bool=True, 
     save_bf16: bool=True, 
 
     policy_do_sample: bool=True, 
@@ -279,18 +282,36 @@ def main(
         kl_controller = AdaptiveKLController(init_kl_coef=init_kl_coef, target=kl_target, horizon=kl_horizon)
     else:
         kl_controller = FixedKLController(kl_coef=init_kl_coef)
+        
 
     data_round = 0
+    prev_positions = []
     def ppo_dataset_loader(ppo_inference: GPT2PPOInference, policy: GPT2PPOPolicy) -> PPODataset:
         print("collecting data ...")
         nonlocal data_round
-        position = large_piece_random_endgame("kQK")
-        env = FenChessHistoryEnv(from_position=position)
-        raw_results, summary_results = text_env_eval(
-            env=env, 
-            policy=policy, 
-            n_rollouts=n_rollouts, 
-            bsize=rollout_bsize, 
+        nonlocal prev_positions
+        # position = large_piece_random_endgame("kQK")
+        bucket_name = "rail-tpus-isadora"
+        blob_name = "queen_rook_unopposed/queen_rook_unopposed/test_positions.jsonl"
+        positions = get_random_positions_not_in_test(bucket_name=bucket_name, blob_name=blob_name, num_pos_per_setup=num_pos_per_setup)
+        prev_positions.extend(positions)
+        prev_positions = list(set(prev_positions))
+        print("number of unique positions so far: ", len(prev_positions))
+        print('saving starting positions ...')
+        
+        with open(get_enabled_save_path(
+                os.path.join(save_dir, 'ppo_start_positions.jsonl'), 
+                enabled=is_main_process, 
+            ), 'w+') as f:
+            for position in tqdm(prev_positions):
+                f.write(json.dumps(position)+"\n")
+        
+        # env = FenChessHistoryEnv(from_position=position)
+        raw_results, summary_results = text_env_eval_chess_positions(
+            positions=positions,
+            policy=policy,
+            n_rollouts=n_rollouts,
+            bsize=rollout_bsize,
         )
         summary_results = pull_logs(summary_results)
 
@@ -383,7 +404,8 @@ def main(
 
         return ppo_dataset
 
-    outputs_path = convert_path(f"outputs/chess/{exp_name}/")
+    # outputs_path = convert_path(f"outputs/chess/{exp_name}/")
+    outputs_path = f"/nfs/nfs1/users/isadoracw/LLM_RL/outputs/chess/{exp_name}/"
     save_dir, exp_name = setup_experiment_save(
         exp_name=exp_name, 
         outputs_path=outputs_path, 

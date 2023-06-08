@@ -4,11 +4,13 @@ import os
 import io
 from LLM_RL.environment import Text, TextTrajectory, TextTrajectoryChain, TokenTrajectoryChain
 import json
-from llm_rl_scripts.chess.env import preprocess_move, preprocess_state
+from llm_rl_scripts.chess.env import large_piece_random_endgame, preprocess_move, preprocess_state, preprocess_state_og
 import random
 import chess
 from IPython import embed
 from tqdm.auto import tqdm
+import pickle
+import glob
 
 # cwd = os.getcwd()
 # key_path = os.path.join(cwd, "rail-tpus.json")
@@ -27,6 +29,39 @@ def get_data_from_bucket(bucket_name, blob_name):
     blob_data = blob_data.split("\n")
     return blob_data
 
+def get_random_positions_not_in_test(bucket_name=bucket_name, blob_name=blob_name, num_pos_per_setup=4):
+    test_positions = get_data_from_bucket(bucket_name, blob_name)
+    test_positions = test_positions[:500]
+    test_positions = [position.replace("\n", "").replace("\"", "") for position in test_positions]
+    
+    total_positions = []
+    for setup in ["kQK", "kRK", "kQRK", "kRRK"]:
+        random_positions = []
+        while len(random_positions) < num_pos_per_setup:
+            random_position = large_piece_random_endgame(setup)
+            if random_position not in test_positions:
+                random_positions.append(random_position)
+        total_positions.extend(random_positions)
+    
+    return total_positions
+
+def get_saved_text_chains(data_saves_dir):
+    
+    # find all directories in data_saves_dir
+    directories = glob.glob(data_saves_dir + "/*")
+    # get all text_trajectory_chains.pkl files and concatenate them
+    total_text_trajectory_chains = []
+    for directory in directories:
+        path = str(directory) + "/text_trajectory_chains.pkl"
+        # load pickle file and print results
+        with open(path, 'rb') as f:
+            pickle_data = pickle.load(f)
+            total_text_trajectory_chains += pickle_data
+    return total_text_trajectory_chains
+
+# blob_name = "queen_rook_unopposed/queen_rook_unopposed/test_positions.jsonl"
+# print(get_random_positions_not_in_test(blob_name=blob_name))
+    
 # def chess_text_trajectory_chain_from_json(data, scaling=1):
 #     # lst = list(f)
 #     for obj in data:
@@ -56,7 +91,7 @@ def chess_text_trajectory_chain_from_json(data, scaling=1):
                 idx += 1
                 break
             result = json.loads(data[idx])
-            state = Text(preprocess_state(result["from_state"]), False)
+            state = Text(preprocess_state_og(result["from_state"]), False)
             action = Text(preprocess_move(result["action"]), True)
             trajectory = TextTrajectory([state, action], [0, scaling*result["reward"]], result["done"])
             trajectories.append(trajectory)
@@ -84,24 +119,30 @@ def chess_text_trajectory_chain_from_json(data, scaling=1):
 def chess_trajectory_chain_from_npy(actions, states, done, reward):
     text_trajectory_chains = []
     init_state = chess.Board().fen()
+    print(len(actions))
     for game_idx in tqdm(range(len(actions))):
         trajectories = []
         move_idx = 0
-        while not done[game_idx][move_idx]:
+        d = False
+        while move_idx + 1 < 200 and not d:
             if move_idx == 0:
-                state = Text(preprocess_state(init_state), False)
+                state = Text(preprocess_state_og(init_state), False)
             else:
-                state = Text(preprocess_state(states[game_idx][move_idx - 1]), False)
+                state = Text(preprocess_state_og(states[game_idx][move_idx - 1]), False)
             action = Text(preprocess_move(actions[game_idx][move_idx]), True)
-            trajectory = TextTrajectory([state, action], [0, reward[game_idx][move_idx]], done[game_idx][move_idx])
+            if move_idx == 199:
+                d = True
+            else:
+                d = done[game_idx][move_idx]
+            trajectory = TextTrajectory([state, action], [0, reward[game_idx][move_idx]], d)
             trajectories.append(trajectory)
             move_idx += 1
-    chain = None
-    for text_trajectory in trajectories[::-1]:
-        chain = TextTrajectoryChain(
-            text_trajectory=text_trajectory, 
-            next=chain, 
-        )
+        chain = None
+        for text_trajectory in trajectories[::-1]:
+            chain = TextTrajectoryChain(
+                text_trajectory=text_trajectory, 
+                next=chain, 
+            )
         text_trajectory_chains.append(chain)
         
     random.shuffle(text_trajectory_chains)
@@ -117,8 +158,10 @@ def get_dataset(dataset_path):
 dataset_path = os.path.join("/nfs/nfs1/users/isadoracw/ILQL5/src/environments/chess/complete_background_generated/")
 actions, states, done, reward = get_dataset(dataset_path)
 text_trajectory_chains = chess_trajectory_chain_from_npy(actions[:100], states, done, reward)
-print(text_trajectory_chains[:10])
-# data = get_data_from_bucket(bucket_name, blob_name)
+# print(text_trajectory_chains[:10])
+print(len(text_trajectory_chains))
+# print(text_trajectory_chains[:10])
+# # data = get_data_from_bucket(bucket_name, blob_name)
 # chains = chess_text_trajectory_chain_from_json(data)
 # # chains[:10]
 # print(chains[:10])

@@ -511,6 +511,7 @@ class PPOInference(struct.PyTreeNode):
 
         # get values, logits from forward pass
         initial_policy_logprobs, policy_logprobs, values = [], [], []
+        print("getting log probs...")
         for i in tqdm(range(0, len(tokens), bsize), disable=not verbose):
             tokens_batch = jnp.asarray(tokens[i:(i+bsize)], dtype=jnp.int32)
             new_key = None
