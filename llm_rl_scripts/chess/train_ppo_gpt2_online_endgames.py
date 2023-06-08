@@ -17,7 +17,7 @@ from LLM_RL.algorithms.ppo.base_interface import ppo_loss_fn, FixedKLController,
 from transformers.generation import GenerationConfig
 from jaxtyping import PyTree
 import re
-from LLM_RL.environment import TextEnv, TextHistory, Text, interact_environment, text_env_eval, TextTrajectory, TextTrajectoryChain
+from LLM_RL.environment import TextEnv, TextHistory, Text, interact_environment, text_env_eval, TextTrajectory, TextTrajectoryChain, text_env_eval_chess_positions
 from LLM_RL.algorithms.ppo.gpt2.interface import GPT2PPOPolicy, GPT2PPOInference, GPT2PPOTrain
 from LLM_RL.heads.linear_head import load_train_state_from_config as load_head_train_state_from_config
 from LLM_RL.heads.linear_head import LinearHeadConfig
@@ -289,6 +289,7 @@ def main(
     def ppo_dataset_loader(ppo_inference: GPT2PPOInference, policy: GPT2PPOPolicy) -> PPODataset:
         print("collecting data ...")
         nonlocal data_round
+<<<<<<< HEAD
         nonlocal prev_positions
         # position = large_piece_random_endgame("kQK")
         bucket_name = "rail-tpus-isadora"
@@ -306,6 +307,11 @@ def main(
             for position in tqdm(prev_positions):
                 f.write(json.dumps(position)+"\n")
         
+=======
+        # position = large_piece_random_endgame("kQK")
+        positions = [large_piece_random_endgame("kQK"), large_piece_random_endgame("kRK"), \
+            large_piece_random_endgame("kRRK"), large_piece_random_endgame("kRQK")]
+>>>>>>> cafe842e1f5f7bfa5b28ed7e4c614fd64d206997
         # env = FenChessHistoryEnv(from_position=position)
         raw_results, summary_results = text_env_eval_chess_positions(
             positions=positions,
