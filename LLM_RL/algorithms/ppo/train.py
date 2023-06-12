@@ -1,4 +1,5 @@
 from typing import Any, Callable, Dict, Iterable, Optional, Tuple, Union, Hashable, Iterator
+import gcsfs
 from jaxtyping import PyTree
 from jax.random import KeyArray
 from collections import deque
@@ -23,6 +24,7 @@ from LLM_RL.algorithms.ppo.base_interface import PPOPolicy
 import flax.linen as nn
 import os
 import jax.numpy as jnp
+import tempfile
 from JaxSeq.data import MaskDataset, MaskIterableDataset
 
 def dump_state(
@@ -83,6 +85,31 @@ def dump_state(
             dtype=save_dtype, 
             sharding=get_sharding_from_model_head(value_head_model, value_head_train_state.params), 
         )
+
+def dump_state_to_bucket(
+    policy_model: FlaxPreTrainedModel, 
+    policy_train_state: TrainState, 
+    value_head_model: nn.Module, 
+    value_head_train_state: TrainState, 
+    save_dir: str, 
+    save_train_state: bool, 
+    enable_save: bool, 
+    save_dtype: jnp.dtype, 
+    gcloud_project: str=None,
+    gcloud_token: str=None,
+    **loop_state: Dict[Hashable, Any],
+):
+    if save_dir.startswith('gcs://'):
+        output_path = save_dir[len('gcs://'):]
+        
+        tmp_dir = tempfile.TemporaryDirectory()
+        dump_state(policy_model=policy_model, policy_train_state=policy_train_state, value_head_model=value_head_model, value_head_train_state=value_head_train_state, save_dir=tmp_dir.name, save_train_state=save_train_state, enable_save=True, save_dtype=save_dtype, **loop_state)
+        
+        gcsfs.GCSFileSystem(project=gcloud_project, token=gcloud_token).put(tmp_dir.name, output_path, recursive=True)
+        
+        tmp_dir.cleanup()
+    else:
+        dump_state(policy_model=policy_model, policy_train_state=policy_train_state, value_head_model=value_head_model, value_head_train_state=value_head_train_state, save_dir=save_dir, save_train_state=save_train_state, enable_save=enable_save, save_dtype=save_dtype, **loop_state)
 
 def eval_loss(
     inference: PPOInference, 

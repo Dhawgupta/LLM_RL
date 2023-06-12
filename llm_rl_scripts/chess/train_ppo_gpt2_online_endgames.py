@@ -17,7 +17,7 @@ from LLM_RL.algorithms.ppo.base_interface import ppo_loss_fn, FixedKLController,
 from transformers.generation import GenerationConfig
 from jaxtyping import PyTree
 import re
-from LLM_RL.environment import TextEnv, TextHistory, Text, interact_environment, text_env_eval, TextTrajectory, TextTrajectoryChain, text_env_eval_chess_positions
+from LLM_RL.environment import TextEnv, TextHistory, Text, interact_environment, text_env_eval, TextTrajectory, TextTrajectoryChain
 from LLM_RL.algorithms.ppo.gpt2.interface import GPT2PPOPolicy, GPT2PPOInference, GPT2PPOTrain
 from LLM_RL.heads.linear_head import load_train_state_from_config as load_head_train_state_from_config
 from LLM_RL.heads.linear_head import LinearHeadConfig
@@ -32,6 +32,7 @@ from JaxSeq.utils import multihost_device_get
 from IPython import embed
 from llm_rl_scripts.chess.data import get_random_positions_not_in_test
 from tqdm.auto import tqdm
+from JaxSeq.checkpointing import save_pytree_to_bucket, save_dataset_to_bucket
 
 from llm_rl_scripts.chess.env import FenChessHistoryEnv, FenChessHistoryEnvSingleTurn, large_piece_random_endgame, text_env_eval_chess_positions
 
@@ -289,7 +290,6 @@ def main(
     def ppo_dataset_loader(ppo_inference: GPT2PPOInference, policy: GPT2PPOPolicy) -> PPODataset:
         print("collecting data ...")
         nonlocal data_round
-<<<<<<< HEAD
         nonlocal prev_positions
         # position = large_piece_random_endgame("kQK")
         bucket_name = "rail-tpus-isadora"
@@ -298,20 +298,15 @@ def main(
         prev_positions.extend(positions)
         prev_positions = list(set(prev_positions))
         print("number of unique positions so far: ", len(prev_positions))
-        print('saving starting positions ...')
+        # print('saving starting positions ...')
         
-        with open(get_enabled_save_path(
-                os.path.join(save_dir, 'ppo_start_positions.jsonl'), 
-                enabled=is_main_process, 
-            ), 'w+') as f:
-            for position in tqdm(prev_positions):
-                f.write(json.dumps(position)+"\n")
+        # with open(get_enabled_save_path(
+        #         os.path.join(save_dir, 'ppo_start_positions.jsonl'), 
+        #         enabled=is_main_process, 
+        #     ), 'w+') as f:
+        #     for position in tqdm(prev_positions):
+        #         f.write(json.dumps(position)+"\n")
         
-=======
-        # position = large_piece_random_endgame("kQK")
-        positions = [large_piece_random_endgame("kQK"), large_piece_random_endgame("kRK"), \
-            large_piece_random_endgame("kRRK"), large_piece_random_endgame("kRQK")]
->>>>>>> cafe842e1f5f7bfa5b28ed7e4c614fd64d206997
         # env = FenChessHistoryEnv(from_position=position)
         raw_results, summary_results = text_env_eval_chess_positions(
             positions=positions,
@@ -377,6 +372,7 @@ def main(
         if save_dir is not None and save_ppo_dataset:
             print('saving ppo dataset ...')
             print(save_dir)
+            # save_dataset_to_bucket(ppo_dataset, save_dir, data_round, is_main_process, text_trajectory_chains, raw_results, summary_results)
             data_save_path = os.path.join(save_dir, 'data_saves', f'{data_round}')
             if is_main_process:
                 create_path(data_save_path)
@@ -411,7 +407,7 @@ def main(
         return ppo_dataset
 
     # outputs_path = convert_path(f"outputs/chess/{exp_name}/")
-    outputs_path = f"/nfs/nfs1/users/isadoracw/LLM_RL/outputs/chess/{exp_name}/"
+    outputs_path = f"gcs://rail-tpus-isadora/llm-rl-outputs/outputs/chess/{exp_name}/"
     save_dir, exp_name = setup_experiment_save(
         exp_name=exp_name, 
         outputs_path=outputs_path, 

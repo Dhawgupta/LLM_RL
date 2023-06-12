@@ -64,17 +64,17 @@ def main(
 ):
     # get checkpoint directory
     # checkpoint_dir = "~/isadoracw/LLM_RL/outputs/chess/ppo_online_endgames_queen_rook/ppo_online_endgames_queen_rook.2023-06-04-22-46-25.986.a317fd12032911ee9fce87d7217c0314/round_59/"
-    policy_path = os.path.join(checkpoint_dir, "policy", "train_state.msgpack")
-    value_head_path = os.path.join(checkpoint_dir, "value_head", "train_state.msgpack")
+    # policy_path = os.path.join(checkpoint_dir, "policy", "train_state.msgpack")
+    # value_head_path = os.path.join(checkpoint_dir, "value_head", "train_state.msgpack")
 
-    # load checkpoints from checkpoint directory
-    target = TrainState 
+    # # load checkpoints from checkpoint directory
+    # target = TrainState 
 
-    policy_train_state = load_pytree(policy_path, target=target)
-    policy_params = policy_train_state["params"]
+    # policy_train_state = load_pytree(policy_path, target=target)
+    # policy_params = policy_train_state["params"]
 
-    value_head_train_state = load_pytree(value_head_path, target=target)
-    value_head_params = value_head_train_state["params"]
+    # value_head_train_state = load_pytree(value_head_path, target=target)
+    # value_head_params = value_head_train_state["params"]
 
     tokenizer = AutoTokenizer.from_pretrained('gpt2')
     tokenizer.add_special_tokens({'pad_token': '<|pad|>'})
@@ -215,7 +215,7 @@ def main(
             print(positions)
             test_positions = [position.replace("\n", "").replace("\"", "") for position in positions]    
     else:
-        print("evalauting from tricky test positions...")
+        print("evaluating from tricky test positions...")
         test_positions = get_data_from_bucket(bucket_name, blob_name)
         # test_positions = test_positions[:500]
         test_positions = [position.replace("\n", "").replace("\"", "") for position in test_positions if position != ""]

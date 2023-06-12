@@ -155,13 +155,13 @@ def get_dataset(dataset_path):
     reward = np.load(os.path.join(dataset_path, "reward.npy"), mmap_mode="r")
     return actions, states, done, reward
 
-dataset_path = os.path.join("/nfs/nfs1/users/isadoracw/ILQL5/src/environments/chess/complete_background_generated/")
-actions, states, done, reward = get_dataset(dataset_path)
-text_trajectory_chains = chess_trajectory_chain_from_npy(actions[:100], states, done, reward)
-# print(text_trajectory_chains[:10])
-print(len(text_trajectory_chains))
-# print(text_trajectory_chains[:10])
-# # data = get_data_from_bucket(bucket_name, blob_name)
+# dataset_path = os.path.join("/nfs/nfs1/users/isadoracw/ILQL5/src/environments/chess/complete_background_generated/")
+# actions, states, done, reward = get_dataset(dataset_path)
+# text_trajectory_chains = chess_trajectory_chain_from_npy(actions[:100], states, done, reward)
+# # print(text_trajectory_chains[:10])
+# print(len(text_trajectory_chains))
+# # print(text_trajectory_chains[:10])
+# data = get_data_from_bucket(bucket_name, blob_name)
 # chains = chess_text_trajectory_chain_from_json(data)
 # # chains[:10]
 # print(chains[:10])

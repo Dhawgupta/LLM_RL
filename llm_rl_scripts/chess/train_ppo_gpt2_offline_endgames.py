@@ -29,8 +29,10 @@ import numpy as np
 from JaxSeq.logs import label_logs, log, pull_logs
 import json
 from JaxSeq.utils import multihost_device_get
-from llm_rl_scripts.chess.data import chess_text_trajectory_chain_from_json, get_data_from_bucket
+from llm_rl_scripts.chess.data import chess_text_trajectory_chain_from_json, get_data_from_bucket, get_random_positions_not_in_test
 from google.cloud import storage
+
+from llm_rl_scripts.chess.env import text_env_eval_chess_positions
 
 
 def main(
@@ -52,6 +54,7 @@ def main(
     n_rounds: int=1, 
     epochs: int=1, 
     max_steps: Optional[int]=None, 
+    num_pos_per_setup: int=1,
     
     lr: float=1e-5, 
     weight_decay: float=0.0, 
@@ -59,7 +62,7 @@ def main(
     train_bsize: int=32, 
     grad_accum_steps: int=1, 
     rollout_bsize: int=32, 
-    n_rollouts: int=128, 
+    n_rollouts: int=16, 
     ppo_data_bsize: int=32, 
 
     gradient_checkpointing: bool=False, 
@@ -71,19 +74,19 @@ def main(
     max_output_length: int=512, 
 
     log_every: int=256, 
-    eval_every_steps: Optional[int]=256, 
+    eval_every_steps: Optional[int]=None, 
     eval_every_epochs: Optional[int]=None, 
-    eval_every_rounds: Optional[int]=None, 
+    eval_every_rounds: Optional[int]=1, 
     eval_at_beginning: bool=False, 
     eval_at_end: bool=True, 
 
-    save_every_steps: Optional[int]=2500, 
+    save_every_steps: Optional[int]=None, 
     save_every_epochs: Optional[int]=None, 
     save_every_rounds: Optional[int]=None, 
     save_at_beginning: bool=False, 
-    save_at_end: bool=False, 
+    save_at_end: bool=True, 
     save_best: bool=True, 
-    max_checkpoints: Optional[int]=20, 
+    max_checkpoints: Optional[int]=None, 
     save_train_state: bool=True, 
     save_ppo_dataset: bool=False, 
     save_bf16: bool=True, 
@@ -109,6 +112,7 @@ def main(
     force_pad_embeddings: bool=False, 
 
     should_restore_loop_state: bool=False, 
+    on_cloud_bucket: bool=True,
 ):
     input_args = locals().copy()
     print(input_args)
@@ -278,28 +282,6 @@ def main(
         nonlocal data_round
         # num_to_sample = len(text_trajectory_chains) // n_rounds
         chains_for_round = text_trajectory_chains[data_round*num_to_sample:(data_round+1)*num_to_sample]
-        
-        # print(type(text_trajectory_chains))
-
-    # data_round = 0
-    # def ppo_dataset_loader(ppo_inference: GPT2PPOInference, policy: GPT2Policy) -> PPODataset:
-    #     nonlocal data_round
-    #     raw_results, summary_results = text_env_eval(
-    #         env=env, 
-    #         policy=policy, 
-    #         n_rollouts=n_rollouts, 
-    #         bsize=rollout_bsize, 
-    #     )
-    #     summary_results = pull_logs(summary_results)
-
-        # text_trajectory_chains = []
-        # for raw_result in raw_results:
-        #     text_trajectory = TextTrajectory(
-        #         text_history=raw_result[-1].post_transition_history, 
-        #         reward=(0.0, raw_result[-1].reward), 
-        #         done=raw_result[-1].done, 
-        #     )
-        #     text_trajectory_chains.append(TextTrajectoryChain(text_trajectory, None))
         print("congrats! you are done loading data!!")
         ppo_data, all_kls = ppo_inference.get_ppo_data_from_text_trajectory_chain(
             chains_for_round, 
@@ -318,19 +300,7 @@ def main(
             tokenizer, 
             BlockingStrategy(Padding.RIGHT, Truncation.RIGHT, max_input_length+max_output_length), 
         )
-
-        # logs = dict(
-        #     policy=dict(
-        #         initial_policy_kl=get_tensor_stats_np(all_kls, np.ones(all_kls.shape), all_kls.size), 
-        #         sqrt_initial_policy_kl=np.sqrt(mean_kl), 
-        #         kl_ctrl_value=kl_controller.value, 
-        #     ), 
-        #     env_interaction=summary_results, 
-        # )
-
-        # logs = pull_logs(label_logs(logs, 'data_collection', {'round': data_round}))
-        # log(logs, use_wandb and is_main_process)
-
+        
         if save_dir is not None and save_ppo_dataset:
             print('saving ppo dataset ...')
             data_save_path = os.path.join(save_dir, 'data_saves', f'{data_round}')
@@ -365,8 +335,28 @@ def main(
         data_round += 1
 
         return ppo_dataset
+    
+    def evaluator(inference, policy):
+        bucket_name = "rail-tpus-isadora"
+        blob_name = "queen_rook_unopposed/queen_rook_unopposed/test_positions.jsonl"
+        positions = get_random_positions_not_in_test(bucket_name=bucket_name, blob_name=blob_name, num_pos_per_setup=num_pos_per_setup)
 
-    outputs_path = f"/nfs/nfs1/users/isadoracw/LLM_RL/outputs/chess/{exp_name}"
+        raw_results, summary_results = text_env_eval_chess_positions(
+            positions=positions,
+            policy=policy,
+            n_rollouts=n_rollouts,
+            bsize=rollout_bsize,
+        )
+        summary_results = pull_logs(summary_results)
+        
+        return summary_results["reward"]["mean"], summary_results
+        
+        # log(summary_results, use_wandb and is_main_process)
+    if not on_cloud_bucket:
+        outputs_path = f"/nfs/nfs1/users/isadoracw/LLM_RL/outputs/chess/{exp_name}"
+    else:
+        outputs_path = f"gcs://rail-tpus-isadora/llm-rl-outputs/chess/{exp_name}"
+    # outputs_path = f"/nfs/nfs1/users/isadoracw/LLM_RL/outputs/chess/{exp_name}"
     save_dir, exp_name = setup_experiment_save(
         exp_name=exp_name, 
         outputs_path=outputs_path, 
@@ -382,7 +372,7 @@ def main(
         inference=ppo_inference, 
         policy=policy, 
         load_dataset=ppo_dataset_loader, 
-        evaluator=None, 
+        evaluator=evaluator, 
         prng_key=train_prng, 
         save_dir=save_dir, 
         n_rounds=n_rounds, 

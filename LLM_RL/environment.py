@@ -9,8 +9,6 @@ from LLM_RL.utils import get_tensor_stats
 from tqdm.auto import tqdm
 from copy import deepcopy
 
-from llm_rl_scripts.chess.env import FenChessHistoryEnv
-
 # define text objects
 
 @dataclass(frozen=True)
@@ -207,61 +205,6 @@ def interact_environment(
             )
     return transitions_batch
 
-<<<<<<< HEAD
-=======
-def text_env_eval_chess_positions(
-    positions: List[str],
-    policy: Union[TextPolicy, BatchedTextPolicy], 
-    n_rollouts: int, 
-    initial_text_history: Optional[TextHistory]=None, # only allow one initial_text_history here
-    seed_generator: Optional[Iterator[int]]=None, 
-    env_options: Optional[Dict]=None, # only allow one env_options here
-    interaction_callback: Optional[Callable[[List[Tuple[TextHistory, TextHistory, TextHistory, float, bool]]], None]]=None, 
-    bsize: int=1, 
-    verbose: bool=True,
-):
-    interactions, rewards, dones = [], [], []
-    for position in positions:
-        env = FenChessHistoryEnv(initial_history=initial_text_history, from_position=position)
-        for _ in tqdm(range((n_rollouts+(bsize-1))//bsize), disable=not verbose):
-            actual_bsize = min(n_rollouts-len(interactions), bsize)
-            npad = bsize - actual_bsize
-            interaction_batch = interact_environment(
-                env, 
-                policy, 
-                initial_text_history=initial_text_history, 
-                env_seed=[None]*actual_bsize if seed_generator is None else [next(seed_generator) for _ in range(actual_bsize)], 
-                env_options=[env_options]*actual_bsize, 
-                bsize=actual_bsize,
-                npad=npad,
-            )
-            
-            for interaction in interaction_batch:
-                interactions.append(interaction)
-                rewards.append(sum(map(lambda x: x.reward, interaction)))
-                dones.append(interaction[-1].done)
-                if interaction_callback is not None:
-                    interaction_callback(interaction)
-    
-    rewards = np.asarray(rewards, dtype=np.float32)
-    dones = np.asarray(dones, dtype=np.float32)
-    results_summary = dict(
-        reward=dict(
-            mean=np.mean(rewards), 
-            std=np.std(rewards), 
-            min=np.min(rewards), 
-            max=np.max(rewards), 
-        ), 
-        done=dict(
-            mean=np.mean(dones), 
-            std=np.std(dones), 
-            min=np.min(dones), 
-            max=np.max(dones), 
-        ), 
-    )
-    
-    return interactions, results_summary
->>>>>>> cafe842e1f5f7bfa5b28ed7e4c614fd64d206997
     
 
 def text_env_eval(
