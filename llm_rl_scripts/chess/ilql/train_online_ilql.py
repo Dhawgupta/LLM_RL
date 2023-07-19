@@ -14,10 +14,11 @@ import pickle as pkl
 from JaxSeq.data import Seq2SeqDataset
 from LLM_RL.algorithms.ppo.train import train_loop
 from LLM_RL.algorithms.ppo.base_interface import ppo_loss_fn, FixedKLController, AdaptiveKLController
+from LLM_RL.algorithms.ilql.data import ILQLData, ILQLIterableDataset, ILQLDataset
 from transformers.generation import GenerationConfig
 from jaxtyping import PyTree
 import re
-from LLM_RL.environment import TextEnv, TextHistory, Text, interact_environment, text_env_eval, TextTrajectory, TextTrajectoryChain
+from LLM_RL.environment import TextEnv, TextHistory, Text, TokenTrajectoryChain, interact_environment, text_env_eval, TextTrajectory, TextTrajectoryChain
 from LLM_RL.algorithms.ppo.gpt2.interface import GPT2ILQLPolicy, GPT2ILQLInference, GPT2PPOTrain
 from LLM_RL.heads.linear_head import load_train_state_from_config as load_head_train_state_from_config
 from LLM_RL.heads.linear_head import LinearHeadConfig
@@ -103,7 +104,7 @@ def main(
     save_best: bool=True, 
     max_checkpoints: Optional[int]=20, 
     save_train_state: bool=True, 
-    save_ppo_dataset: bool=True, 
+    save_ilql_dataset: bool=True, 
     save_bf16: bool=True, 
 
     policy_do_sample: bool=True, 
@@ -287,7 +288,7 @@ def main(
 
     data_round = 0
     prev_positions = []
-    def ppo_dataset_loader(ppo_inference: GPT2ILQLInference, policy: GPT2ILQLPolicy) -> PPODataset:
+    def ilql_dataset_loader(ppo_inference: GPT2ILQLInference, policy: GPT2ILQLPolicy) -> PPODataset:
         print("collecting data ...")
         nonlocal data_round
         nonlocal prev_positions
@@ -348,29 +349,28 @@ def main(
             kl_weight=kl_controller.value, 
             use_advantage_whitening=use_advantage_whitening, 
         )
-        mean_kl = all_kls.mean().item()
-        kl_controller.update(mean_kl, train_bsize)
-
-        ppo_dataset = PPODataset.from_ppo_data_list(
-            ppo_data, 
-            tokenizer, 
-            BlockingStrategy(Padding.RIGHT, Truncation.RIGHT, max_input_length+max_output_length), 
-        )
-
+        
         logs = dict(
-            policy=dict(
-                initial_policy_kl=get_tensor_stats_np(all_kls, np.ones(all_kls.shape), all_kls.size), 
-                sqrt_initial_policy_kl=np.sqrt(mean_kl), 
-                kl_ctrl_value=kl_controller.value, 
-            ), 
+            env_interaction=summary_results, 
+        )
+        
+        token_trajectory_chains = list(map(lambda chain: TokenTrajectoryChain.from_text_trajectory_chain(chain, tokenizer), text_trajectory_chains))
+        ilql_data_list = list(map(lambda x: ILQLData.from_token_trajectory_chain(x), token_trajectory_chains))
+        
+        ilql_dataset = ILQLDataset.from_ilql_data_list(ilql_data_list, 
+                                                       tokenizer, 
+                                                       BlockingStrategy(Padding.RIGHT, Truncation.RIGHT, max_length=max_length))s
+        
+        
+        logs = dict(
             env_interaction=summary_results, 
         )
 
         logs = pull_logs(label_logs(logs, 'data_collection', {'round': data_round}))
         log(logs, use_wandb and is_main_process)
 
-        if save_dir is not None and save_ppo_dataset:
-            print('saving ppo dataset ...')
+        if save_dir is not None and save_ilql_dataset:
+            print('saving online dataset ...')
             print(save_dir)
             # save_dataset_to_bucket(ppo_dataset, save_dir, data_round, is_main_process, text_trajectory_chains, raw_results, summary_results)
             data_save_path = os.path.join(save_dir, 'data_saves', f'{data_round}')
@@ -378,10 +378,10 @@ def main(
                 create_path(data_save_path)
             # save ppo_dataset
             with open(get_enabled_save_path(
-                os.path.join(data_save_path, 'ppo_dataset.pkl'), 
+                os.path.join(data_save_path, 'ilql_dataset.pkl'), 
                 enabled=is_main_process, 
             ), 'wb') as f:
-                pkl.dump(ppo_dataset, f)
+                pkl.dump(ilql_dataset, f)
             # save text_trajectory_chains
             with open(get_enabled_save_path(
                 os.path.join(data_save_path, 'text_trajectory_chains.pkl'), 
@@ -404,7 +404,7 @@ def main(
         
         data_round += 1
 
-        return ppo_dataset
+        return ilql_dataset
 
     # outputs_path = convert_path(f"outputs/chess/{exp_name}/")
     outputs_path = f"gcs://rail-tpus-isadora/llm-rl-outputs/outputs/chess/{exp_name}/"
@@ -422,7 +422,7 @@ def main(
         trainer=ppo_trainer, 
         inference=ppo_inference, 
         policy=policy, 
-        load_dataset=ppo_dataset_loader, 
+        load_dataset=ilql_dataset_loader, 
         evaluator=None, 
         prng_key=train_prng, 
         save_dir=save_dir, 

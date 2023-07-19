@@ -1,4 +1,5 @@
 from typing import Optional, Dict, Any, Tuple
+import chess
 from flax.training.train_state import TrainState
 import tyro
 from JaxSeq.bucket_manager import open_with_bucket as open
@@ -19,7 +20,7 @@ from transformers.generation import GenerationConfig
 from jaxtyping import PyTree
 import re
 from LLM_RL.environment import TextEnv, TextHistory, Text, interact_environment, text_env_eval, TextTrajectory, TextTrajectoryChain
-from LLM_RL.algorithms.ppo.gpt2.interface import GPT2PPOPolicy, GPT2PPOInference, GPT2PPOTrain
+from LLM_RL.algorithms.ppo.gpt2.interface import GPT2ILQLPolicy, GPT2ILQLInference, GPT2PPOTrain
 from LLM_RL.heads.linear_head import load_train_state_from_config as load_head_train_state_from_config
 from LLM_RL.heads.linear_head import LinearHeadConfig
 from JaxSeq.shard_model import shard_params_from_params
@@ -35,7 +36,7 @@ from google.cloud import storage
 
 from JaxSeq.checkpointing import load_pytree, save_pytree
 
-from llm_rl_scripts.chess.env import text_env_eval_chess_positions
+from llm_rl_scripts.chess.env import FenChessHistoryEnv, text_env_eval_chess_positions
 
 def main(
     exp_name: str="ppo_online_endgames_queen_rook",
@@ -59,7 +60,9 @@ def main(
     max_output_length:int=512,
     max_eval_length:int=512,
     
-    
+    n_rollouts:int=16,
+    full_games:bool=False,
+    random_opponent:bool=False,
     
 ):
     # get checkpoint directory
@@ -140,7 +143,7 @@ def main(
     )
     
     policy_prng = jax.random.PRNGKey(0)
-    policy = GPT2PPOPolicy(
+    policy = GPT2ILQLPolicy(
         inference=policy_inference, 
         prng_key=policy_prng, 
         generation_config=GenerationConfig(
@@ -191,7 +194,7 @@ def main(
         params_dtype=jnp.float32, 
     )
     
-    ppo_inference = GPT2PPOInference.load_inference(
+    ppo_inference = GPT2ILQLInference.load_inference(
         initial_policy_params=initial_policy_params, 
         policy_params=policy_train_state.params, 
         value_head_params=value_head_train_state.params, 
@@ -214,18 +217,30 @@ def main(
             positions = positions[19*16:20*16]
             print(positions)
             test_positions = [position.replace("\n", "").replace("\"", "") for position in positions]    
-    else:
+    elif not full_games:
         print("evaluating from tricky test positions...")
         test_positions = get_data_from_bucket(bucket_name, blob_name)
         # test_positions = test_positions[:500]
         test_positions = [position.replace("\n", "").replace("\"", "") for position in test_positions if position != ""]
+    
+    if full_games:
+        print("evaluating from beginning of game...")
+        raw_results, summary_results = text_env_eval_chess_positions(
+            positions=[chess.Board().fen()],
+            policy=policy,
+            n_rollouts=n_rollouts,
+            bsize=8,
+            random_opponent=random_opponent,
+        )
+    else:
         
-    raw_results, summary_results = text_env_eval_chess_positions(
-        positions=test_positions,
-        policy=policy,
-        n_rollouts=16 if random_positions or save_positions else 1, 
-        bsize=8
-    )
+        raw_results, summary_results = text_env_eval_chess_positions(
+            positions=test_positions,
+            policy=policy,
+            n_rollouts=16 if random_positions or save_positions else 1, 
+            bsize=8, 
+            random_opponent=random_opponent,
+        )
     
     # check output directory
     save_dir = None

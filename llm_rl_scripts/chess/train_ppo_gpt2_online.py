@@ -18,7 +18,7 @@ from transformers.generation import GenerationConfig
 from jaxtyping import PyTree
 import re
 from LLM_RL.environment import TextEnv, TextHistory, Text, interact_environment, text_env_eval, TextTrajectory, TextTrajectoryChain
-from LLM_RL.algorithms.ppo.gpt2.interface import GPT2PPOPolicy, GPT2PPOInference, GPT2PPOTrain
+from LLM_RL.algorithms.ppo.gpt2.interface import GPT2ILQLPolicy, GPT2ILQLInference, GPT2PPOTrain
 from LLM_RL.heads.linear_head import load_train_state_from_config as load_head_train_state_from_config
 from LLM_RL.heads.linear_head import LinearHeadConfig
 from JaxSeq.shard_model import shard_params_from_params
@@ -202,7 +202,7 @@ def main(
     env = FenChessHistoryEnv()
     
     policy_prng = jax.random.PRNGKey(0)
-    policy = GPT2PPOPolicy(
+    policy = GPT2ILQLPolicy(
         inference=policy_inference, 
         prng_key=policy_prng, 
         generation_config=GenerationConfig(
@@ -255,7 +255,7 @@ def main(
 
     loss_f = partial(ppo_loss_fn, cliprange_value=cliprange_value, cliprange=cliprange, value_loss_coef=value_loss_coef)
 
-    ppo_inference = GPT2PPOInference.load_inference(
+    ppo_inference = GPT2ILQLInference.load_inference(
         initial_policy_params=initial_policy_params, 
         policy_params=policy_train_state.params, 
         value_head_params=value_head_train_state.params, 
@@ -281,7 +281,7 @@ def main(
         kl_controller = FixedKLController(kl_coef=init_kl_coef)
 
     data_round = 0
-    def ppo_dataset_loader(ppo_inference: GPT2PPOInference, policy: GPT2PPOPolicy) -> PPODataset:
+    def ppo_dataset_loader(ppo_inference: GPT2ILQLInference, policy: GPT2ILQLPolicy) -> PPODataset:
         nonlocal data_round
         raw_results, summary_results = text_env_eval(
             env=env, 

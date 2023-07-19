@@ -61,7 +61,8 @@ def main(
     train_bsize: int=32, 
     grad_accum_steps: int=1, 
     
-    data_save_dir:str="/home/isadoracw/isadoracw/LLM_RL/outputs/chess/lr1e-6_ppo_online_endgames_queen_rook_save/lr1e-6_ppo_online_endgames_queen_rook_save.2023-06-06-19-22-40.564.8100307e049f11ee8b308de166d61c57/data_saves",
+    bucket_name: str="rail-tpus-isadora",
+    data_path: str="llm-rl-outputs/outputs/chess/ppo_online_endgames_lr1e-5_bsize256_64roll_4pos/ppo_online_endgames_lr1e-5_bsize256_64roll_4pos.2023-06-11-19-41-19.979.f04a0c5e088f11ee8b308de166d61c57/",
 
     bf16_activations: bool=False, 
     gradient_checkpointing: bool=False, 
@@ -122,7 +123,7 @@ def main(
         token_trajectory_chain = TokenTrajectoryChain.from_text_trajectory_chain(chain, tokenizer)
         return MCData.from_token_trajectory_chain(token_trajectory_chain, gamma=gamma)
     
-    data = get_saved_text_chains(data_save_dir)
+    data = get_saved_text_chains(bucket_name, data_path)
     train_data = data[:int(len(data)*0.8)]
     print(train_data[0])
     eval_data = data[int(len(data)*0.8):]
@@ -251,7 +252,7 @@ def main(
     
     
     env = FenChessHistoryEnv()
-    outputs_path = f"/nfs/nfs1/users/isadoracw/LLM_RL/outputs/chess/{exp_name}/" if outputs_path is None else outputs_path
+    outputs_path = f"gcs://rail-tpus-isadora/llm-rl-outputs/outputs/chess/{exp_name}/" if outputs_path is None else outputs_path
     save_dir, exp_name = setup_experiment_save(
         exp_name=exp_name, 
         outputs_path=convert_path(outputs_path), 
@@ -293,7 +294,6 @@ def main(
             eval_batches=eval_loss_batches, 
         )
 
-        bucket_name = "rail-tpus-isadora"
         blob_name = "queen_rook_unopposed/queen_rook_unopposed/test_positions.jsonl"
         positions = get_random_positions_not_in_test(bucket_name=bucket_name, blob_name=blob_name, num_pos_per_setup=4)
         

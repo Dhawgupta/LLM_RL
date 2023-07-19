@@ -15,7 +15,7 @@ import jax.numpy as jnp
 import optax
 from LLM_RL.algorithms.value_rl_base.gptj.interface import GPTJValueRLInference
 
-class GPTJILQLTrain(ILQLTrain):
+class GPT2ILQLTrain(ILQLTrain):
     @classmethod
     def load_train(
         cls, 

@@ -45,38 +45,43 @@ def get_random_positions_not_in_test(bucket_name=bucket_name, blob_name=blob_nam
     
     return total_positions
 
-def get_saved_text_chains(data_saves_dir):
+def get_saved_text_chains(bucket_name, path):
     
     # find all directories in data_saves_dir
-    directories = glob.glob(data_saves_dir + "/*")
+    directories = get_directories_with_data_saves(bucket_name, path)
+    print(directories)
+    #TODO: check the parent directory??
     # get all text_trajectory_chains.pkl files and concatenate them
     total_text_trajectory_chains = []
+    rounds = []
     for directory in directories:
-        path = str(directory) + "/text_trajectory_chains.pkl"
-        # load pickle file and print results
-        with open(path, 'rb') as f:
-            pickle_data = pickle.load(f)
-            total_text_trajectory_chains += pickle_data
-    return total_text_trajectory_chains
+        path = str(directory)
+        round = int(path.split("/")[-2])
+        round_chains = read_pkl_file(bucket_name, path)
+        rounds += [round] * len(round_chains)
+        total_text_trajectory_chains += round_chains
+    return total_text_trajectory_chains, rounds
 
-# blob_name = "queen_rook_unopposed/queen_rook_unopposed/test_positions.jsonl"
-# print(get_random_positions_not_in_test(blob_name=blob_name))
-    
-# def chess_text_trajectory_chain_from_json(data, scaling=1):
-#     # lst = list(f)
-#     for obj in data:
-#         # print(obj)
-#         if obj == "":
-#             continue
-#         result =  json.loads(obj)
-#         from_state = Text(preprocess_state(result["from_state"]), False)
-#         action = Text(preprocess_move(result["action"]), True) 
-#         to_state = Text(preprocess_state(result["to_state"]), False)
-#         next_action = Text(preprocess_move(result["next_action"]), True)
+def get_directories_with_data_saves(bucket_name, prefix):
+    bucket = client.get_bucket(bucket_name)
+    blobs = bucket.list_blobs(prefix=prefix)
+    directories = []
 
-#         curr_trajectory = TextTrajectory([from_state, action], [0, scaling*result["reward"]], result["done"])
-#         next_trajectory = TextTrajectoryChain(TextTrajectory([to_state, next_action], [0, scaling*result["next_reward"]], result["next_done"]))
-#         yield TextTrajectoryChain(curr_trajectory, next_trajectory)
+    for blob in blobs:
+        blob_path = blob.name
+        if "/data_saves/" in blob_path and blob_path.endswith("text_trajectory_chains.pkl"):
+            # directory = "/".join(blob_path.split("/")[:-1]) + "/"
+            if blob_path not in directories:
+                directories.append(blob_path)
+
+    return directories
+
+def read_pkl_file(bucket_name, blob_name):
+    storage_client = storage.Client()
+    bucket = storage_client.get_bucket(bucket_name)
+    blob = bucket.blob(blob_name)
+    data = blob.download_as_bytes()
+    return pickle.loads(data)
 
 def chess_text_trajectory_chain_from_json(data, scaling=1):
     idx = 0
@@ -154,6 +159,8 @@ def get_dataset(dataset_path):
     done = np.load(os.path.join(dataset_path, "done.npy"), mmap_mode="r")
     reward = np.load(os.path.join(dataset_path, "reward.npy"), mmap_mode="r")
     return actions, states, done, reward
+
+
 
 # dataset_path = os.path.join("/nfs/nfs1/users/isadoracw/ILQL5/src/environments/chess/complete_background_generated/")
 # actions, states, done, reward = get_dataset(dataset_path)

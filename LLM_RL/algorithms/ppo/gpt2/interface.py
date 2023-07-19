@@ -225,7 +225,7 @@ class PPOForwardOutputGPT2(NamedTuple):
     policy_raw_output: FlaxCausalLMOutputWithCrossAttentions
     values: jax.Array
 
-class GPT2PPOInference(PPOInference):
+class GPT2ILQLInference(PPOInference):
     @classmethod
     def load_inference(
         cls, 
@@ -240,7 +240,7 @@ class GPT2PPOInference(PPOInference):
         dp_shard_logits: bool=True, 
         bc_loss_fn: Optional[Callable]=None, 
         bc_loss_weight: float=0.0, 
-    ) -> GPT2PPOInference:
+    ) -> GPT2ILQLInference:
         mesh = policy_model.config.mesh
         assert mesh is not None
         assert mesh == value_head_model.config.mesh
@@ -478,7 +478,7 @@ class GPT2PPOInference(PPOInference):
             _eval_loss=_eval_loss, 
         )
 
-class GPT2PPOPolicy(PPOPolicy):
+class GPT2ILQLPolicy(PPOPolicy):
     def __init__(
         self, 
         inference: GPT2Inference, 

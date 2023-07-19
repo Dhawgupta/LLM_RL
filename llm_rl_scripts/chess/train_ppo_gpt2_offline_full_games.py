@@ -1,4 +1,5 @@
 from typing import Optional, Dict, Any, Tuple
+import chess
 import tyro
 from JaxSeq.bucket_manager import open_with_bucket as open
 from transformers import AutoTokenizer
@@ -18,7 +19,7 @@ from transformers.generation import GenerationConfig
 from jaxtyping import PyTree
 import re
 from LLM_RL.environment import TextEnv, TextHistory, Text, interact_environment, text_env_eval, TextTrajectory, TextTrajectoryChain
-from LLM_RL.algorithms.ppo.gpt2.interface import GPT2PPOPolicy, GPT2PPOInference, GPT2PPOTrain
+from LLM_RL.algorithms.ppo.gpt2.interface import GPT2ILQLPolicy, GPT2ILQLInference, GPT2PPOTrain
 from LLM_RL.heads.linear_head import load_train_state_from_config as load_head_train_state_from_config
 from LLM_RL.heads.linear_head import LinearHeadConfig
 from JaxSeq.shard_model import shard_params_from_params
@@ -30,6 +31,7 @@ from JaxSeq.logs import label_logs, log, pull_logs
 import json
 from JaxSeq.utils import multihost_device_get
 from llm_rl_scripts.chess.data import chess_text_trajectory_chain_from_json, chess_trajectory_chain_from_npy, get_data_from_bucket, get_dataset
+from llm_rl_scripts.chess.env import text_env_eval_chess_positions
 from google.cloud import storage
 from IPython import embed
 
@@ -188,7 +190,7 @@ def main(
     # env = FenChessEnvSingleTurn()
     
     policy_prng = jax.random.PRNGKey(0)
-    policy = GPT2PPOPolicy(
+    policy = GPT2ILQLPolicy(
         inference=policy_inference, 
         prng_key=policy_prng, 
         generation_config=GenerationConfig(
@@ -241,7 +243,7 @@ def main(
 
     loss_f = partial(ppo_loss_fn, cliprange_value=cliprange_value, cliprange=cliprange, value_loss_coef=value_loss_coef)
 
-    ppo_inference = GPT2PPOInference.load_inference(
+    ppo_inference = GPT2ILQLInference.load_inference(
         initial_policy_params=initial_policy_params, 
         policy_params=policy_train_state.params, 
         value_head_params=value_head_train_state.params, 
@@ -271,7 +273,7 @@ def main(
     text_trajectory_chains = chess_trajectory_chain_from_npy(actions, states, done, reward)
     print("there are this many chains: ", len(text_trajectory_chains))
     data_round = 0
-    def ppo_dataset_loader(ppo_inference:GPT2PPOInference, policy, num_to_sample=256):
+    def ppo_dataset_loader(ppo_inference:GPT2ILQLInference, policy, num_to_sample=256):
         nonlocal data_round
         # num_to_sample = len(text_trajectory_chains) // n_rounds
         chains_for_round = text_trajectory_chains[data_round*num_to_sample:(data_round+1)*num_to_sample]
@@ -341,7 +343,7 @@ def main(
 
         return ppo_dataset
 
-    outputs_path = convert_path(f"/nfs/nfs1/users/isadoracw/LLM_RL/outputs/chess/{exp_name}")
+    outputs_path = f"gcs://rail-tpus-isadora/llm-rl-outputs/chess/{exp_name}"
     save_dir, exp_name = setup_experiment_save(
         exp_name=exp_name, 
         outputs_path=outputs_path, 
@@ -350,6 +352,22 @@ def main(
         is_main_process=is_main_process, 
     )
     
+    def evaluator(inference, policy):
+        # bucket_name = "rail-tpus-isadora"
+        # blob_name = "queen_rook_unopposed/queen_rook_unopposed/test_positions.jsonl"
+        # positions = get_random_positions_not_in_test(bucket_name=bucket_name, blob_name=blob_name, num_pos_per_setup=num_pos_per_setup)
+        positions = [chess.Board().fen()]
+        raw_results, summary_results = text_env_eval_chess_positions(
+            positions=positions,
+            policy=policy,
+            n_rollouts=n_rollouts,
+            bsize=rollout_bsize,
+        )
+        summary_results = pull_logs(summary_results)
+        
+        return summary_results["reward"]["mean"], summary_results
+    
+    
     train_prng = jax.random.PRNGKey(1)
     save_dtype = jnp.bfloat16 if save_bf16 else jnp.float32
     ppo_trainer, ppo_inference, policy = train_loop(
@@ -357,7 +375,7 @@ def main(
         inference=ppo_inference, 
         policy=policy, 
         load_dataset=ppo_dataset_loader, 
-        evaluator=None, 
+        evaluator=evaluator, 
         prng_key=train_prng, 
         save_dir=save_dir, 
         n_rounds=n_rounds, 

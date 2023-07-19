@@ -28,7 +28,7 @@ def postprocess_state(state: str):
 class ChessEnv():
     metadata = {'render.modes': ['human']}
 
-    def __init__(self, side="w", fen=True, from_position=None):
+    def __init__(self, side="w", fen=True, from_position=None, stockfish_level=3, stockfish_elo=1200, random_opponent=False):
         """Initialize the underlying chess environment.
 
         Args:
@@ -51,25 +51,40 @@ class ChessEnv():
         else:
             self.side = chess.BLACK
         
-        self.stockfish_params = {
-            "Threads": 1, # More threads will make the engine stronger, but < # of logical processors
-            "UCI_Elo": 1200,
-        }
-
-        
-
+        self.stockfish_params = {"Threads": 1, "UCI_Elo": stockfish_elo}
+        # print(self.stockfish_params)
         self.stockfish = Stockfish(path=CHESS_ENGINE_PATH, parameters=self.stockfish_params)
+        self.stockfish.set_fen_position(self.starting_position)
+        self.random_opponent = random_opponent
     
     def reset(self):
         self.board = chess.Board(fen=self.starting_position)
+        # self.move_history = ""
+        # starting_position = self.board.fen()
 
         self.stockfish.set_fen_position(self.starting_position)
         return self.starting_position, {}
 
     def sample_valid_action(self):
-        """Plays a random legal move. For debugging purposes. """
-        move = np.random.choice(self.board.legal_moves, 1)[0]
+        """Sample a random legal move in san notation."""
+        legal_move_generator = self.board.legal_moves
+        valid_actions : list = list(self.board.legal_moves)
+        move = np.random.choice(valid_actions, 1)[0]
+        print(move)
         return self.board.san(move)
+    
+    # def _fake_step(self, text_history: TextHistory) -> TextHistory:
+    #     assert text_history[-1].is_action
+    #     action = text_history[-1].text
+    #     with seed_context(self.random_state):
+    #         st, reward, done, opp_mv = self._step(action) # my previous chess environment step function
+    #         if self.fen:
+    #             new_state = Text(st, False)
+    #             # want to have a text trajectory which links to the next text trajectory
+    #             # this is more like the state-ful RL policy
+    #         else:
+    #             new_state = opp_mv["opponent move"]
+    #     return text_history+new_state, reward, done
 
     def step(self, action: str, opponent_move: bool = True):
         """
@@ -85,21 +100,34 @@ class ChessEnv():
         the flag self.fen
         reward: 0 for non-terminal states and draws, 1 for victory, -1 for illegal moves and loss
         """
-        try:
+        # move = self.board.parse_san(action) # throws an error if not a legal move
+        assert self.board.turn == chess.WHITE
+        reward, done = -1, 0
+        opponent = None
+        try: 
             move : chess.Move = self.board.push_san(action)
-        except Exception as e:
-            reward, done = -1, 0
-            opponent = None
+        except:
+            assert self.board.turn == chess.WHITE
+            pass
         else:
+            assert self.board.turn == chess.BLACK
             self.stockfish.make_moves_from_current_position([move.uci()])
             if self.board.is_game_over():
                 reward = 1 if self.board.is_checkmate() else 0 # it's agent's turn so the agent wins
                 done = 1
                 opponent = None
             elif opponent_move:
-                opponent = self._make_engine_move()
+                assert self.board.turn == chess.BLACK
+                if self.random_opponent:
+                    opponent = self._make_random_move()
+                else:
+                    opponent = self._make_engine_move()
+                assert self.board.turn == chess.WHITE
                 reward = -1 if self.board.is_checkmate() else 0
                 done = self.board.is_game_over()
+            else: # when the game isn't over, but no opponent move needs to be made?
+                print(f"{move.uci()} {self.board.fen()}")
+                reward, done, opponent = 0, 0, None
         finally:
             state = self._get_state()
             return state, reward, done, {"opponent move": opponent}
@@ -123,36 +151,30 @@ class ChessEnv():
         """
         return: a move in san notation representing the move the opponent made.
         """
+        assert self.board.turn == chess.BLACK
         move : str = self.stockfish.get_best_move_time(100)
         self.stockfish.make_moves_from_current_position([move])
         ch_move : chess.Move = chess.Move.from_uci(move)
         san_move = self.board.san(ch_move)
+        
         # self._update_move_history(self.board.san(ch_move))
         self.board.push(ch_move)
-       
+        assert self.board.turn == chess.WHITE
         return san_move
     
-    def san_make_move(self, move):
+    def _make_random_move(self):
         """
-        Get the opponents move and track this in the board state.
-        move: a string representing the move either in uci or san notation
+        return: a move in san notation representing the move the opponent made.
         """
-        self.board.push_san(move)
-        self._update_move_history(move)
-        # don't we also want the opponents move to go the model afterward?
-        return self._get_state()
-    
-    def make_move(self, move: chess.Move):
-        """
-        Get the opponents move, but move is a chess.Move object.
-        """
-        str_move : str = move.uci()
-        self.board.push(move)
-        self._update_move_history(str_move)
-
-        done = self.board.is_game_over()
-
-        return self._get_state(), done
+        print("random move!")
+        assert self.board.turn == chess.BLACK
+        legal_moves : list = list(self.board.legal_moves)
+        ch_move : chess.Move = np.random.choice(legal_moves, 1)[0]
+        self.stockfish.make_moves_from_current_position([ch_move.uci()])
+        move = self.board.san(ch_move)
+        self.board.push(ch_move)
+        assert self.board.turn == chess.WHITE
+        return move
 
     def render(self, mode='human', close=False):
         print(self.board)
@@ -187,9 +209,9 @@ class FenChessHistoryEnvSingleTurn(TextEnv):
         return FenChessHistoryEnvSingleTurn(self.initial_history, self.max_moves, self.from_position)
 
 class FenChessHistoryEnv(TextEnv):
-    def __init__(self, max_moves=400, from_position=None):
+    def __init__(self, max_moves=400, from_position=None, random_opponent=False):
         super().__init__()
-        self.chess_env = ChessEnv(fen=True, from_position=from_position)
+        self.chess_env = ChessEnv(fen=True, from_position=from_position, random_opponent=random_opponent)
         self.from_position = from_position
         self.max_moves = max_moves
         self.from_position = from_position
@@ -240,11 +262,12 @@ def text_env_eval_chess_positions(
     interaction_callback: Optional[Callable[[List[Tuple[TextHistory, TextHistory, TextHistory, float, bool]]], None]]=None, 
     bsize: int=1, 
     verbose: bool=True,
+    random_opponent: bool=False,
 ):
     interactions, rs, dones = [], [], []
     victories, percent_illegals, episode_length = [], [], []
     for position in positions:
-        env = FenChessHistoryEnv(from_position=position)
+        env = FenChessHistoryEnv(from_position=position, random_opponent=random_opponent)
         env_interactions = []
         for _ in tqdm(range((n_rollouts+(bsize-1))//bsize), disable=not verbose):
             actual_bsize = min(n_rollouts-len(env_interactions), bsize)

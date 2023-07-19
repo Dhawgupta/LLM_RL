@@ -17,7 +17,7 @@ from LLM_RL.algorithms.ppo.base_interface import ppo_loss_fn, FixedKLController,
 from transformers.generation import GenerationConfig
 from jaxtyping import PyTree
 import re
-from LLM_RL.environment import TextEnv, TextHistory, Text, interact_environment, text_env_eval, TextTrajectory, TextTrajectoryChain
+from LLM_RL.environment import TextEnv, TextHistory, Text, TokenTrajectory, interact_environment, text_env_eval, TextTrajectory, TextTrajectoryChain, TokenTrajectoryChain
 from LLM_RL.algorithms.ppo.gpt2.interface import GPT2ILQLPolicy, GPT2ILQLInference, GPT2PPOTrain
 from LLM_RL.heads.linear_head import load_train_state_from_config as load_head_train_state_from_config
 from LLM_RL.heads.linear_head import LinearHeadConfig
@@ -33,8 +33,12 @@ from IPython import embed
 from llm_rl_scripts.chess.data import get_random_positions_not_in_test
 from tqdm.auto import tqdm
 from JaxSeq.checkpointing import save_pytree_to_bucket, save_dataset_to_bucket
+from llm_rl_scripts.maze.mazes import maze2d_large, maze2d_medium, maze2d_umaze, double_t_maze
 
 from llm_rl_scripts.chess.env import FenChessHistoryEnv, FenChessHistoryEnvSingleTurn, large_piece_random_endgame, text_env_eval_chess_positions
+from llm_rl_scripts.maze.env import MazeEnv, manhatten_actions
+
+# from LLM_RL.gpt2 import load_gpt2_from_pretrained
 
 class BitsTestEnv(TextEnv):
     def __init__(self, n: int):
@@ -56,8 +60,11 @@ def main(
 
     /,  # Mark the end of positional arguments.
 
+    model_str:str="gpt2",
+    
     exp_name: Optional[str]=None, 
     outputs_path: Optional[str]=None, 
+    maze_name: str="medium",
 
     data_mesh_shape: int=1, 
     fsdp_mesh_shape: int=1, 
@@ -135,7 +142,7 @@ def main(
     if not use_adaptive_kl:
         assert kl_target is None and kl_horizon is None
 
-    tokenizer = AutoTokenizer.from_pretrained('gpt2')
+    tokenizer = AutoTokenizer.from_pretrained('gpt2', model_max_length=max_input_length+max_output_length, is_split_into_words=True)
     tokenizer.add_special_tokens({'pad_token': '<|pad|>'})
 
     mesh = load_mesh((data_mesh_shape, fsdp_mesh_shape, model_mesh_shape), ('dp', 'fsdp', 'mp'))
@@ -167,6 +174,7 @@ def main(
     params_dtype = get_dtype(use_fp16=use_fp16_params)
 
     model_prng_key = jax.random.PRNGKey(2)
+    
     policy_train_state, policy_model = load_train_state(
         model_load_mode=model_load_mode, 
         model_load_path=convert_path(model_load_path) if model_load_mode != ModelLoadMode.HF else model_load_path, 
@@ -202,8 +210,6 @@ def main(
         model=policy_model, 
         tokenizer=tokenizer, 
     )
-
-    env = FenChessHistoryEnv()
     
     policy_prng = jax.random.PRNGKey(0)
     policy = GPT2ILQLPolicy(
@@ -283,64 +289,80 @@ def main(
         kl_controller = AdaptiveKLController(init_kl_coef=init_kl_coef, target=kl_target, horizon=kl_horizon)
     else:
         kl_controller = FixedKLController(kl_coef=init_kl_coef)
-        
+    
+    # setup environment
+    if maze_name == 'large':
+        maze = maze2d_large()
+        max_steps = 75
+    elif maze_name == 'medium':
+        maze = maze2d_medium()
+        max_steps = 50
+    elif maze_name == 'umaze':
+        maze = maze2d_umaze()
+        max_steps = 25
+    elif maze_name == "double_t_maze":
+        maze = double_t_maze()
+        max_steps = 75
+    else:
+        raise ValueError(f'unknown maze name: {maze_name}')
+    
+    valid_goals = np.where(maze == 0)
+    valid_goals = np.array(list(zip(valid_goals[0], valid_goals[1])), dtype=np.int32)
+    
+    env = MazeEnv(
+        maze=maze, 
+        valid_goals=valid_goals, 
+        actions=manhatten_actions, 
+        max_steps=max_steps, 
+        display_initial_position=True,
+    )
 
     data_round = 0
-    prev_positions = []
     def ppo_dataset_loader(ppo_inference: GPT2ILQLInference, policy: GPT2ILQLPolicy) -> PPODataset:
         print("collecting data ...")
         nonlocal data_round
-        nonlocal prev_positions
-        # position = large_piece_random_endgame("kQK")
-        bucket_name = "rail-tpus-isadora"
-        blob_name = "queen_rook_unopposed/queen_rook_unopposed/test_positions.jsonl"
-        positions = get_random_positions_not_in_test(bucket_name=bucket_name, blob_name=blob_name, num_pos_per_setup=num_pos_per_setup)
-        prev_positions.extend(positions)
-        prev_positions = list(set(prev_positions))
-        print("number of unique positions so far: ", len(prev_positions))
-        # print('saving starting positions ...')
-        
-        # with open(get_enabled_save_path(
-        #         os.path.join(save_dir, 'ppo_start_positions.jsonl'), 
-        #         enabled=is_main_process, 
-        #     ), 'w+') as f:
-        #     for position in tqdm(prev_positions):
-        #         f.write(json.dumps(position)+"\n")
-        
-        # env = FenChessHistoryEnv(from_position=position)
-        raw_results, summary_results = text_env_eval_chess_positions(
-            positions=positions,
+        raw_results, summary_results = text_env_eval(
+            env=env,
             policy=policy,
             n_rollouts=n_rollouts,
             bsize=rollout_bsize,
         )
         summary_results = pull_logs(summary_results)
 
-        text_trajectory_chains = []
-        for raw_result in raw_results:
-            curr_chain = []
-            for transition in raw_result:
-                try: 
-                    text_trajectory = TextTrajectory(
-                        text_history=transition.post_action_history, 
-                        reward=[0.0, transition.reward], 
-                        done=transition.done, 
-                    )
-                    curr_chain.append(text_trajectory)
-                except:
-                    embed()
-            
-            chain = None
-            for text_trajectory in curr_chain[::-1]:
-                chain = TextTrajectoryChain(
-                    text_trajectory=text_trajectory, 
-                    next=chain, 
+        text_trajectories = []
+        token_trajectory_chains = []
+        for interaction in raw_results:
+            rewards = [0.0]
+            for transition in interaction:
+                rewards.append(transition.reward)
+                rewards.append(0.0)
+
+            text_history = interaction[-1].post_transition_history
+            done = interaction[-1].done
+            while True:
+                text_trajectory = TextTrajectory(
+                    text_history=text_history, 
+                    reward=tuple(rewards),
+                    done=done, 
                 )
-            
-            text_trajectory_chains.append(chain)
+                token_trajectory = TokenTrajectory.from_text_trajectory(text_trajectory, tokenizer)
+                if token_trajectory.tokens.shape[0] < max_input_length+max_output_length:
+                    break
+
+                # truncate one step
+                text_history = text_history[:-2]
+                last_r = rewards[-2]
+                rewards = rewards[:-2]
+                rewards[-2] += last_r * gamma
+                done = False
+
+            if token_trajectory.tokens.shape[0] == 0:
+                continue
+            text_trajectories.append(text_trajectory)
+            token_trajectory_chains.append(TokenTrajectoryChain(token_trajectory, None))
         
-        ppo_data, all_kls = ppo_inference.get_ppo_data_from_text_trajectory_chain(
-            text_trajectory_chains, 
+        ppo_data, all_kls = ppo_inference.get_ppo_data_from_token_trajectory_chain(
+            token_trajectory_chains, 
             bsize=ppo_data_bsize, 
             max_length=max_input_length+max_output_length, 
             gamma=gamma, 
@@ -384,10 +406,10 @@ def main(
                 pkl.dump(ppo_dataset, f)
             # save text_trajectory_chains
             with open(get_enabled_save_path(
-                os.path.join(data_save_path, 'text_trajectory_chains.pkl'), 
+                os.path.join(data_save_path, 'token_trajectory_chains.pkl'), 
                 enabled=is_main_process, 
             ), 'wb') as f:
-                pkl.dump(text_trajectory_chains, f)
+                pkl.dump(token_trajectory_chains, f)
             # save raw_results
             with open(get_enabled_save_path(
                 os.path.join(data_save_path, 'raw_results.pkl'), 
@@ -407,7 +429,7 @@ def main(
         return ppo_dataset
 
     # outputs_path = convert_path(f"outputs/chess/{exp_name}/")
-    outputs_path = f"gcs://rail-tpus-isadora/llm-rl-outputs/outputs/chess/{exp_name}/"
+    outputs_path = f"gcs://rail-tpus-isadora/maze/maze_{maze_name}/{exp_name}"
     save_dir, exp_name = setup_experiment_save(
         exp_name=exp_name, 
         outputs_path=outputs_path, 
