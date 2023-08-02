@@ -548,3 +548,4 @@ class GPT2ILQLPolicy(PPOPolicy):
     
     def set_params(self, policy_params: PyTree) -> None:
         self.inference = self.inference.replace(params=policy_params)
+        

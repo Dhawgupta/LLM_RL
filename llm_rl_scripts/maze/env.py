@@ -1,8 +1,9 @@
-from typing import Optional, Dict, List, Tuple
+from typing import Callable, Optional, Dict, List, Tuple
 from LLM_RL.environment import Text, TextEnv, TextHistory
 import numpy as np
 import random
 from llm_rl_scripts.maze.randomness import RandomState
+from IPython import embed
 
 def describe_objects(object: str, relations: List[str]):
     if len(relations) == 0:
@@ -47,6 +48,25 @@ def describe_observation(maze: np.ndarray,
         return f"{goal_description} {initial_description} {history_description} {wall_description}\n"
     return f"{goal_description} {history_description} {wall_description}\n"
 
+def describe_observation_give_position(maze:np.ndarray,
+                                       position: Tuple[int, int],
+                                       goal_position: Tuple[int, int],
+                                       initial_position: Tuple[int, int]=None,
+                                       move_history: List[str]=None,
+                                       ) -> str:
+    goal_description = f"The goal is at position {' '.join(str(goal_position[0]))}, {' '.join(str(goal_position[1]))}."
+    curr_position_description = f"Your current position is at position {' '.join(str(position[0]))}, {' '.join(str(position[1]))}."
+    delta_descriptions = {"to your right": (0, 1), "to your left": (0, -1), "above you": (-1, 0), "below you": (1, 0)} 
+
+    walls = []
+    for k, (dy, dx) in delta_descriptions.items():
+        if maze[position[0]+dy, position[1]+dx] == 1:
+            walls.append(k)
+    
+    wall_description = describe_objects("wall", walls)
+    
+    return f"{goal_description} {curr_position_description} {wall_description}\n"
+
 diagonal_actions = {
     'move left\n': (0, -1), 
     'move right\n': (0, 1), 
@@ -65,6 +85,9 @@ manhatten_actions = {
     'move down\n': (1, 0), 
 }
 
+def maze_proposal_function(text_history: TextHistory) -> List[TextHistory]:
+    return [text_history+(Text(action, True),) for action in manhatten_actions.keys()]
+
 def update_position(maze: np.ndarray, position: Tuple[int, int], action: str, actions: Dict[str, Tuple[int, int]]) -> Tuple[int, int]:
     if action in actions and maze[position[0] + actions[action][0], position[1] + actions[action][1]] == 0:
         return (position[0] + actions[action][0], position[1] + actions[action][1])
@@ -75,7 +98,8 @@ class MazeEnv(TextEnv):
                  valid_goals: np.ndarray, 
                  actions: Dict[str, Tuple[int, int]], 
                  max_steps: Optional[int]=None, 
-                 display_initial_position: bool=False):
+                 display_initial_position: bool=False,
+                 describe_function: Callable[[np.ndarray, Tuple[int, int], Tuple[int, int], Optional[Tuple[int, int]], Optional[List[str]]], str]=describe_observation,):
         assert len(maze.shape) == 2
         assert all([maze[goal[0], goal[1]] == 0 for goal in valid_goals])
 
@@ -84,29 +108,37 @@ class MazeEnv(TextEnv):
         self.actions = actions
         self.max_steps = max_steps
         self.display_initial_position = display_initial_position
+        self.num_steps = 0
+        self.describe_function = describe_function
+        self.move_history = []
         
         self.random_state = RandomState(None)
         self.reset()
     
     def step(self, text_history: TextHistory) -> Tuple[TextHistory, float, bool]:
         assert text_history[-1].is_action
-        
-        if self.max_steps is not None and (len(text_history) // 2) >= self.max_steps:
+        # embed()
+        if self.max_steps is not None and self.num_steps >= self.max_steps:
             return (Text("Failure\n", False),), -1.0, True
         
         action = text_history[-1].text    
         self.position = update_position(self.maze, self.position, action, self.actions)
         
+        self.move_history.append(action.replace('\n', ''))
+        
         if self.position[0] == self.goal[0] and self.position[1] == self.goal[1]:
             return (Text("Success\n", False),), 0.0, True
         
-        move_history = [text_history[i].text for i in range(0, len(text_history), 2) if text_history[i].is_action]
-        
-        obs_description = describe_observation(self.maze, self.position, self.goal, self.initial_position, move_history)
+        # move_history = [text_history[i].text for i in range(0, len(text_history), 2) if text_history[i].is_action]
+        self.num_steps += 1
+        obs_description = self.describe_function(self.maze, self.position, self.goal, self.initial_position, self.move_history)
+        if action not in self.actions:
+            return (Text(obs_description, False),), -4.0, False
         return (Text(obs_description, False),), -1.0, False
     
     def reset(self, seed: Optional[int] = None, options: Optional[Dict] = None) -> TextHistory:
         self.random_state.reset(seed)
+        self.num_steps = 0
 
         if options is not None and 'goal' in options:
             self.goal = options['goal']

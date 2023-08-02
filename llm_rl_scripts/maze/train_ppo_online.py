@@ -12,6 +12,7 @@ from JaxSeq.models.gpt2.interface import GPT2Train, GPT2Inference
 from JaxSeq.models.gpt2.load import load_train_state, ModelLoadMode
 import pickle as pkl
 from JaxSeq.data import Seq2SeqDataset
+from LLM_RL.algorithms.ppo.score_fn import build_ppo_score_fn
 from LLM_RL.algorithms.ppo.train import train_loop
 from LLM_RL.algorithms.ppo.base_interface import ppo_loss_fn, FixedKLController, AdaptiveKLController
 from transformers.generation import GenerationConfig
@@ -36,23 +37,9 @@ from JaxSeq.checkpointing import save_pytree_to_bucket, save_dataset_to_bucket
 from llm_rl_scripts.maze.mazes import maze2d_large, maze2d_medium, maze2d_umaze, double_t_maze
 
 from llm_rl_scripts.chess.env import FenChessHistoryEnv, FenChessHistoryEnvSingleTurn, large_piece_random_endgame, text_env_eval_chess_positions
-from llm_rl_scripts.maze.env import MazeEnv, manhatten_actions
-
+from llm_rl_scripts.maze.env import MazeEnv, describe_observation_give_position, manhatten_actions, describe_observation, maze_proposal_function
+from LLM_RL.algorithms.ppo.reranker_policy import ReRankerPolicy, ReRankerSamplePolicy
 # from LLM_RL.gpt2 import load_gpt2_from_pretrained
-
-class BitsTestEnv(TextEnv):
-    def __init__(self, n: int):
-        self.n = n
-
-    def step(self, text_history: TextHistory) -> Tuple[TextHistory, float, bool]:
-        try:
-            bits = list(map(int, text_history[-1].text.strip().split(' ')))
-        except:
-            bits = []
-        return text_history, float(sum(bits) > (self.n // 2))*10.0, True
-
-    def reset(self, seed: Optional[int]=None, options: Optional[Dict]=None) -> TextHistory:
-        return (Text(text='<|endoftext|>', is_action=False),)
 
 def main(
     model_load_mode: ModelLoadMode, 
@@ -134,7 +121,11 @@ def main(
     force_pad_embeddings: bool=False, 
 
     should_restore_loop_state: bool=False, 
+    
+    describe_function: str= "describe_observation",
+    reranker_policy: bool=False,
 ):
+    
     input_args = locals().copy()
     print(input_args)
 
@@ -142,7 +133,7 @@ def main(
     if not use_adaptive_kl:
         assert kl_target is None and kl_horizon is None
 
-    tokenizer = AutoTokenizer.from_pretrained('gpt2', model_max_length=max_input_length+max_output_length, is_split_into_words=True)
+    tokenizer = AutoTokenizer.from_pretrained('gpt2')
     tokenizer.add_special_tokens({'pad_token': '<|pad|>'})
 
     mesh = load_mesh((data_mesh_shape, fsdp_mesh_shape, model_mesh_shape), ('dp', 'fsdp', 'mp'))
@@ -174,7 +165,6 @@ def main(
     params_dtype = get_dtype(use_fp16=use_fp16_params)
 
     model_prng_key = jax.random.PRNGKey(2)
-    
     policy_train_state, policy_model = load_train_state(
         model_load_mode=model_load_mode, 
         model_load_path=convert_path(model_load_path) if model_load_mode != ModelLoadMode.HF else model_load_path, 
@@ -291,34 +281,51 @@ def main(
         kl_controller = FixedKLController(kl_coef=init_kl_coef)
     
     # setup environment
-    if maze_name == 'large':
-        maze = maze2d_large()
-        max_steps = 75
-    elif maze_name == 'medium':
-        maze = maze2d_medium()
-        max_steps = 50
-    elif maze_name == 'umaze':
+    if maze_name == 'umaze':
         maze = maze2d_umaze()
-        max_steps = 25
+        valid_goals = np.array([[3, 3]])
+        start_position = (3, 1)
     elif maze_name == "double_t_maze":
         maze = double_t_maze()
-        max_steps = 75
+        valid_goals = np.array([[8, 6]])
+        start_position = (1, 1)
     else:
         raise ValueError(f'unknown maze name: {maze_name}')
     
-    valid_goals = np.where(maze == 0)
-    valid_goals = np.array(list(zip(valid_goals[0], valid_goals[1])), dtype=np.int32)
+    # valid_goals = np.where(maze == 0)
+    # valid_goals = np.array(list(zip(valid_goals[0], valid_goals[1])), dtype=np.int32)
+    if describe_function == "describe_observation":
+        describe_function = describe_observation
+    elif describe_function == "describe_observation_give_position":
+        describe_function = describe_observation_give_position
+    else:
+        raise ValueError(f'unknown describe function: {describe_function}')
     
     env = MazeEnv(
         maze=maze, 
         valid_goals=valid_goals, 
         actions=manhatten_actions, 
-        max_steps=max_steps, 
+        max_steps=100, 
         display_initial_position=True,
+        describe_function=describe_function,
     )
 
     data_round = 0
     def ppo_dataset_loader(ppo_inference: GPT2ILQLInference, policy: GPT2ILQLPolicy) -> PPODataset:
+        
+        # reranker_policy = 
+        if reranker_policy:
+            policy = ReRankerSamplePolicy(
+                proposal_fn=maze_proposal_function, 
+                score_fn=build_ppo_score_fn(
+                    inference=ppo_inference,
+                    tokenizer=tokenizer,
+                    max_length=max_input_length+max_output_length,
+                    bsize=ppo_data_bsize,
+                )
+                
+            )
+        
         print("collecting data ...")
         nonlocal data_round
         raw_results, summary_results = text_env_eval(
@@ -326,43 +333,35 @@ def main(
             policy=policy,
             n_rollouts=n_rollouts,
             bsize=rollout_bsize,
+            env_options={"init_position": start_position},
         )
         summary_results = pull_logs(summary_results)
 
-        text_trajectories = []
-        token_trajectory_chains = []
-        for interaction in raw_results:
-            rewards = [0.0]
-            for transition in interaction:
-                rewards.append(transition.reward)
-                rewards.append(0.0)
-
-            text_history = interaction[-1].post_transition_history
-            done = interaction[-1].done
-            while True:
-                text_trajectory = TextTrajectory(
-                    text_history=text_history, 
-                    reward=tuple(rewards),
-                    done=done, 
+        text_trajectory_chains = []
+        for raw_result in raw_results:
+            curr_chain = []
+            for transition in raw_result:
+                try: 
+                    text_trajectory = TextTrajectory(
+                        text_history=transition.post_action_history, 
+                        reward=[0.0, transition.reward], 
+                        done=transition.done, 
+                    )
+                    curr_chain.append(text_trajectory)
+                except:
+                    embed()
+            
+            chain = None
+            for text_trajectory in curr_chain[::-1]:
+                chain = TextTrajectoryChain(
+                    text_trajectory=text_trajectory, 
+                    next=chain, 
                 )
-                token_trajectory = TokenTrajectory.from_text_trajectory(text_trajectory, tokenizer)
-                if token_trajectory.tokens.shape[0] < max_input_length+max_output_length:
-                    break
-
-                # truncate one step
-                text_history = text_history[:-2]
-                last_r = rewards[-2]
-                rewards = rewards[:-2]
-                rewards[-2] += last_r * gamma
-                done = False
-
-            if token_trajectory.tokens.shape[0] == 0:
-                continue
-            text_trajectories.append(text_trajectory)
-            token_trajectory_chains.append(TokenTrajectoryChain(token_trajectory, None))
+            
+            text_trajectory_chains.append(chain)
         
-        ppo_data, all_kls = ppo_inference.get_ppo_data_from_token_trajectory_chain(
-            token_trajectory_chains, 
+        ppo_data, all_kls = ppo_inference.get_ppo_data_from_text_trajectory_chain(
+            text_trajectory_chains, 
             bsize=ppo_data_bsize, 
             max_length=max_input_length+max_output_length, 
             gamma=gamma, 
@@ -406,10 +405,10 @@ def main(
                 pkl.dump(ppo_dataset, f)
             # save text_trajectory_chains
             with open(get_enabled_save_path(
-                os.path.join(data_save_path, 'token_trajectory_chains.pkl'), 
+                os.path.join(data_save_path, 'text_trajectory_chains.pkl'), 
                 enabled=is_main_process, 
             ), 'wb') as f:
-                pkl.dump(token_trajectory_chains, f)
+                pkl.dump(text_trajectory_chains, f)
             # save raw_results
             with open(get_enabled_save_path(
                 os.path.join(data_save_path, 'raw_results.pkl'), 

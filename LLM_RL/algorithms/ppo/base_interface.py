@@ -75,6 +75,9 @@ class FixedKLController:
         """
         pass
 
+def ppo_score_fn():
+    
+    pass
 
 def ppo_loss_fn(
     attention_mask: jax.Array, # [batch, time-1] – output is masked; shift x[1:]
