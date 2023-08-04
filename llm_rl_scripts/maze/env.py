@@ -5,6 +5,8 @@ import random
 from llm_rl_scripts.maze.randomness import RandomState
 from IPython import embed
 
+
+
 def describe_objects(object: str, relations: List[str]):
     if len(relations) == 0:
         return f"There are no {object}s near you."
@@ -93,13 +95,30 @@ def update_position(maze: np.ndarray, position: Tuple[int, int], action: str, ac
         return (position[0] + actions[action][0], position[1] + actions[action][1])
     return position
 
+def standard_reward(action, goal, position, possible_actions):
+    if position[0] == goal[0] and position[1] == goal[1]:
+        return 0.0
+    elif action not in possible_actions:
+        return -4.0
+    else:
+        return -1.0
+
+def illegal_penalty_reward(action, goal, position, possible_actions):
+    if position[0] == goal[0] and position[1] == goal[1]:
+        return 1.0
+    elif action not in possible_actions:
+        return -1.0
+    else:
+        return 0.0
+
 class MazeEnv(TextEnv):
     def __init__(self, maze: np.ndarray, 
                  valid_goals: np.ndarray, 
                  actions: Dict[str, Tuple[int, int]], 
                  max_steps: Optional[int]=None, 
                  display_initial_position: bool=False,
-                 describe_function: Callable[[np.ndarray, Tuple[int, int], Tuple[int, int], Optional[Tuple[int, int]], Optional[List[str]]], str]=describe_observation,):
+                 describe_function: Callable[[np.ndarray, Tuple[int, int], Tuple[int, int], Optional[Tuple[int, int]], Optional[List[str]]], str]=describe_observation,
+                 reward_function: Callable[[str, Tuple[int, int], Tuple[int, int], Dict[str, Tuple[int, int]]], float]=standard_reward,):
         assert len(maze.shape) == 2
         assert all([maze[goal[0], goal[1]] == 0 for goal in valid_goals])
 
@@ -111,6 +130,8 @@ class MazeEnv(TextEnv):
         self.num_steps = 0
         self.describe_function = describe_function
         self.move_history = []
+        
+        self.reward_function = reward_function
         
         self.random_state = RandomState(None)
         self.reset()
@@ -126,15 +147,16 @@ class MazeEnv(TextEnv):
         
         self.move_history.append(action.replace('\n', ''))
         
+        reward = self.reward_function(action, self.goal, self.position, self.actions)
         if self.position[0] == self.goal[0] and self.position[1] == self.goal[1]:
-            return (Text("Success\n", False),), 0.0, True
+            return (Text("Success\n", False),), reward, True
         
         # move_history = [text_history[i].text for i in range(0, len(text_history), 2) if text_history[i].is_action]
         self.num_steps += 1
         obs_description = self.describe_function(self.maze, self.position, self.goal, self.initial_position, self.move_history)
         if action not in self.actions:
-            return (Text(obs_description, False),), -4.0, False
-        return (Text(obs_description, False),), -1.0, False
+            return (Text(obs_description, False),), reward, False
+        return (Text(obs_description, False),), reward, False
     
     def reset(self, seed: Optional[int] = None, options: Optional[Dict] = None) -> TextHistory:
         self.random_state.reset(seed)

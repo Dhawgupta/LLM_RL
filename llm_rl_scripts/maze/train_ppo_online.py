@@ -18,7 +18,7 @@ from LLM_RL.algorithms.ppo.base_interface import ppo_loss_fn, FixedKLController,
 from transformers.generation import GenerationConfig
 from jaxtyping import PyTree
 import re
-from LLM_RL.environment import TextEnv, TextHistory, Text, TokenTrajectory, interact_environment, text_env_eval, TextTrajectory, TextTrajectoryChain, TokenTrajectoryChain
+from LLM_RL.environment import TextEnv, TextHistory, Text, TokenHistory, TokenTrajectory, interact_environment, text_env_eval, TextTrajectory, TextTrajectoryChain, TokenTrajectoryChain, text_history_to_str
 from LLM_RL.algorithms.ppo.gpt2.interface import GPT2ILQLPolicy, GPT2ILQLInference, GPT2PPOTrain
 from LLM_RL.heads.linear_head import load_train_state_from_config as load_head_train_state_from_config
 from LLM_RL.heads.linear_head import LinearHeadConfig
@@ -35,18 +35,24 @@ from llm_rl_scripts.chess.data import get_random_positions_not_in_test
 from tqdm.auto import tqdm
 from JaxSeq.checkpointing import save_pytree_to_bucket, save_dataset_to_bucket
 from llm_rl_scripts.maze.mazes import maze2d_large, maze2d_medium, maze2d_umaze, double_t_maze
+from JaxSeq.data import MaskDataset
+from JaxSeq.models.gpt2.interface import loss_fn_mask
 
 from llm_rl_scripts.chess.env import FenChessHistoryEnv, FenChessHistoryEnvSingleTurn, large_piece_random_endgame, text_env_eval_chess_positions
 from llm_rl_scripts.maze.env import MazeEnv, describe_observation_give_position, manhatten_actions, describe_observation, maze_proposal_function
 from LLM_RL.algorithms.ppo.reranker_policy import ReRankerPolicy, ReRankerSamplePolicy
+from JaxSeq.utils import pad_sequence, block_sequences
+from llm_rl_scripts.maze.maze_utils import setup_maze_env, pick_start_position
 # from LLM_RL.gpt2 import load_gpt2_from_pretrained
 
 def main(
     model_load_mode: ModelLoadMode, 
     model_load_path: str, 
-
+    
     /,  # Mark the end of positional arguments.
-
+    bc_data_path: Optional[str]=None,
+    train_bc_bsize: int=8,
+    bc_loss_weight:int=0,
     model_str:str="gpt2",
     
     exp_name: Optional[str]=None, 
@@ -124,6 +130,8 @@ def main(
     
     describe_function: str= "describe_observation",
     reranker_policy: bool=False,
+    
+    reward_function: str="standard_reward",
 ):
     
     input_args = locals().copy()
@@ -135,6 +143,28 @@ def main(
 
     tokenizer = AutoTokenizer.from_pretrained('gpt2')
     tokenizer.add_special_tokens({'pad_token': '<|pad|>'})
+    
+    if bc_data_path is not None:
+        with open(bc_data_path, 'rb') as f:
+            text_histories = pkl.load(f)
+
+        blocking_strategy = BlockingStrategy(Padding.RIGHT, Truncation.RIGHT, max_input_length+max_output_length)
+        
+        # in_tokens = list(map(lambda x: block_sequences([x.tokens], tokenizer.pad_token_id, dtype=np.int32, blocking_strategy=BlockingStrategy(Padding.RIGHT, Truncation.RIGHT, max_input_length))[0], text_histories))
+        # text_histories = list(map(lambda x: x.text_history, text_trajectories))
+        # no this doesn't work because we also need to pad the is_actions
+        token_histories = list(map(lambda x: TokenHistory.from_text_history(x, tokenizer), text_histories))
+        in_tokens = list(map(lambda x: block_sequences([x.tokens], tokenizer.pad_token_id, dtype=np.int32, blocking_strategy=blocking_strategy)[0], token_histories))
+        is_actions = list(map(lambda x: block_sequences([x.is_action], 0.0, dtype=np.float32, blocking_strategy=blocking_strategy)[0], token_histories))
+        # tokens = list(map(lambda x: token_process(x.tokens), token_histories))
+        # is_actions = list(map(lambda x: x.is_action, token_histories))
+
+        bc_data = MaskDataset(
+            in_tokens = jnp.array(in_tokens),
+            in_training_mask = jnp.array(is_actions),
+        )
+    else:
+        bc_data = None
 
     mesh = load_mesh((data_mesh_shape, fsdp_mesh_shape, model_mesh_shape), ('dp', 'fsdp', 'mp'))
     is_main_process = jax.process_index() == 0
@@ -264,6 +294,8 @@ def main(
         value_head_model=value_head, 
         tokenizer=tokenizer, 
         loss_fn=loss_f, 
+        bc_loss_fn=loss_fn_mask if bc_data is not None else None,
+        bc_loss_weight=bc_loss_weight if bc_data is not None else 0.0,
     )
 
     ppo_trainer = GPT2PPOTrain.load_train(
@@ -273,48 +305,25 @@ def main(
         value_head_model=value_head, 
         tokenizer=tokenizer, 
         loss_fn=loss_f, 
+        bc_loss_fn=loss_fn_mask if bc_data is not None else None,
+        bc_loss_weight=bc_loss_weight if bc_data is not None else 0.0,
     )
 
     if use_adaptive_kl:
         kl_controller = AdaptiveKLController(init_kl_coef=init_kl_coef, target=kl_target, horizon=kl_horizon)
     else:
         kl_controller = FixedKLController(kl_coef=init_kl_coef)
+
     
-    # setup environment
-    if maze_name == 'umaze':
-        maze = maze2d_umaze()
-        valid_goals = np.array([[3, 3]])
-        start_position = (3, 1)
-    elif maze_name == "double_t_maze":
-        maze = double_t_maze()
-        valid_goals = np.array([[8, 6]])
-        start_position = (1, 1)
-    else:
-        raise ValueError(f'unknown maze name: {maze_name}')
-    
-    # valid_goals = np.where(maze == 0)
-    # valid_goals = np.array(list(zip(valid_goals[0], valid_goals[1])), dtype=np.int32)
-    if describe_function == "describe_observation":
-        describe_function = describe_observation
-    elif describe_function == "describe_observation_give_position":
-        describe_function = describe_observation_give_position
-    else:
-        raise ValueError(f'unknown describe function: {describe_function}')
-    
-    env = MazeEnv(
-        maze=maze, 
-        valid_goals=valid_goals, 
-        actions=manhatten_actions, 
-        max_steps=100, 
-        display_initial_position=True,
-        describe_function=describe_function,
-    )
+    env = setup_maze_env(maze_name=maze_name, describe_function=describe_function, reward_function=reward_function)
+    start_position = pick_start_position(maze_name=maze_name)
 
     data_round = 0
     def ppo_dataset_loader(ppo_inference: GPT2ILQLInference, policy: GPT2ILQLPolicy) -> PPODataset:
         
         # reranker_policy = 
         if reranker_policy:
+            print("reranker policy!")
             policy = ReRankerSamplePolicy(
                 proposal_fn=maze_proposal_function, 
                 score_fn=build_ppo_score_fn(
@@ -470,7 +479,9 @@ def main(
         wandb_project=wandb_project, 
         wandb_run_name=exp_name, 
         wandb_config=None, 
-        is_main_process=is_main_process, 
+        is_main_process=is_main_process,
+        bc_dataset=bc_data,
+        bc_bsize=train_bc_bsize, 
         **loop_state, 
     )
 

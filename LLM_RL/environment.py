@@ -219,7 +219,7 @@ def text_env_eval(
     verbose: bool=True, 
 ) -> Tuple[List[List[InteractionTransition]], Dict[str, Any]]:
     
-    interactions, rewards, dones = [], [], []
+    interactions, rewards, dones, eps_lengths = [], [], [], []
     for _ in tqdm(range((n_rollouts+(bsize-1))//bsize), disable=not verbose):
         actual_bsize = min(n_rollouts-len(interactions), bsize)
         npad = bsize - actual_bsize
@@ -237,6 +237,7 @@ def text_env_eval(
             interactions.append(interaction)
             rewards.append(sum(map(lambda x: x.reward, interaction)))
             dones.append(interaction[-1].done)
+            eps_lengths.append(len(interaction))
             if interaction_callback is not None:
                 interaction_callback(interaction)
     
@@ -255,6 +256,12 @@ def text_env_eval(
             min=np.min(dones), 
             max=np.max(dones), 
         ), 
+        length=dict(
+            mean=np.mean(eps_lengths),
+            std=np.std(eps_lengths),
+            min=np.min(eps_lengths),
+            max=np.max(eps_lengths),
+        ),
     )
     
     return interactions, results_summary

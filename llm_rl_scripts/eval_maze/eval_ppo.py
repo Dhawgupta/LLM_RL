@@ -33,20 +33,20 @@ import json
 from JaxSeq.utils import multihost_device_get
 from llm_rl_scripts.chess.data import chess_text_trajectory_chain_from_json, get_data_from_bucket, get_random_positions_not_in_test
 from google.cloud import storage
+from IPython import embed
 
 from JaxSeq.checkpointing import load_pytree, save_pytree
 
 from llm_rl_scripts.chess.env import FenChessHistoryEnv, text_env_eval_chess_positions
+from llm_rl_scripts.maze.maze_utils import setup_maze_env
 
 def main(
-    exp_name: str="ppo_online_endgames_queen_rook",
+    exp_name: str="ppo_umaze",
     model_load_mode: ModelLoadMode=ModelLoadMode.TRAIN_STATE,
     model_load_path: str="outputs/chess/test_bc_shuffled2/model/",
     checkpoint_dir: str="/home/isadoracw/isadoracw/LLM_RL/outputs/chess/lr1e-6_ppo_online_endgames_queen_rook/lr1e-6_ppo_online_endgames_queen_rook.2023-06-05-07-13-26.269.76fee0fa037011eeb99cbd216c6583a9/round_99",
     
-    random_positions: bool=False,
-    save_positions:bool=False,
-    output_path: str="logs/chess/",
+    output_path: str="logs/maze/",
     data_mesh_shape:int=1,
     fsdp_mesh_shape:int=1,
     model_mesh_shape:int=1,
@@ -61,26 +61,9 @@ def main(
     max_eval_length:int=512,
     
     n_rollouts:int=16,
-    full_games:bool=False,
     random_opponent:bool=False,
     
-    maze_name:str="umaze",
-    describe_function:str="describe_observation",
-    
 ):
-    # get checkpoint directory
-    # checkpoint_dir = "~/isadoracw/LLM_RL/outputs/chess/ppo_online_endgames_queen_rook/ppo_online_endgames_queen_rook.2023-06-04-22-46-25.986.a317fd12032911ee9fce87d7217c0314/round_59/"
-    # policy_path = os.path.join(checkpoint_dir, "policy", "train_state.msgpack")
-    # value_head_path = os.path.join(checkpoint_dir, "value_head", "train_state.msgpack")
-
-    # # load checkpoints from checkpoint directory
-    # target = TrainState 
-
-    # policy_train_state = load_pytree(policy_path, target=target)
-    # policy_params = policy_train_state["params"]
-
-    # value_head_train_state = load_pytree(value_head_path, target=target)
-    # value_head_params = value_head_train_state["params"]
 
     tokenizer = AutoTokenizer.from_pretrained('gpt2')
     tokenizer.add_special_tokens({'pad_token': '<|pad|>'})
@@ -151,7 +134,7 @@ def main(
         prng_key=policy_prng, 
         generation_config=GenerationConfig(
             do_sample=policy_do_sample, 
-            num_beams=1, 
+            num_beams=policy_num_beams, 
             temperature=policy_temperature, 
             top_p=policy_top_p, 
             top_k=policy_top_k, 
@@ -167,83 +150,14 @@ def main(
         out_str_process=lambda x: x.removesuffix('\n')+'\n', 
     )
     
-    def value_head_optim_getter(params: PyTree):
-        mask = get_weight_decay_mask(("bias",))(params)
-        return optax.MultiSteps(
-            optax.adamw(
-                learning_rate=1e-5, 
-                b1=0.9, 
-                b2=0.95, 
-                eps=1e-8, 
-                weight_decay=0.0, 
-                mask=mask, 
-            ), 
-            every_k_schedule=4, 
-        )
-    
-    head_prng_key = jax.random.PRNGKey(3)
-    value_head_train_state, value_head = load_head_train_state_from_config(
-        model_config=LinearHeadConfig(
-            input_dim=policy_model.config.n_embd, 
-            output_dim=1, 
-            use_bias=True, 
-            initializer_range=0.0, 
-        ), 
-        model_dtype=jnp.float32, 
-        optim_getter=value_head_optim_getter, 
-        mesh=mesh, 
-        prng_key=head_prng_key, 
-        pad_to_output_dim=None, 
-        params_dtype=jnp.float32, 
-    )
-    
-    ppo_inference = GPT2ILQLInference.load_inference(
-        initial_policy_params=initial_policy_params, 
-        policy_params=policy_train_state.params, 
-        value_head_params=value_head_train_state.params, 
-        initial_policy_model=policy_model, 
-        policy_model=policy_model, 
-        value_head_model=value_head, 
-        tokenizer=tokenizer, 
-        loss_fn=None, 
-    )
-    bucket_name = "rail-tpus-isadora"
-    blob_name = "queen_rook_unopposed/queen_rook_unopposed/tricky_test_positions.jsonl"
-    if random_positions:
-        print("evaluating from random positions...")
-        test_positions = get_random_positions_not_in_test(bucket_name=bucket_name, blob_name=blob_name, num_pos_per_setup=4)
-    elif save_positions:
-        print("evaluating from saved postiions...")
-        positions_path = "outputs/chess/lr1e-6_ppo_online_endgames_queen_rook_save/lr1e-6_ppo_online_endgames_queen_rook_save.2023-06-06-19-22-40.564.8100307e049f11ee8b308de166d61c57/ppo_start_positions.jsonl"
-        with open(positions_path, "r+") as f:
-            positions = list(f)
-            positions = positions[19*16:20*16]
-            print(positions)
-            test_positions = [position.replace("\n", "").replace("\"", "") for position in positions]    
-    elif not full_games:
-        print("evaluating from tricky test positions...")
-        test_positions = get_data_from_bucket(bucket_name, blob_name)
-        # test_positions = test_positions[:500]
-        test_positions = [position.replace("\n", "").replace("\"", "") for position in test_positions if position != ""]
-    
-    if full_games:
-        print("evaluating from beginning of game...")
-        raw_results, summary_results = text_env_eval_chess_positions(
-            positions=[chess.Board().fen()],
-            policy=policy,
-            n_rollouts=n_rollouts,
-            bsize=8,
-            random_opponent=random_opponent,
-        )
-    else:
+    env = setup_maze_env(maze_name='umaze', describe_function='describe_observation_give_position')
         
-        raw_results, summary_results = text_env_eval_chess_positions(
-            positions=test_positions,
-            policy=policy,
-            n_rollouts=16 if random_positions or save_positions else 1, 
-            bsize=8, 
-            random_opponent=random_opponent,
-        )
+    raw_results, summary_results = text_env_eval(
+        env=env,
+        policy=policy,
+        n_rollouts=n_rollouts, 
+        bsize=8, 
+    )
     
     # check output directory
     save_dir = None
@@ -269,7 +183,4 @@ def main(
     
 if __name__ == "__main__":
     tyro.cli(main) 
-
-    
-
     #  
