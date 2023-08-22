@@ -108,7 +108,7 @@ def main(
     policy_top_p: Optional[float]=None, 
     policy_top_k: Optional[int]=None, 
 
-    gamma: float=1.0, 
+    gamma: float=0.99, 
     lam: float=0.95, 
     use_advantage_whitening: bool=True, 
 
@@ -379,7 +379,7 @@ def main(
 
         return ppo_dataset
 
-    outputs_path = f"/nfs/nfs1/users/isadoracw/LLM_RL/outputs/chess/{exp_name}/"
+    outputs_path = f"gcs://rail-tpus-isadora/llm-rl-outputs/outputs/chess/{exp_name}/"
     save_dir, exp_name = setup_experiment_save(
         exp_name=exp_name, 
         outputs_path=convert_path(outputs_path), 

@@ -112,7 +112,7 @@ def main(
     policy_top_p: Optional[float]=None, 
     policy_top_k: Optional[int]=None, 
 
-    gamma: float=1.0, 
+    gamma: float=0.99, 
     lam: float=0.95, 
     use_advantage_whitening: bool=True, 
 
