@@ -10,6 +10,5 @@ dump.rdb
 secrets.sh
 *.egg-info/
 logs/*
-experiments/*
 setup*
 
