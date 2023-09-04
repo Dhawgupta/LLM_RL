@@ -25,9 +25,8 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 def main(
     model_load_mode: ModelLoadMode, 
     model_load_path: str, 
-    tokenizer_path: str, 
+    tokenizer_path: str,
     train_data_path: str, 
-    # eval_data_path: str, 
 
     /,  # Mark the end of positional arguments.
 
@@ -99,7 +98,13 @@ def main(
     # )
     
     # tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
-    tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
+    tokenizer = load_tokenizer(
+        tokenizer_path, 
+        bos_token="<s>", 
+        eos_token="</s>", 
+        add_bos_token=False, 
+        add_eos_token=False, 
+    )
     tokenizer.pad_token_id = tokenizer.unk_token_id
     tokenizer.add_special_tokens({'bos_token': '<s>', 'eos_token': '</s>'})
 
@@ -176,7 +181,7 @@ def main(
         optim_getter=optim_getter, 
         tokenizer=tokenizer, 
         mesh=mesh, 
-        model_prng_key=model_prng_key, 
+        prng_key=model_prng_key, 
         force_pad_embeddings=force_pad_embeddings, 
         params_dtype=jnp.float32, 
     )
