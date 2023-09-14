@@ -12,7 +12,6 @@ import jax
 from jax.sharding import NamedSharding
 from jax.sharding import PartitionSpec as PS
 import jax.numpy as jnp
-from LLM_RL.algorithms.ilql.gpt2.interface import GPTJValueRLInference
 
 
 class GPT2MCTrain(MCTrain):

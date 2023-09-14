@@ -13,9 +13,9 @@ from jax.sharding import NamedSharding
 from jax.sharding import PartitionSpec as PS
 import jax.numpy as jnp
 import optax
-from LLM_RL.algorithms.value_rl_base.gptj.interface import GPTJValueRLInference
+from LLM_RL.algorithms.value_rl_base.gpt2.interface import GPT2ValueRLInference
 
-class GPTJILQLTrain(ILQLTrain):
+class GPT2ILQLTrain(ILQLTrain):
     @classmethod
     def load_train(
         cls, 
@@ -381,12 +381,12 @@ class GPTJILQLTrain(ILQLTrain):
             _step=_step, 
         )
 
-class GPTJILQLInference(ILQLInference):
+class GPT2ILQLInference(ILQLInference):
     @classmethod
     def load_inference(
         cls, 
-        value_inference: GPTJValueRLInference, 
-        target_value_inference: GPTJValueRLInference, 
+        value_inference: GPT2ValueRLInference, 
+        target_value_inference: GPT2ValueRLInference, 
         loss_fn: Callable, 
     ):
         mesh = value_inference.base_model.config.mesh
