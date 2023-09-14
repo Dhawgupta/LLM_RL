@@ -21,6 +21,13 @@ import json
 import numpy as np
 from transformers import AutoTokenizer
 from JaxSeq.bucket_manager import open_with_bucket as open
+from LLM_RL.algorithms.ppo.reranker_policy import ReRankerSamplePolicy
+from LLM_RL.algorithms.ppo.score_fn import build_ppo_score_fn
+
+from LLM_RL.environment import text_env_eval
+from llm_rl_scripts.maze.env import maze_proposal_function
+from llm_rl_scripts.maze.maze_utils import pick_start_position, setup_maze_env
+from llm_rl_scripts.maze.mazes import double_t_maze
 
 def main(
     model_load_mode: ModelLoadMode, 
@@ -85,6 +92,7 @@ def main(
     force_pad_embeddings: bool=False, 
 
     should_restore_loop_state: bool=False, 
+    traj_max_length:int=40
 ):
     input_args = locals()
     print(input_args)
@@ -97,15 +105,20 @@ def main(
     print(f"Mesh: {mesh}")
     print(f"Is main process: {is_main_process}")
     
-    
-    
-    
+    def str_iterable(filename: str):
+        with open(filename, "r") as f:
+            for item in f:
+                obj = json.loads(item)
+                for i in range(0, len(obj['text_history']), 2):
+                    start_idx = max(0, i-traj_max_length)
+                    in_text = " ".join(obj['text_history'][start_idx:i+1])
+                    out_text = obj['text_history'][i+1]
+                    yield {"in_text":in_text, "out_text":out_text}
 
     train_data = Seq2SeqIterableDataset.from_str_iterable(
         MapIterable(
             lambda x: (tokenizer.bos_token+x['in_text'].removeprefix(tokenizer.bos_token), x['out_text']), 
-            FileOpenIterable(convert_path(train_data_path), 'r', pipe=jsonl_stream), 
-        ), 
+            str_iterable(convert_path(train_data_path))), 
         tokenizer=tokenizer, 
         in_blocking_strategy=BlockingStrategy(
             padding=Padding.LEFT, 
@@ -122,8 +135,7 @@ def main(
     eval_data = Seq2SeqIterableDataset.from_str_iterable(
         MapIterable(
             lambda x: (tokenizer.bos_token+x['in_text'].removeprefix(tokenizer.bos_token), x['out_text']), 
-            FileOpenIterable(convert_path(eval_data_path), 'r', pipe=jsonl_stream), 
-        ), 
+            str_iterable(convert_path(train_data_path))), 
         tokenizer=tokenizer, 
         in_blocking_strategy=BlockingStrategy(
             padding=Padding.LEFT, 
@@ -204,76 +216,121 @@ def main(
         script__file__=__file__, 
         is_main_process=is_main_process, 
     )
-
     
-    eval_prng = jax.random.PRNGKey(0)
-    eval_round = 0
+    maze_name = "double_t_maze"
+    describe_function = "describe_observation_only_walls"
+    reward_function = "standard_reward"
+    
+    maze = double_t_maze()
+    
+    env = setup_maze_env(maze_name=maze_name, describe_function=describe_function, reward_function=reward_function)
+    start_position = pick_start_position(maze_name=maze_name)
+    possible_positions = zip(*np.where(maze==0))
+    
     def evaluator(inference: GPT2Inference):
-        nonlocal eval_prng
-        nonlocal eval_round
-
-        loss_metrics = eval_loss(
+        data_results = eval_loss(
             inference=inference, 
             dataset=eval_data, 
-            prng_key=None, 
-            bsize=eval_loss_bsize, 
-            eval_batches=eval_loss_batches, 
+            prng_key=jax.random.PRNGKey(1), 
+            bsize=4, 
+            prefetch_batches=None, 
+            eval_batches=64, 
         )
-
-        generation_examples = []
-        with open(convert_path(eval_data_path), 'r') as f:
-            for item in jsonl_stream(f):
-                if len(generation_examples) >= generation_bsize*generation_batches:
-                    break
-                generation_examples.append(item)
         
-        eval_prng, new_prng = jax.random.split(eval_prng)
-        generation_data = generate_language(
-            inference=inference, 
-            prompts=list(map(lambda x: tokenizer.bos_token+x['in_text'].removeprefix(tokenizer.bos_token), generation_examples)), 
-            references=list(map(lambda x: x['stockfish_actions'], generation_examples)), 
-            prng_key=new_prng, 
-            bsize=generation_bsize, 
-            generation_batches=generation_batches, 
-            blocking_strategy=BlockingStrategy(
-                padding=Padding.LEFT, 
-                truncation=Truncation.LEFT, 
-                max_length=max_input_length
-            ), 
-            generation_config=GenerationConfig(
-                max_length=max_input_length+max_output_length, 
-                do_sample=False, 
-                num_beams=1, 
-                pad_token_id=tokenizer.pad_token_id, 
-                eos_token_id=tokenizer.encode('\n')[0], 
-                temperature=None, 
-                top_k=None, 
-                top_p=None, 
-            ), 
-        )
+        results = {}
+        for position in possible_positions:
+            position = tuple(position)
+            results[position] = text_env_eval(
+                env=env, 
+                policy=ReRankerSamplePolicy(
+                    proposal_fn=maze_proposal_function, 
+                    score_fn=build_ppo_score_fn(
+                        inference=inference, 
+                        tokenizer=tokenizer, 
+                        max_length=8, 
+                        bsize=4, 
+                    )
+                ), 
+                n_rounds=1, 
+                verbose=True, 
+                save_path=None, 
+                seed=1, 
+                env_options={"init_position": position},
+                save_config=None, 
+            )
+        # avg_position_results = results["avg_reward"]
+        #TODO: accuracy metric
+        return data_results['loss'], {'data': data_results, 'sample_env': results}
 
-        for item in generation_data:
-            generation = item['generation'].split('\n', 1)[1].replace(" ", "").strip()
-            refs = list(map(lambda x: x.replace(" ", "").strip(), item['reference']))
-            item['parsed_generation'] = generation
-            item['refs'] = refs
-            item['move_match'] = float(item['parsed_generation'] in item['refs'])
+    
+    # eval_prng = jax.random.PRNGKey(0)
+    # eval_round = 0
+    # def evaluator(inference: GPT2Inference):
+    #     nonlocal eval_prng
+    #     nonlocal eval_round
 
-        if save_dir is not None:
-            generations_save_dir = os.path.join(save_dir, 'generations', str(eval_round))
-            if is_main_process:
-                create_path(generations_save_dir)
-            with open(get_enabled_save_path(
-                os.path.join(generations_save_dir, 'generations.json'), 
-                enabled=is_main_process, 
-            ), 'w') as f:
-                json.dump(generation_data, f)
+    #     loss_metrics = eval_loss(
+    #         inference=inference, 
+    #         dataset=eval_data, 
+    #         prng_key=None, 
+    #         bsize=eval_loss_bsize, 
+    #         eval_batches=eval_loss_batches, 
+    #     )
+
+    #     generation_examples = []
+    #     with open(convert_path(eval_data_path), 'r') as f:
+    #         for item in jsonl_stream(f):
+    #             if len(generation_examples) >= generation_bsize*generation_batches:
+    #                 break
+    #             generation_examples.append(item)
         
-        move_accuracy = np.mean(list(map(lambda x: x['move_match'], generation_data)))
+    #     eval_prng, new_prng = jax.random.split(eval_prng)
+    #     generation_data = generate_language(
+    #         inference=inference, 
+    #         prompts=list(map(lambda x: tokenizer.bos_token+x['in_text'].removeprefix(tokenizer.bos_token), generation_examples)), 
+    #         references=list(map(lambda x: x['stockfish_actions'], generation_examples)), 
+    #         prng_key=new_prng, 
+    #         bsize=generation_bsize, 
+    #         generation_batches=generation_batches, 
+    #         blocking_strategy=BlockingStrategy(
+    #             padding=Padding.LEFT, 
+    #             truncation=Truncation.LEFT, 
+    #             max_length=max_input_length
+    #         ), 
+    #         generation_config=GenerationConfig(
+    #             max_length=max_input_length+max_output_length, 
+    #             do_sample=False, 
+    #             num_beams=1, 
+    #             pad_token_id=tokenizer.pad_token_id, 
+    #             eos_token_id=tokenizer.encode('\n')[0], 
+    #             temperature=None, 
+    #             top_k=None, 
+    #             top_p=None, 
+    #         ), 
+    #     )
 
-        eval_round += 1
+    #     for item in generation_data:
+    #         generation = item['generation'].split('\n', 1)[1].replace(" ", "").strip()
+    #         refs = list(map(lambda x: x.replace(" ", "").strip(), item['reference']))
+    #         item['parsed_generation'] = generation
+    #         item['refs'] = refs
+    #         item['move_match'] = float(item['parsed_generation'] in item['refs'])
 
-        return loss_metrics['loss'], {'loss_metrics': loss_metrics, 'move_accuracy': move_accuracy}
+    #     if save_dir is not None:
+    #         generations_save_dir = os.path.join(save_dir, 'generations', str(eval_round))
+    #         if is_main_process:
+    #             create_path(generations_save_dir)
+    #         with open(get_enabled_save_path(
+    #             os.path.join(generations_save_dir, 'generations.json'), 
+    #             enabled=is_main_process, 
+    #         ), 'w') as f:
+    #             json.dump(generation_data, f)
+        
+    #     move_accuracy = np.mean(list(map(lambda x: x['move_match'], generation_data)))
+
+    #     eval_round += 1
+
+    #     return loss_metrics['loss'], {'loss_metrics': loss_metrics, 'move_accuracy': move_accuracy}
     
     train_prng = jax.random.PRNGKey(1)
     save_dtype = jnp.bfloat16 if save_bf16 else jnp.float32

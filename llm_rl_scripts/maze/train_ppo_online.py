@@ -39,7 +39,7 @@ from JaxSeq.data import MaskDataset
 from JaxSeq.models.gpt2.interface import loss_fn_mask
 
 from llm_rl_scripts.chess.env import FenChessHistoryEnv, FenChessHistoryEnvSingleTurn, large_piece_random_endgame, text_env_eval_chess_positions
-from llm_rl_scripts.maze.env import MazeEnv, describe_observation_give_position, manhatten_actions, describe_observation, maze_proposal_function
+from llm_rl_scripts.maze.env import MazeEnv, describe_observation_give_position, manhatten_actions, describe_observation, maze_proposal_function, illegal_penalty_reward, illegal_penalty_diff_scale, standard_reward
 from LLM_RL.algorithms.ppo.reranker_policy import ReRankerPolicy, ReRankerSamplePolicy
 from JaxSeq.utils import pad_sequence, block_sequences
 from llm_rl_scripts.maze.maze_utils import setup_maze_env, pick_start_position
@@ -313,7 +313,36 @@ def main(
         kl_controller = AdaptiveKLController(init_kl_coef=init_kl_coef, target=kl_target, horizon=kl_horizon)
     else:
         kl_controller = FixedKLController(kl_coef=init_kl_coef)
+        
+    # if maze_name == "double_t_maze":
+    #     maze = double_t_maze()
+    #     valid_goals = np.array(zip(*np.where(maze == 0)))
 
+    # if describe_function == "describe_observation":
+    #     describe_function = describe_observation
+    # elif describe_function == "describe_observation_give_position":
+    #     describe_function = describe_observation_give_position
+    # else:
+    #     raise ValueError(f'unknown describe function: {describe_function}')
+    
+    # if reward_function is None or reward_function == "standard_reward":
+    #     reward_function = standard_reward
+    # elif reward_function == "illegal_penalty_reward":
+    #     reward_function = illegal_penalty_reward
+    # elif reward_function == "illegal_penalty_diff_scale":
+    #     reward_function = illegal_penalty_diff_scale
+    # else:
+    #     raise ValueError(f'unknown reward function: {reward_function}')
+    
+    # env = MazeEnv(
+    #     maze=maze, 
+    #     valid_goals=valid_goals, 
+    #     actions=manhatten_actions, 
+    #     max_steps=100, 
+    #     display_initial_position=True,
+    #     describe_function=describe_function,
+    #     reward_function=reward_function,
+    # )
     
     env = setup_maze_env(maze_name=maze_name, describe_function=describe_function, reward_function=reward_function)
     start_position = pick_start_position(maze_name=maze_name)

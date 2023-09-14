@@ -69,6 +69,19 @@ def describe_observation_give_position(maze:np.ndarray,
     
     return f"{goal_description} {curr_position_description} {wall_description}\n"
 
+def describe_observation_only_walls(maze:np.ndarray, 
+                                    position: Tuple[int, int],
+                                    goal_position: Tuple[int, int]=None,
+                                    initial_position: Tuple[int, int]=None,
+                                    move_history: List[str]=None,) -> str:
+    delta_descriptions = {"to your right": (0, 1), "to your left": (0, -1), "above you": (-1, 0), "below you": (1, 0)} 
+    walls = []
+    for k, (dy, dx) in delta_descriptions.items():
+        if maze[position[0]+dy, position[1]+dx] == 1:
+            walls.append(k)
+    wall_description = describe_objects("wall", walls)
+    return f"{wall_description}\n"
+
 diagonal_actions = {
     'move left\n': (0, -1), 
     'move right\n': (0, 1), 
@@ -111,14 +124,24 @@ def illegal_penalty_reward(action, goal, position, possible_actions):
     else:
         return 0.0
 
+def illegal_penalty_diff_scale(action, goal, position, possible_actions):
+    if position[0] == goal[0] and position[1] == goal[1]:
+        return 1.0
+    elif action not in possible_actions:
+        return -100.0
+    else:
+        return -1.0
+
 class MazeEnv(TextEnv):
     def __init__(self, maze: np.ndarray, 
                  valid_goals: np.ndarray, 
                  actions: Dict[str, Tuple[int, int]], 
                  max_steps: Optional[int]=None, 
                  display_initial_position: bool=False,
-                 describe_function: Callable[[np.ndarray, Tuple[int, int], Tuple[int, int], Optional[Tuple[int, int]], Optional[List[str]]], str]=describe_observation,
-                 reward_function: Callable[[str, Tuple[int, int], Tuple[int, int], Dict[str, Tuple[int, int]]], float]=standard_reward,):
+                 describe_function: Callable[[np.ndarray, Tuple[int, int], Tuple[int, int], Optional[Tuple[int, int]], Optional[List[str]]], str]=describe_observation_give_position,
+                 reward_function: Callable[[str, Tuple[int, int], Tuple[int, int], Dict[str, Tuple[int, int]]], float]=standard_reward,
+                 last_k:int=40,
+                 ):
         assert len(maze.shape) == 2
         assert all([maze[goal[0], goal[1]] == 0 for goal in valid_goals])
 
@@ -130,6 +153,7 @@ class MazeEnv(TextEnv):
         self.num_steps = 0
         self.describe_function = describe_function
         self.move_history = []
+        self.last_k = last_k
         
         self.reward_function = reward_function
         
@@ -156,7 +180,10 @@ class MazeEnv(TextEnv):
         obs_description = self.describe_function(self.maze, self.position, self.goal, self.initial_position, self.move_history)
         if action not in self.actions:
             return (Text(obs_description, False),), reward, False
-        return (Text(obs_description, False),), reward, False
+
+        new_history = list(text_history) + [Text(obs_description, False)]
+        new_history = new_history[-self.last_k:]
+        return tuple(new_history), reward, False
     
     def reset(self, seed: Optional[int] = None, options: Optional[Dict] = None) -> TextHistory:
         self.random_state.reset(seed)
