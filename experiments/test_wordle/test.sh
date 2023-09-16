@@ -16,8 +16,8 @@ conda activate LLM_RL
 
 # 9/15/23
 
-export GCLOUD_PROJECT="civic-boulder-204700"
-export GCLOUD_TOKEN_PATH="${HOME}/.config/gcloud/civic-boulder-204700-V2.json"
+export GCLOUD_PROJECT="rail-tpus"
+export GCLOUD_TOKEN_PATH="${HOME}/.config/gcloud/rail-tpus.json"
 
 python -m llm_rl_scripts.wordle.train_bc \
     CONFIG \
