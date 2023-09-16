@@ -1,4 +1,4 @@
-from typing import Optional, Dict, Any, Tuple
+from typing import Optional, Dict, Any, Tuple, List
 import tyro
 from JaxSeq.bucket_manager import open_with_bucket as open
 from JaxSeq.utils import convert_path, load_mesh, setup_experiment_save, get_enabled_save_path, MapIterable, FileOpenIterable, BlockingStrategy, Padding, Truncation, create_path, uuid_name
@@ -23,6 +23,7 @@ from transformers import AutoTokenizer
 from JaxSeq.bucket_manager import open_with_bucket as open
 from LLM_RL.algorithms.ppo.reranker_policy import ReRankerSamplePolicy
 from LLM_RL.algorithms.ppo.score_fn import build_ppo_score_fn
+import random
 
 from LLM_RL.environment import text_env_eval
 from llm_rl_scripts.maze.env import maze_proposal_function
@@ -33,7 +34,8 @@ def main(
     model_load_mode: ModelLoadMode, 
     model_load_path: str, 
     train_data_path: str, 
-    eval_data_path: str, 
+    eval_frac: float,
+    # eval_data_path: str, 
 
     /,  # Mark the end of positional arguments.
 
@@ -105,20 +107,27 @@ def main(
     print(f"Mesh: {mesh}")
     print(f"Is main process: {is_main_process}")
     
-    def str_iterable(filename: str):
-        with open(filename, "r") as f:
-            for item in f:
-                obj = json.loads(item)
-                for i in range(0, len(obj['text_history']), 2):
-                    start_idx = max(0, i-traj_max_length)
-                    in_text = " ".join(obj['text_history'][start_idx:i+1])
-                    out_text = obj['text_history'][i+1]
-                    yield {"in_text":in_text, "out_text":out_text}
-
+    with open(convert_path(train_data_path), "r") as f:
+        all_items = list(f)
+    # create splits
+    random.seed(0)
+    random.shuffle(all_items)
+    train_items = all_items[:int(len(all_items)*eval_frac)]
+    eval_items = all_items[int(len(all_items)*eval_frac):]
+    
+    def str_iterable(items: List[str]):
+        for item in items:
+            obj = json.loads(item)
+            for i in range(0, len(obj['text_history']), 2):
+                start_idx = max(0, i-traj_max_length)
+                in_text = " ".join(obj['text_history'][start_idx:i+1])
+                out_text = obj['text_history'][i+1]
+                yield {"in_text":in_text, "out_text":out_text}
+    
     train_data = Seq2SeqIterableDataset.from_str_iterable(
         MapIterable(
             lambda x: (tokenizer.bos_token+x['in_text'].removeprefix(tokenizer.bos_token), x['out_text']), 
-            str_iterable(convert_path(train_data_path))), 
+            str_iterable(train_items)), 
         tokenizer=tokenizer, 
         in_blocking_strategy=BlockingStrategy(
             padding=Padding.LEFT, 
@@ -135,7 +144,7 @@ def main(
     eval_data = Seq2SeqIterableDataset.from_str_iterable(
         MapIterable(
             lambda x: (tokenizer.bos_token+x['in_text'].removeprefix(tokenizer.bos_token), x['out_text']), 
-            str_iterable(convert_path(train_data_path))), 
+            str_iterable(eval_items)), 
         tokenizer=tokenizer, 
         in_blocking_strategy=BlockingStrategy(
             padding=Padding.LEFT, 
@@ -228,39 +237,40 @@ def main(
     possible_positions = zip(*np.where(maze==0))
     
     def evaluator(inference: GPT2Inference):
-        data_results = eval_loss(
-            inference=inference, 
-            dataset=eval_data, 
-            prng_key=jax.random.PRNGKey(1), 
-            bsize=4, 
-            prefetch_batches=None, 
-            eval_batches=64, 
-        )
+        return 0.0, {}
+        # data_results = eval_loss(
+        #     inference=inference, 
+        #     dataset=eval_data, 
+        #     prng_key=jax.random.PRNGKey(1), 
+        #     bsize=4, 
+        #     prefetch_batches=None, 
+        #     eval_batches=64, 
+        # )
         
-        results = {}
-        for position in possible_positions:
-            position = tuple(position)
-            results[position] = text_env_eval(
-                env=env, 
-                policy=ReRankerSamplePolicy(
-                    proposal_fn=maze_proposal_function, 
-                    score_fn=build_ppo_score_fn(
-                        inference=inference, 
-                        tokenizer=tokenizer, 
-                        max_length=8, 
-                        bsize=4, 
-                    )
-                ), 
-                n_rounds=1, 
-                verbose=True, 
-                save_path=None, 
-                seed=1, 
-                env_options={"init_position": position},
-                save_config=None, 
-            )
-        # avg_position_results = results["avg_reward"]
-        #TODO: accuracy metric
-        return data_results['loss'], {'data': data_results, 'sample_env': results}
+        # results = {}
+        # for position in possible_positions:
+        #     position = tuple(position)
+        #     results[position] = text_env_eval(
+        #         env=env, 
+        #         policy=ReRankerSamplePolicy(
+        #             proposal_fn=maze_proposal_function, 
+        #             score_fn=build_ppo_score_fn(
+        #                 inference=inference, 
+        #                 tokenizer=tokenizer, 
+        #                 max_length=8, 
+        #                 bsize=4, 
+        #             )
+        #         ), 
+        #         n_rounds=1, 
+        #         verbose=True, 
+        #         save_path=None, 
+        #         seed=1, 
+        #         env_options={"init_position": position},
+        #         save_config=None, 
+        #     )
+        # # avg_position_results = results["avg_reward"]
+        # #TODO: accuracy metric
+        # return data_results['loss'], {'data': data_results, 'sample_env': results}
 
     
     # eval_prng = jax.random.PRNGKey(0)
