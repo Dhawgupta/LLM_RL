@@ -195,11 +195,9 @@ class MazeEnv(TextEnv):
             self.goal = random.choice(self.valid_goals).tolist()
         
         positions = np.argwhere(self.maze == 0).tolist()
-        print('in reset:', positions, options)
         positions.remove(self.goal)
         
         if options is not None and 'init_position' in options:
-            print(list(options['init_position']) in positions)
             assert list(options['init_position']) in positions
             self.position = list(options['init_position'])
         else:
