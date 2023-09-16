@@ -16,7 +16,109 @@ conda activate LLM_RL
 
 # 9/15/23
 
-python -m llm_rl_scripts.wordle.optimal_perf
+export GCLOUD_PROJECT="civic-boulder-204700"
+export GCLOUD_TOKEN_PATH="${HOME}/.config/gcloud/civic-boulder-204700-V2.json"
+
+python -m llm_rl_scripts.wordle.train_bc \
+    CONFIG \
+    experiments/test_wordle/base_config.json \
+    gcs://charlie-bucket2/LLM_RL_data/wordle/bc_data1_filtered_50.0.jsonl \
+    gcs://charlie-bucket2/LLM_RL_data/wordle/bc_data_eval1.jsonl \
+    llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+    --exp-name "wordle_gptj_config_test2_filtered_50" \
+    --outputs-path gcs://charlie-bucket2/JaxSeq2_outputs/wordle_filtered_bc_50/ \
+    --use-wandb \
+    --wandb-project "wordle_bc" \
+    \
+    --epochs 20 \
+    --train-bsize 128 \
+    --grad-accum-steps None \
+    --max-length 128 \
+    --eval-loss-bsize 128 \
+    --eval-loss-batches 256 \
+    --policy-bsize 128 \
+    --policy-n-rollouts 256 \
+    --policy-max-input-length 128 \
+    --policy-max-output-length 16 \
+    \
+    --log-every 256 \
+    --eval-every-steps 1024 \
+    --save-every-steps 1024 \
+    --save-at-end \
+    --no-save-best \
+    --no-save-train-state \
+    \
+    --data-mesh-shape -1 \
+    --fsdp-mesh-shape 1 \
+    --model-mesh-shape 1 \
+
+python -m llm_rl_scripts.wordle.train_bc \
+    CONFIG \
+    experiments/test_wordle/base_config.json \
+    gcs://charlie-bucket2/LLM_RL_data/wordle/bc_data1_filtered_30.0.jsonl \
+    gcs://charlie-bucket2/LLM_RL_data/wordle/bc_data_eval1.jsonl \
+    llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+    --exp-name "wordle_gptj_config_test2_filtered_30" \
+    --outputs-path gcs://charlie-bucket2/JaxSeq2_outputs/wordle_filtered_bc_30/ \
+    --use-wandb \
+    --wandb-project "wordle_bc" \
+    \
+    --epochs 20 \
+    --train-bsize 128 \
+    --grad-accum-steps None \
+    --max-length 128 \
+    --eval-loss-bsize 128 \
+    --eval-loss-batches 256 \
+    --policy-bsize 128 \
+    --policy-n-rollouts 256 \
+    --policy-max-input-length 128 \
+    --policy-max-output-length 16 \
+    \
+    --log-every 256 \
+    --eval-every-steps 1024 \
+    --save-every-steps 1024 \
+    --save-at-end \
+    --no-save-best \
+    --no-save-train-state \
+    \
+    --data-mesh-shape -1 \
+    --fsdp-mesh-shape 1 \
+    --model-mesh-shape 1 \
+
+python -m llm_rl_scripts.wordle.train_bc \
+    CONFIG \
+    experiments/test_wordle/base_config.json \
+    gcs://charlie-bucket2/LLM_RL_data/wordle/bc_data1_filtered_10.0.jsonl \
+    gcs://charlie-bucket2/LLM_RL_data/wordle/bc_data_eval1.jsonl \
+    llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+    --exp-name "wordle_gptj_config_test2_filtered_10" \
+    --outputs-path gcs://charlie-bucket2/JaxSeq2_outputs/wordle_filtered_bc_10/ \
+    --use-wandb \
+    --wandb-project "wordle_bc" \
+    \
+    --epochs 20 \
+    --train-bsize 128 \
+    --grad-accum-steps None \
+    --max-length 128 \
+    --eval-loss-bsize 128 \
+    --eval-loss-batches 256 \
+    --policy-bsize 128 \
+    --policy-n-rollouts 256 \
+    --policy-max-input-length 128 \
+    --policy-max-output-length 16 \
+    \
+    --log-every 256 \
+    --eval-every-steps 1024 \
+    --save-every-steps 1024 \
+    --save-at-end \
+    --no-save-best \
+    --no-save-train-state \
+    \
+    --data-mesh-shape -1 \
+    --fsdp-mesh-shape 1 \
+    --model-mesh-shape 1 \
+
+# python -m llm_rl_scripts.wordle.optimal_perf
 
 # 5/21/2023
 

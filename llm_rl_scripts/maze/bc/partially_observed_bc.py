@@ -22,7 +22,7 @@ import numpy as np
 from transformers import AutoTokenizer
 from JaxSeq.bucket_manager import open_with_bucket as open
 from LLM_RL.algorithms.ppo.reranker_policy import ReRankerSamplePolicy
-from LLM_RL.algorithms.ppo.score_fn import build_ppo_score_fn
+from LLM_RL.algorithms.ppo.score_fn import build_bc_score_fn
 import random
 
 from LLM_RL.environment import text_env_eval
@@ -235,42 +235,42 @@ def main(
     env = setup_maze_env(maze_name=maze_name, describe_function=describe_function, reward_function=reward_function)
     start_position = pick_start_position(maze_name=maze_name)
     possible_positions = zip(*np.where(maze==0))
+    print(possible_positions)
     
     def evaluator(inference: GPT2Inference):
-        return 0.0, {}
-        # data_results = eval_loss(
-        #     inference=inference, 
-        #     dataset=eval_data, 
-        #     prng_key=jax.random.PRNGKey(1), 
-        #     bsize=4, 
-        #     prefetch_batches=None, 
-        #     eval_batches=64, 
-        # )
+        data_results = eval_loss(
+            inference=inference, 
+            dataset=eval_data, 
+            prng_key=jax.random.PRNGKey(1), 
+            bsize=4, 
+            eval_batches=64, 
+        )
         
-        # results = {}
-        # for position in possible_positions:
-        #     position = tuple(position)
-        #     results[position] = text_env_eval(
-        #         env=env, 
-        #         policy=ReRankerSamplePolicy(
-        #             proposal_fn=maze_proposal_function, 
-        #             score_fn=build_ppo_score_fn(
-        #                 inference=inference, 
-        #                 tokenizer=tokenizer, 
-        #                 max_length=8, 
-        #                 bsize=4, 
-        #             )
-        #         ), 
-        #         n_rounds=1, 
-        #         verbose=True, 
-        #         save_path=None, 
-        #         seed=1, 
-        #         env_options={"init_position": position},
-        #         save_config=None, 
-        #     )
-        # # avg_position_results = results["avg_reward"]
-        # #TODO: accuracy metric
-        # return data_results['loss'], {'data': data_results, 'sample_env': results}
+        results = {}
+        for position in possible_positions:
+            print(possible_positions, 'curr_pos:', position)
+            position = tuple(position)
+            results[position] = text_env_eval(
+                env=env, 
+                policy=ReRankerSamplePolicy(
+                    proposal_fn=maze_proposal_function, 
+                    score_fn=build_bc_score_fn(
+                        inference=inference, 
+                        tokenizer=tokenizer, 
+                        max_length=8, 
+                        bsize=4, 
+                    )
+                ), 
+                n_rollouts=1, 
+                verbose=True, 
+                # save_path=None, 
+                # seed=1, 
+                env_options={"init_position": position},
+                # save_config=None, 
+            )
+        # avg_position_results = results["avg_reward"]
+        #TODO: accuracy metric
+        return data_results['loss'], {'data': data_results, 'sample_env': results}
 
     
     # eval_prng = jax.random.PRNGKey(0)

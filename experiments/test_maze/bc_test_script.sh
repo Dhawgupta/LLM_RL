@@ -29,5 +29,6 @@ python -m llm_rl_scripts.maze.bc.partially_observed_bc \
     --save-at-end \
     --eval-loss-batches 64 \
     --generation-batches 64 \
+    --eval-at-beginning
 
 
