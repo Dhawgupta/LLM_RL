@@ -248,7 +248,7 @@ def main(
         
         results = {}
         for position in possible_positions:
-            print(possible_positions, 'curr_pos:', position)
+            print(list(possible_positions), 'curr_pos:', position)
             position = tuple(position)
             results[position] = text_env_eval(
                 env=env, 
