@@ -234,7 +234,7 @@ def main(
     
     env = setup_maze_env(maze_name=maze_name, describe_function=describe_function, reward_function=reward_function)
     start_position = pick_start_position(maze_name=maze_name)
-    possible_positions = zip(*np.where(maze==0))
+    possible_positions = list(zip(*np.where(maze==0)))
     print(possible_positions)
     
     def evaluator(inference: GPT2Inference):
@@ -248,9 +248,9 @@ def main(
         
         results = {}
         for position in possible_positions:
-            print(list(possible_positions), 'curr_pos:', position)
             position = tuple(position)
-            results[position] = text_env_eval(
+            print(list(possible_positions), 'curr_pos:', position)
+            _, results[position] = text_env_eval(
                 env=env, 
                 policy=ReRankerSamplePolicy(
                     proposal_fn=maze_proposal_function, 

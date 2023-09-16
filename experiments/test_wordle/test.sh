@@ -22,11 +22,11 @@ export GCLOUD_TOKEN_PATH="${HOME}/.config/gcloud/rail-tpus.json"
 python -m llm_rl_scripts.wordle.train_bc \
     CONFIG \
     experiments/test_wordle/base_config.json \
-    gcs://charlie-bucket2/LLM_RL_data/wordle/bc_data1_filtered_50.0.jsonl \
-    gcs://charlie-bucket2/LLM_RL_data/wordle/bc_data_eval1.jsonl \
+    gcs://rail-tpus-csnell-us/LLM_RL_data/wordle/bc_data1_filtered_50.0.jsonl \
+    gcs://rail-tpus-csnell-us/LLM_RL_data/wordle/bc_data_eval1.jsonl \
     llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
     --exp-name "wordle_gptj_config_test2_filtered_50" \
-    --outputs-path gcs://charlie-bucket2/JaxSeq2_outputs/wordle_filtered_bc_50/ \
+    --outputs-path gcs://rail-tpus-csnell-us/JaxSeq2_outputs/wordle_filtered_bc_50/ \
     --use-wandb \
     --wandb-project "wordle_bc" \
     \
@@ -55,11 +55,11 @@ python -m llm_rl_scripts.wordle.train_bc \
 python -m llm_rl_scripts.wordle.train_bc \
     CONFIG \
     experiments/test_wordle/base_config.json \
-    gcs://charlie-bucket2/LLM_RL_data/wordle/bc_data1_filtered_30.0.jsonl \
-    gcs://charlie-bucket2/LLM_RL_data/wordle/bc_data_eval1.jsonl \
+    gcs://rail-tpus-csnell-us/LLM_RL_data/wordle/bc_data1_filtered_30.0.jsonl \
+    gcs://rail-tpus-csnell-us/LLM_RL_data/wordle/bc_data_eval1.jsonl \
     llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
     --exp-name "wordle_gptj_config_test2_filtered_30" \
-    --outputs-path gcs://charlie-bucket2/JaxSeq2_outputs/wordle_filtered_bc_30/ \
+    --outputs-path gcs://rail-tpus-csnell-us/JaxSeq2_outputs/wordle_filtered_bc_30/ \
     --use-wandb \
     --wandb-project "wordle_bc" \
     \
@@ -88,11 +88,11 @@ python -m llm_rl_scripts.wordle.train_bc \
 python -m llm_rl_scripts.wordle.train_bc \
     CONFIG \
     experiments/test_wordle/base_config.json \
-    gcs://charlie-bucket2/LLM_RL_data/wordle/bc_data1_filtered_10.0.jsonl \
-    gcs://charlie-bucket2/LLM_RL_data/wordle/bc_data_eval1.jsonl \
+    gcs://rail-tpus-csnell-us/LLM_RL_data/wordle/bc_data1_filtered_10.0.jsonl \
+    gcs://rail-tpus-csnell-us/LLM_RL_data/wordle/bc_data_eval1.jsonl \
     llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
     --exp-name "wordle_gptj_config_test2_filtered_10" \
-    --outputs-path gcs://charlie-bucket2/JaxSeq2_outputs/wordle_filtered_bc_10/ \
+    --outputs-path gcs://rail-tpus-csnell-us/JaxSeq2_outputs/wordle_filtered_bc_10/ \
     --use-wandb \
     --wandb-project "wordle_bc" \
     \
