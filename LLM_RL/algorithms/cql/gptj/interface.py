@@ -15,7 +15,7 @@ import jax.numpy as jnp
 import optax
 from LLM_RL.algorithms.value_rl_base.gptj.interface import GPTJValueRLInference
 
-class GPTJCQLTrain(ILQLTrain):
+class GPTJCQLTrain(CQLTrain):
     @classmethod
     def load_train(
         cls, 
@@ -122,7 +122,7 @@ class GPTJCQLTrain(ILQLTrain):
 
             # define loss function
 
-            def grad_loss(base_params: PyTree, q1_head_params: PyTree, q2_head_params: PyTree, v_head_params: PyTree, prng_key: jax.random.PRNGKeyArray):
+            def grad_loss(base_params: PyTree, q1_head_params: PyTree, q2_head_params: PyTree, prng_key: jax.random.PRNGKeyArray):
                 
                 # get base hidden states
 
@@ -240,12 +240,12 @@ class GPTJCQLTrain(ILQLTrain):
                     new_key = None
                     if prng_key is not None:
                         prng_key, new_key = jax.random.split(prng_key)
-                    next_token_v_head_output = v_head_model.apply(
-                        {'params': v_head_params}, 
+                    next_token_v_head_output = q_head_model.apply(
+                        {'params': q1_target_head_params}, 
                         final_next_token_h, 
                         train=train, 
                         rngs={'dropout': new_key} if prng_key is not None else None, 
-                    ).squeeze(1)
+                    )
                     v_final = next_token_v_head_output * (1 - next_dones.astype(jnp.float32))
                 else:
                     last_action_idxs = (should_take_action.shape[1]-1)-jnp.argmax(jnp.flip(should_take_action, axis=1).astype(jnp.int32), axis=1)+1
@@ -272,11 +272,10 @@ class GPTJCQLTrain(ILQLTrain):
                 return loss, info
 
             # take loss
-            (loss, info), (base_grads, q1_head_grads, q2_head_grads, v_head_grads) = jax.value_and_grad(grad_loss, has_aux=True, argnums=(0, 1, 2, 3))(
+            (loss, info), (base_grads, q1_head_grads, q2_head_grads) = jax.value_and_grad(grad_loss, has_aux=True, argnums=(0, 1, 2))(
                 base_train_state.params, 
                 q1_head_train_state.params, 
                 q2_head_train_state.params, 
-                v_head_train_state.params, 
                 prng_key, 
             )
             # assert shard gradients
@@ -295,16 +294,10 @@ class GPTJCQLTrain(ILQLTrain):
                 q2_head_grads, 
                 q2_head_train_state_partition_spec.params, 
             )
-            v_head_grads = jax.tree_util.tree_map(
-                lambda x, ps: with_named_sharding_constraint(x, mesh, ps), 
-                v_head_grads, 
-                v_head_train_state_partition_spec.params, 
-            )
             # update params and optim state
             base_train_state = base_train_state.apply_gradients(grads=base_grads)
             q1_head_train_state = q1_head_train_state.apply_gradients(grads=q1_head_grads)
             q2_head_train_state = q2_head_train_state.apply_gradients(grads=q2_head_grads)
-            v_head_train_state = v_head_train_state.apply_gradients(grads=v_head_grads)
 
             # handle target network updates
             def update_targets(params: PyTree, base_params: PyTree, steps: jnp.ndarray) -> PyTree:
@@ -347,19 +340,17 @@ class GPTJCQLTrain(ILQLTrain):
                 q2_head_train_state.step, 
             )
 
-            return base_train_state, target_base_params, q1_head_train_state, q2_head_train_state, v_head_train_state, q1_target_head_params, q2_target_head_params, loss, info
+            return base_train_state, target_base_params, q1_head_train_state, q2_head_train_state, q1_target_head_params, q2_target_head_params, loss, info
 
         return cls(
             base_train_state=base_train_state, 
             target_base_params=target_base_params, 
             q1_head_train_state=q1_head_train_state, 
             q2_head_train_state=q2_head_train_state, 
-            v_head_train_state=v_head_train_state, 
             q1_target_head_params=q1_target_head_params, 
             q2_target_head_params=q2_target_head_params, 
             base_model=base_model, 
             q_head_model=q_head_model, 
-            v_head_model=v_head_model, 
             tokenizer=tokenizer, 
             _step=_step, 
         )
