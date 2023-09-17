@@ -627,5 +627,4 @@ class GPT2ILQLInference(ILQLInference):
             value_inference=value_inference, 
             target_value_inference=target_value_inference, 
             _eval_loss=_eval_loss, 
-            tokenizer=value_inference.tokenizer,
         )

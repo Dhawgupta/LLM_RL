@@ -43,6 +43,7 @@ from llm_rl_scripts.maze.mazes import double_t_maze_optimal_directions, double_t
 from llm_rl_scripts.maze.env import MazeEnv, describe_observation_give_position, manhatten_actions, describe_observation, maze_proposal_function, standard_reward
 from LLM_RL.algorithms.ppo.reranker_policy import ReRankerPolicy, ReRankerSamplePolicy
 from LLM_RL.algorithms.ilql.gpt2.score_fn import build_ilql_score_fn
+import random 
 
 def main(
     model_load_mode: ModelLoadMode, 
@@ -59,7 +60,7 @@ def main(
     model_mesh_shape: int=-1, 
 
     use_wandb: bool=False, 
-    wandb_project: Optional[str]=None, 
+    wandb_project: Optional[str]="llm_rl_repo_give_position_ilql", 
 
     n_rounds: int=1, 
     epochs: int=1, 
@@ -133,11 +134,8 @@ def main(
                                                      [0, traj["reward"]], traj["done"])
                     curr_chain = TextTrajectoryChain(text_trajectory=prev_trajectory, next=curr_chain)
                 token_trajectory_chain = TokenTrajectoryChain.from_text_trajectory_chain(curr_chain, tokenizer)
-                count = 0 
-                while token_trajectory_chain is not None:
-                    count +=1 
-                    if token_trajectory_chain.next is not None:
-                        yield ILQLData.from_token_trajectory_chain(token_trajectory_chain)
+                while token_trajectory_chain.next is not None:
+                    yield ILQLData.from_token_trajectory_chain(token_trajectory_chain)
                     token_trajectory_chain = token_trajectory_chain.next
                 # first_trajectory = TextTrajectory([Text(obj[0]["state"], False), Text(obj[0]["action"], True)],
                 #                                 [0, obj[0]["reward"]], obj[0]["done"])
@@ -152,13 +150,22 @@ def main(
                 #     text_trajectory_chain = TextTrajectoryChain(text_trajectory=next_trajectory, next=next_trajectory)
                 #     token_trajectory_chain = TokenTrajectoryChain.from_text_trajectory_chain(text_trajectory_chain, tokenizer)
                 #     yield ILQLData.from_token_trajectory_chain(token_trajectory_chain)
+    ilql_data_lst = list(ilql_data_generator(train_data_path))
+    random.shuffle(ilql_data_lst)
+    
+    dataset = ILQLDataset.from_ilql_data_list(ilql_data_lst, tokenizer, 
+                                              BlockingStrategy(
+                                                padding=Padding.RIGHT,
+                                                truncation=Truncation.RIGHT,
+                                                max_length=max_length,
+                                            ))
 
-    dataset = ILQLIterableDataset.from_ilql_data_iterable(ilql_data_generator(train_data_path), tokenizer, 
-                                  BlockingStrategy(
-                                      padding=Padding.RIGHT,
-                                      truncation=Truncation.RIGHT,
-                                      max_length=max_length,
-                                  ))
+    # dataset = ILQLIterableDataset.from_ilql_data_iterable(ilql_data_generator(train_data_path), tokenizer, 
+    #                               BlockingStrategy(
+    #                                   padding=Padding.RIGHT,
+    #                                   truncation=Truncation.RIGHT,
+    #                                   max_length=max_length,
+    #                               ))
     
     def policy_optim_getter(params: PyTree):
         mask = get_weight_decay_mask((
@@ -372,26 +379,38 @@ def main(
     def evaluate(inference: GPT2ILQLInference):
         nonlocal policy_prng
         policy_prng, new_key = jax.random.split(policy_prng)
-        sample_policy = GPT2ValuePolicy(
-            inference=inference.value_inference, 
-            prng_key=new_key, 
-            generation_config=GenerationConfig(
-                do_sample=True, 
-                num_beams=policy_num_beams, 
-                temperature=policy_temperature, 
-                top_p=policy_top_p, 
-                top_k=policy_top_k, 
-                eos_token_id=tokenizer.encode('\n')[0], 
-                pad_token_id=tokenizer.pad_token_id, 
-                max_new_tokens=policy_max_output_length, 
-            ), 
-            blocking_strategy=BlockingStrategy(
-                padding=Padding.LEFT, 
-                truncation=Truncation.LEFT, 
-                max_length=policy_max_input_length, 
-            ), 
-            out_str_process=lambda x: x.removesuffix('\n')+'\n', 
+        sample_policy = ReRankerSamplePolicy(
+            proposal_fn=maze_proposal_function,
+            score_fn=build_ilql_score_fn(
+                inference=inference.value_inference,
+                pi_beta_inference=None,
+                tokenizer=tokenizer,
+                max_length=6, 
+                value_weight=1.0,
+                logit_weight=None,
+                bsize=4,
+            )
         )
+        # sample_policy = GPT2ValuePolicy(
+        #     inference=inference.value_inference, 
+        #     prng_key=new_key, 
+        #     generation_config=GenerationConfig(
+        #         do_sample=True, 
+        #         num_beams=policy_num_beams, 
+        #         temperature=policy_temperature, 
+        #         top_p=policy_top_p, 
+        #         top_k=policy_top_k, 
+        #         eos_token_id=tokenizer.encode('\n')[0], 
+        #         pad_token_id=tokenizer.pad_token_id, 
+        #         max_new_tokens=policy_max_output_length, 
+        #     ), 
+        #     blocking_strategy=BlockingStrategy(
+        #         padding=Padding.LEFT, 
+        #         truncation=Truncation.LEFT, 
+        #         max_length=policy_max_input_length, 
+        #     ), 
+        #     out_str_process=lambda x: x.removesuffix('\n')+'\n', 
+        # )
         maze_name = "double_t_maze"
         describe_function = "describe_observation_give_position"
         reward_function = "standard_reward"
@@ -399,26 +418,39 @@ def main(
         env = setup_maze_env(maze_name=maze_name, describe_function=describe_function, reward_function=reward_function)
         start_position = pick_start_position(maze_name=maze_name)
         
-        policy = GPT2ValuePolicy(
-            inference=inference.value_inference, 
-            prng_key=new_key, 
-            generation_config=GenerationConfig(
-                do_sample=False, 
-                num_beams=policy_num_beams, 
-                temperature=policy_temperature, 
-                top_p=policy_top_p, 
-                top_k=policy_top_k, 
-                eos_token_id=tokenizer.encode('\n')[0], 
-                pad_token_id=tokenizer.pad_token_id, 
-                max_new_tokens=policy_max_output_length, 
-            ), 
-            blocking_strategy=BlockingStrategy(
-                padding=Padding.LEFT, 
-                truncation=Truncation.LEFT, 
-                max_length=policy_max_input_length, 
-            ), 
-            out_str_process=lambda x: x.removesuffix('\n')+'\n', 
+        policy = ReRankerPolicy(
+            proposal_fn=maze_proposal_function,
+            score_fn=build_ilql_score_fn(
+                inference=inference,
+                pi_beta_inference=None,
+                tokenizer=tokenizer,
+                max_length=6,
+                value_weight=1.0,
+                logit_weight=None,
+                bsize=4,
+            )
         )
+        
+        # policy = GPT2ValuePolicy(
+        #     inference=inference.value_inference, 
+        #     prng_key=new_key, 
+        #     generation_config=GenerationConfig(
+        #         do_sample=False, 
+        #         num_beams=policy_num_beams, 
+        #         temperature=policy_temperature, 
+        #         top_p=policy_top_p, 
+        #         top_k=policy_top_k, 
+        #         eos_token_id=tokenizer.encode('\n')[0], 
+        #         pad_token_id=tokenizer.pad_token_id, 
+        #         max_new_tokens=policy_max_output_length, 
+        #     ), 
+        #     blocking_strategy=BlockingStrategy(
+        #         padding=Padding.LEFT, 
+        #         truncation=Truncation.LEFT, 
+        #         max_length=policy_max_input_length, 
+        #     ), 
+        #     out_str_process=lambda x: x.removesuffix('\n')+'\n', 
+        # )
         
         maze = double_t_maze()
         goal = (8, 6)
@@ -430,8 +462,10 @@ def main(
                 env.position = position
                 observation = describe_observation_give_position(maze, position, env.goal)
                 text_history = (Text(observation, False),)
-                output = policy.act(text_history, done=[False])
+                output = policy.act(text_history)
                 prediction = output[-1].text
+                # output = policy.act(text_history)
+                # prediction = output[-1].text
                 if position[0] == goal[0] and position[1] == goal[1]:
                     continue
                 if prediction == correct_answers[tuple(position)]:
