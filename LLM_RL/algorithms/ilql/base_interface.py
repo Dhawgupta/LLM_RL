@@ -245,6 +245,7 @@ class ILQLInference(struct.PyTreeNode):
     value_inference: ValueRLInference
     target_value_inference: ValueRLInference
     _eval_loss: Callable = struct.field(pytree_node=False)
+    tokenizer: PreTrainedTokenizerBase = struct.field(pytree_node=False)
 
 class ILQLPolicy(BatchedTextPolicy):
     def set_params(self, params: PyTree) -> None:

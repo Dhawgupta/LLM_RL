@@ -17,6 +17,36 @@ def double_t_maze():
     
     return x
 
+def double_t_maze_optimal_directions():
+    dct = {
+        (1, 1): "move right\n",
+        (1, 2): "move right\n",
+        (1, 3): "move down\n",
+        (1, 4): "move left\n",
+        (1, 5): "move left\n",
+        (1, 7): "move right\n",
+        (1, 8): "move right\n",
+        (1, 9): "move down\n",
+        (1, 10): "move left\n",
+        (1, 11): "move left\n",
+        (2, 3): "move down\n",
+        (3, 3): "move down\n",
+        (4, 3): "move down\n",
+        (5, 3): "move right\n",
+        (5, 4): "move right\n",
+        (5, 5): "move right\n",
+        (5, 6): "move down\n",
+        (6, 6): "move down\n",
+        (7, 6): "move down\n",
+        (5, 7): "move left\n",
+        (5, 8): "move left\n",
+        (5, 9): "move left\n",
+        (4, 9): "move down\n",
+        (3, 9): "move down\n",
+        (2, 9): "move down\n",
+    }
+    return dct
+
 def maze2d_umaze():
     x = np.array([
         [1, 1, 1, 1, 1],

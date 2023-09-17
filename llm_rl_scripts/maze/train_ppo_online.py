@@ -274,6 +274,7 @@ def main(
             output_dim=1, 
             use_bias=True, 
             initializer_range=0.0, 
+            bias_init=-1,
         ), 
         model_dtype=jnp.float32, 
         optim_getter=value_head_optim_getter, 
