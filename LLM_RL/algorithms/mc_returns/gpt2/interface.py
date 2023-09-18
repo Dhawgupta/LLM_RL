@@ -13,6 +13,8 @@ from jax.sharding import NamedSharding
 from jax.sharding import PartitionSpec as PS
 import jax.numpy as jnp
 
+from LLM_RL.algorithms.value_rl_base.gpt2.interface import GPT2ValueRLInference
+
 
 class GPT2MCTrain(MCTrain):
     @classmethod
@@ -151,7 +153,7 @@ class GPT2MCTrain(MCTrain):
             _step=_step, 
         )
 
-class GPTJMCInference(MCInference):
+class GPT2MCInference(MCInference):
     @classmethod
     def load_inference(
         cls, 
@@ -170,7 +172,7 @@ class GPTJMCInference(MCInference):
         assert mesh is not None
         assert mesh == q_head_model.config.mesh
 
-        value_inference = GPTJValueRLInference.load_inference(
+        value_inference = GPT2ValueRLInference.load_inference(
             pi_beta_params=pi_beta_params, 
             base_params=base_params, 
             q1_head_params=q_head_params, 
