@@ -14,109 +14,253 @@ source ${PWD}/secrets.sh
 # source ~/miniconda3/bin/activate
 conda activate LLM_RL
 
-# 9/15/23
+# 9/17/23
+
+# export GCLOUD_PROJECT="civic-boulder-204700"
+# export GCLOUD_TOKEN_PATH="${HOME}/.config/gcloud/civic-boulder-204700-V2.json"
+
+# # bc
+
+# python -m llm_rl_scripts.wordle.eval_bc \
+#     PARAMS \
+#     gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gptj_config_test2.2023-05-12-17-01-25.893.a16043b2f0e611ed890c5d20da9db470/step_237568/ \
+#     llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+#     --outputs-path gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gptj_config_test2.2023-05-12-17-01-25.893.a16043b2f0e611ed890c5d20da9db470/step_237568/eval_bc_sample/ \
+#     \
+#     --data-mesh-shape -1 \
+#     --fsdp-mesh-shape 1 \
+#     --model-mesh-shape 1 \
+#     \
+#     --policy-n-rollouts 4096 \
+#     --policy-bsize 128 \
+#     --policy-max-input-length 128 \
+#     --policy-max-output-length 16
+
+# python -m llm_rl_scripts.wordle.eval_bc \
+#     PARAMS \
+#     gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gptj_config_test2.2023-05-12-17-01-25.893.a16043b2f0e611ed890c5d20da9db470/step_237568/ \
+#     llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+#     --outputs-path gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gptj_config_test2.2023-05-12-17-01-25.893.a16043b2f0e611ed890c5d20da9db470/step_237568/eval_bc_greedy/ \
+#     \
+#     --data-mesh-shape -1 \
+#     --fsdp-mesh-shape 1 \
+#     --model-mesh-shape 1 \
+#     \
+#     --policy-n-rollouts 4096 \
+#     --policy-bsize 128 \
+#     --policy-max-input-length 128 \
+#     --policy-max-output-length 16 \
+#     --no-policy-do-sample
+
+
+
 
 export GCLOUD_PROJECT="rail-tpus"
 export GCLOUD_TOKEN_PATH="${HOME}/.config/gcloud/rail-tpus.json"
 
-python -m llm_rl_scripts.wordle.train_bc \
-    CONFIG \
-    experiments/test_wordle/base_config.json \
-    gcs://rail-tpus-csnell-us/LLM_RL_data/wordle/bc_data1_filtered_50.0.jsonl \
-    gcs://rail-tpus-csnell-us/LLM_RL_data/wordle/bc_data_eval1.jsonl \
-    llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
-    --exp-name "wordle_gptj_config_test2_filtered_50" \
-    --outputs-path gcs://rail-tpus-csnell-us/JaxSeq2_outputs/wordle_filtered_bc_50/ \
-    --use-wandb \
-    --wandb-project "wordle_bc" \
-    \
-    --epochs 20 \
-    --train-bsize 128 \
-    --grad-accum-steps None \
-    --max-length 128 \
-    --eval-loss-bsize 128 \
-    --eval-loss-batches 256 \
-    --policy-bsize 128 \
-    --policy-n-rollouts 256 \
-    --policy-max-input-length 128 \
-    --policy-max-output-length 16 \
-    \
-    --log-every 256 \
-    --eval-every-steps 1024 \
-    --save-every-steps 1024 \
-    --save-at-end \
-    --no-save-best \
-    --no-save-train-state \
-    \
-    --data-mesh-shape -1 \
-    --fsdp-mesh-shape 1 \
-    --model-mesh-shape 1 \
+# 50% bc
 
-python -m llm_rl_scripts.wordle.train_bc \
-    CONFIG \
-    experiments/test_wordle/base_config.json \
-    gcs://rail-tpus-csnell-us/LLM_RL_data/wordle/bc_data1_filtered_30.0.jsonl \
-    gcs://rail-tpus-csnell-us/LLM_RL_data/wordle/bc_data_eval1.jsonl \
+python -m llm_rl_scripts.wordle.eval_bc \
+    PARAMS \
+    gcs://rail-tpus-csnell-us/JaxSeq2_outputs/wordle_filtered_bc_50/wordle_gptj_config_test2_filtered_50.2023-09-16-06-18-04.344.cb859284545811ee9b91dd1a943a02f5/last/ \
     llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
-    --exp-name "wordle_gptj_config_test2_filtered_30" \
-    --outputs-path gcs://rail-tpus-csnell-us/JaxSeq2_outputs/wordle_filtered_bc_30/ \
-    --use-wandb \
-    --wandb-project "wordle_bc" \
-    \
-    --epochs 20 \
-    --train-bsize 128 \
-    --grad-accum-steps None \
-    --max-length 128 \
-    --eval-loss-bsize 128 \
-    --eval-loss-batches 256 \
-    --policy-bsize 128 \
-    --policy-n-rollouts 256 \
-    --policy-max-input-length 128 \
-    --policy-max-output-length 16 \
-    \
-    --log-every 256 \
-    --eval-every-steps 1024 \
-    --save-every-steps 1024 \
-    --save-at-end \
-    --no-save-best \
-    --no-save-train-state \
+    --outputs-path gcs://rail-tpus-csnell-us/JaxSeq2_outputs/wordle_filtered_bc_50/wordle_gptj_config_test2_filtered_50.2023-09-16-06-18-04.344.cb859284545811ee9b91dd1a943a02f5/last/eval_bc_sample/ \
     \
     --data-mesh-shape -1 \
     --fsdp-mesh-shape 1 \
     --model-mesh-shape 1 \
+    \
+    --policy-n-rollouts 4096 \
+    --policy-bsize 128 \
+    --policy-max-input-length 128 \
+    --policy-max-output-length 16
 
-python -m llm_rl_scripts.wordle.train_bc \
-    CONFIG \
-    experiments/test_wordle/base_config.json \
-    gcs://rail-tpus-csnell-us/LLM_RL_data/wordle/bc_data1_filtered_10.0.jsonl \
-    gcs://rail-tpus-csnell-us/LLM_RL_data/wordle/bc_data_eval1.jsonl \
+python -m llm_rl_scripts.wordle.eval_bc \
+    PARAMS \
+    gcs://rail-tpus-csnell-us/JaxSeq2_outputs/wordle_filtered_bc_50/wordle_gptj_config_test2_filtered_50.2023-09-16-06-18-04.344.cb859284545811ee9b91dd1a943a02f5/last/ \
     llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
-    --exp-name "wordle_gptj_config_test2_filtered_10" \
-    --outputs-path gcs://rail-tpus-csnell-us/JaxSeq2_outputs/wordle_filtered_bc_10/ \
-    --use-wandb \
-    --wandb-project "wordle_bc" \
-    \
-    --epochs 20 \
-    --train-bsize 128 \
-    --grad-accum-steps None \
-    --max-length 128 \
-    --eval-loss-bsize 128 \
-    --eval-loss-batches 256 \
-    --policy-bsize 128 \
-    --policy-n-rollouts 256 \
-    --policy-max-input-length 128 \
-    --policy-max-output-length 16 \
-    \
-    --log-every 256 \
-    --eval-every-steps 1024 \
-    --save-every-steps 1024 \
-    --save-at-end \
-    --no-save-best \
-    --no-save-train-state \
+    --outputs-path gcs://rail-tpus-csnell-us/JaxSeq2_outputs/wordle_filtered_bc_50/wordle_gptj_config_test2_filtered_50.2023-09-16-06-18-04.344.cb859284545811ee9b91dd1a943a02f5/last/eval_bc_greedy/ \
     \
     --data-mesh-shape -1 \
     --fsdp-mesh-shape 1 \
     --model-mesh-shape 1 \
+    \
+    --policy-n-rollouts 4096 \
+    --policy-bsize 128 \
+    --policy-max-input-length 128 \
+    --policy-max-output-length 16 \
+    --no-policy-do-sample
+
+# 30% bc
+
+python -m llm_rl_scripts.wordle.eval_bc \
+    PARAMS \
+    gcs://rail-tpus-csnell-us/JaxSeq2_outputs/wordle_filtered_bc_30/wordle_gptj_config_test2_filtered_30.2023-09-16-11-36-39.799.4d388440548511ee9b91dd1a943a02f5/last/ \
+    llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+    --outputs-path gcs://rail-tpus-csnell-us/JaxSeq2_outputs/wordle_filtered_bc_30/wordle_gptj_config_test2_filtered_30.2023-09-16-11-36-39.799.4d388440548511ee9b91dd1a943a02f5/last/eval_bc_sample/ \
+    \
+    --data-mesh-shape -1 \
+    --fsdp-mesh-shape 1 \
+    --model-mesh-shape 1 \
+    \
+    --policy-n-rollouts 4096 \
+    --policy-bsize 128 \
+    --policy-max-input-length 128 \
+    --policy-max-output-length 16
+
+python -m llm_rl_scripts.wordle.eval_bc \
+    PARAMS \
+    gcs://rail-tpus-csnell-us/JaxSeq2_outputs/wordle_filtered_bc_30/wordle_gptj_config_test2_filtered_30.2023-09-16-11-36-39.799.4d388440548511ee9b91dd1a943a02f5/last/ \
+    llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+    --outputs-path gcs://rail-tpus-csnell-us/JaxSeq2_outputs/wordle_filtered_bc_30/wordle_gptj_config_test2_filtered_30.2023-09-16-11-36-39.799.4d388440548511ee9b91dd1a943a02f5/last/eval_bc_greedy/ \
+    \
+    --data-mesh-shape -1 \
+    --fsdp-mesh-shape 1 \
+    --model-mesh-shape 1 \
+    \
+    --policy-n-rollouts 4096 \
+    --policy-bsize 128 \
+    --policy-max-input-length 128 \
+    --policy-max-output-length 16 \
+    --no-policy-do-sample
+
+# 10% bc
+
+python -m llm_rl_scripts.wordle.eval_bc \
+    PARAMS \
+    gcs://rail-tpus-csnell-us/JaxSeq2_outputs/wordle_filtered_bc_10/wordle_gptj_config_test2_filtered_10.2023-09-16-14-43-23.058.62e230a6549f11ee9b91dd1a943a02f5/last/ \
+    llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+    --outputs-path gcs://rail-tpus-csnell-us/JaxSeq2_outputs/wordle_filtered_bc_10/wordle_gptj_config_test2_filtered_10.2023-09-16-14-43-23.058.62e230a6549f11ee9b91dd1a943a02f5/last/eval_bc_sample/ \
+    \
+    --data-mesh-shape -1 \
+    --fsdp-mesh-shape 1 \
+    --model-mesh-shape 1 \
+    \
+    --policy-n-rollouts 4096 \
+    --policy-bsize 128 \
+    --policy-max-input-length 128 \
+    --policy-max-output-length 16
+
+python -m llm_rl_scripts.wordle.eval_bc \
+    PARAMS \
+    gcs://rail-tpus-csnell-us/JaxSeq2_outputs/wordle_filtered_bc_10/wordle_gptj_config_test2_filtered_10.2023-09-16-14-43-23.058.62e230a6549f11ee9b91dd1a943a02f5/last/ \
+    llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+    --outputs-path gcs://rail-tpus-csnell-us/JaxSeq2_outputs/wordle_filtered_bc_10/wordle_gptj_config_test2_filtered_10.2023-09-16-14-43-23.058.62e230a6549f11ee9b91dd1a943a02f5/last/eval_bc_greedy/ \
+    \
+    --data-mesh-shape -1 \
+    --fsdp-mesh-shape 1 \
+    --model-mesh-shape 1 \
+    \
+    --policy-n-rollouts 4096 \
+    --policy-bsize 128 \
+    --policy-max-input-length 128 \
+    --policy-max-output-length 16 \
+    --no-policy-do-sample
+
+
+# 9/15/23
+
+# export GCLOUD_PROJECT="rail-tpus"
+# export GCLOUD_TOKEN_PATH="${HOME}/.config/gcloud/rail-tpus.json"
+
+# python -m llm_rl_scripts.wordle.train_bc \
+#     CONFIG \
+#     experiments/test_wordle/base_config.json \
+#     gcs://rail-tpus-csnell-us/LLM_RL_data/wordle/bc_data1_filtered_50.0.jsonl \
+#     gcs://rail-tpus-csnell-us/LLM_RL_data/wordle/bc_data_eval1.jsonl \
+#     llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+#     --exp-name "wordle_gptj_config_test2_filtered_50" \
+#     --outputs-path gcs://rail-tpus-csnell-us/JaxSeq2_outputs/wordle_filtered_bc_50/ \
+#     --use-wandb \
+#     --wandb-project "wordle_bc" \
+#     \
+#     --epochs 20 \
+#     --train-bsize 128 \
+#     --grad-accum-steps None \
+#     --max-length 128 \
+#     --eval-loss-bsize 128 \
+#     --eval-loss-batches 256 \
+#     --policy-bsize 128 \
+#     --policy-n-rollouts 256 \
+#     --policy-max-input-length 128 \
+#     --policy-max-output-length 16 \
+#     \
+#     --log-every 256 \
+#     --eval-every-steps 1024 \
+#     --save-every-steps 1024 \
+#     --save-at-end \
+#     --no-save-best \
+#     --no-save-train-state \
+#     \
+#     --data-mesh-shape -1 \
+#     --fsdp-mesh-shape 1 \
+#     --model-mesh-shape 1 \
+
+# python -m llm_rl_scripts.wordle.train_bc \
+#     CONFIG \
+#     experiments/test_wordle/base_config.json \
+#     gcs://rail-tpus-csnell-us/LLM_RL_data/wordle/bc_data1_filtered_30.0.jsonl \
+#     gcs://rail-tpus-csnell-us/LLM_RL_data/wordle/bc_data_eval1.jsonl \
+#     llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+#     --exp-name "wordle_gptj_config_test2_filtered_30" \
+#     --outputs-path gcs://rail-tpus-csnell-us/JaxSeq2_outputs/wordle_filtered_bc_30/ \
+#     --use-wandb \
+#     --wandb-project "wordle_bc" \
+#     \
+#     --epochs 20 \
+#     --train-bsize 128 \
+#     --grad-accum-steps None \
+#     --max-length 128 \
+#     --eval-loss-bsize 128 \
+#     --eval-loss-batches 256 \
+#     --policy-bsize 128 \
+#     --policy-n-rollouts 256 \
+#     --policy-max-input-length 128 \
+#     --policy-max-output-length 16 \
+#     \
+#     --log-every 256 \
+#     --eval-every-steps 1024 \
+#     --save-every-steps 1024 \
+#     --save-at-end \
+#     --no-save-best \
+#     --no-save-train-state \
+#     \
+#     --data-mesh-shape -1 \
+#     --fsdp-mesh-shape 1 \
+#     --model-mesh-shape 1 \
+
+# python -m llm_rl_scripts.wordle.train_bc \
+#     CONFIG \
+#     experiments/test_wordle/base_config.json \
+#     gcs://rail-tpus-csnell-us/LLM_RL_data/wordle/bc_data1_filtered_10.0.jsonl \
+#     gcs://rail-tpus-csnell-us/LLM_RL_data/wordle/bc_data_eval1.jsonl \
+#     llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+#     --exp-name "wordle_gptj_config_test2_filtered_10" \
+#     --outputs-path gcs://rail-tpus-csnell-us/JaxSeq2_outputs/wordle_filtered_bc_10/ \
+#     --use-wandb \
+#     --wandb-project "wordle_bc" \
+#     \
+#     --epochs 20 \
+#     --train-bsize 128 \
+#     --grad-accum-steps None \
+#     --max-length 128 \
+#     --eval-loss-bsize 128 \
+#     --eval-loss-batches 256 \
+#     --policy-bsize 128 \
+#     --policy-n-rollouts 256 \
+#     --policy-max-input-length 128 \
+#     --policy-max-output-length 16 \
+#     \
+#     --log-every 256 \
+#     --eval-every-steps 1024 \
+#     --save-every-steps 1024 \
+#     --save-at-end \
+#     --no-save-best \
+#     --no-save-train-state \
+#     \
+#     --data-mesh-shape -1 \
+#     --fsdp-mesh-shape 1 \
+#     --model-mesh-shape 1 \
 
 # python -m llm_rl_scripts.wordle.optimal_perf
 
