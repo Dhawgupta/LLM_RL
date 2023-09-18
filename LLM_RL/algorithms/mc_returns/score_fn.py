@@ -1,6 +1,6 @@
 from typing import List, Optional
 from JaxSeq.models.gpt2.interface import GPT2Inference
-from LLM_RL.algorithms.ilql.base_interface import ILQLInference
+from LLM_RL.algorithms.mc_returns.base_interface import MCInference
 from transformers.tokenization_utils import PreTrainedTokenizer
 import jax.numpy as jnp
 import numpy as np
@@ -8,8 +8,8 @@ from LLM_RL.environment import TextHistory, TokenHistory
 import jax
 from IPython import embed
 
-def build_ilql_score_fn(
-    inference: ILQLInference, 
+def build_mc_score_fn(
+    inference: MCInference, 
     pi_beta_inference: Optional[GPT2Inference], 
     tokenizer: PreTrainedTokenizer, 
     max_length: int, 
@@ -40,13 +40,13 @@ def build_ilql_score_fn(
 
             prefix_len = jnp.asarray([prev_token_histories[i+x].tokens.shape[0] for x in range(batch.shape[0])], dtype=jnp.int32)
             attention_mask = (batch != tokenizer.pad_token_id).astype(np.float32)
-            # embed()
-            qs = jnp.minimum(values.target_output.q1, values.target_output.q2)
+
+            qs = values.q1
             qsa = jnp.take_along_axis(qs[:, :-1], batch[:, 1:][..., None], axis=2).squeeze(2)
             action_advs = jnp.empty(prefix_len.shape, dtype=jnp.float32)
             for x in range(len(prefix_len)):
                 # embed()
-                action_advs = action_advs.at[x].set(value_weight * ((qsa[x] - values.output.v[x, :-1]) * attention_mask[x, 1:])[(prefix_len[x]-1):].sum(axis=0))
+                action_advs = action_advs.at[x].set(value_weight * ((qsa[x]) * attention_mask[x, 1:])[(prefix_len[x]-1):].sum(axis=0))
 
             if logit_weight is not None:
                 logprobs = jax.nn.log_softmax(pi_beta_inference.get_logits_from_tokens(batch), axis=-1)

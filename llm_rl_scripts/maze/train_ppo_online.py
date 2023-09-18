@@ -85,8 +85,8 @@ def main(
     use_fp16_activations: bool=False, 
     use_fp16_params: bool=False, 
 
-    max_input_length: int=512, 
-    max_output_length: int=512, 
+    max_input_length: int=64, 
+    max_output_length: int=32, 
 
     log_every: int=256, 
     eval_every_steps: Optional[int]=256, 
@@ -372,7 +372,7 @@ def main(
             policy=policy,
             n_rollouts=n_rollouts,
             bsize=rollout_bsize,
-            env_options={"init_position": start_position},
+            # env_options={"init_position": start_position},
         )
         summary_results = pull_logs(summary_results)
 

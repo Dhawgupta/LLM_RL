@@ -43,6 +43,7 @@ def setup_maze_env(maze_name, describe_function, reward_function=None):
         display_initial_position=True,
         describe_function=describe_function,
         reward_function=reward_function,
+        last_k=1,
     )
     return env
 

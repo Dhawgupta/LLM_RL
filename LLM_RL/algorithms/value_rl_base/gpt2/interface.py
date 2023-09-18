@@ -2,6 +2,7 @@ from typing import Optional, Callable, Union, List
 from jax.experimental.pjit import pjit
 from jaxtyping import PyTree
 from transformers.modeling_flax_utils import FlaxPreTrainedModel
+from transformers.modeling_flax_outputs import FlaxCausalLMOutputWithCrossAttentions
 from transformers.tokenization_utils import PreTrainedTokenizerBase
 import flax.linen as nn
 from JaxSeq.utils import with_named_sharding_constraint, match_partition_rules, BlockingStrategy, block_sequences, Padding, Truncation
@@ -141,10 +142,11 @@ class GPT2ValueRLInference(ValueRLInference):
                 NamedSharding(mesh, PS()), 
             ), 
             out_shardings=ValueRLForwardOutput(
-                base_raw_output=FlaxCausalLMOutput(
+                base_raw_output=FlaxCausalLMOutputWithCrossAttentions(
                     logits=NamedSharding(mesh, PS(("dp", "fsdp"), None, None)) if dp_shard_logits else NamedSharding(mesh, PS()), 
                     hidden_states=NamedSharding(mesh, PS()), # assume no sharding for hidden states
                     attentions=NamedSharding(mesh, PS()), # assume no sharding for attentions
+                    cross_attentions=NamedSharding(mesh, PS()) # assume no sharding for cross attentions
                 ), 
                 q1=NamedSharding(mesh, PS(("dp", "fsdp"), None, None)) if dp_shard_logits else NamedSharding(mesh, PS()), 
                 q2=NamedSharding(mesh, PS(("dp", "fsdp"), None, None)) if (dp_shard_logits and q2_head_params is not None) else NamedSharding(mesh, PS()), 
