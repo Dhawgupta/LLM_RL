@@ -45,17 +45,11 @@ class GPTJValueRLInference(ValueRLInference):
             assert mesh == v_head_model.config.mesh
         assert (pi_beta_model is None and pi_beta_params is None) or (pi_beta_model is not None and pi_beta_params is not None)
         
-        pi_beta_params_partition_spec = None
-        if pi_beta_params is not None:
-            pi_beta_params_partition_spec = match_partition_rules(pi_beta_model.config.get_partition_rules(), pi_beta_params)
+        pi_beta_params_partition_spec = PS() if pi_beta_params is None else match_partition_rules(pi_beta_model.config.get_partition_rules(), pi_beta_params)
         base_params_partition_spec = match_partition_rules(base_model.config.get_partition_rules(), base_params)
         q1_head_params_partition_spec = match_partition_rules(q_head_model.config.get_partition_rules(), q1_head_params)
-        q2_head_params_partition_spec = None
-        if q2_head_params is not None:
-            q2_head_params_partition_spec = match_partition_rules(q_head_model.config.get_partition_rules(), q2_head_params)
-        v_head_params_partition_spec = None
-        if v_head_params is not None:
-            v_head_params_partition_spec = match_partition_rules(v_head_model.config.get_partition_rules(), v_head_params)
+        q2_head_params_partition_spec = PS() if q2_head_params is None else match_partition_rules(q_head_model.config.get_partition_rules(), q2_head_params)
+        v_head_params_partition_spec = PS() if v_head_params is None else match_partition_rules(v_head_model.config.get_partition_rules(), v_head_params)
 
         generator = None
         if pi_beta_model is not None:
@@ -72,10 +66,10 @@ class GPTJValueRLInference(ValueRLInference):
                 pjit, 
                 static_argnames=('generation_config', 'trace'), 
                 in_shardings=(
-                    NamedSharding(mesh, PS()) if pi_beta_params_partition_spec is None else jax.tree_util.tree_map(lambda ps: NamedSharding(mesh, ps), pi_beta_params_partition_spec), 
+                    jax.tree_util.tree_map(lambda ps: NamedSharding(mesh, ps), pi_beta_params_partition_spec), 
                     jax.tree_util.tree_map(lambda ps: NamedSharding(mesh, ps), base_params_partition_spec), 
                     jax.tree_util.tree_map(lambda ps: NamedSharding(mesh, ps), q1_head_params_partition_spec), 
-                    NamedSharding(mesh, PS()) if q2_head_params_partition_spec is None else jax.tree_util.tree_map(lambda ps: NamedSharding(mesh, ps), q2_head_params_partition_spec), 
+                    jax.tree_util.tree_map(lambda ps: NamedSharding(mesh, ps), q2_head_params_partition_spec), 
                     NamedSharding(mesh, PS()), 
                     NamedSharding(mesh, PS()), 
                     NamedSharding(mesh, PS()), 
@@ -133,8 +127,8 @@ class GPTJValueRLInference(ValueRLInference):
             in_shardings=(
                 jax.tree_util.tree_map(lambda ps: NamedSharding(mesh, ps), base_params_partition_spec), 
                 jax.tree_util.tree_map(lambda ps: NamedSharding(mesh, ps), q1_head_params_partition_spec), 
-                NamedSharding(mesh, PS()) if q2_head_params_partition_spec is None else jax.tree_util.tree_map(lambda ps: NamedSharding(mesh, ps), q2_head_params_partition_spec), 
-                NamedSharding(mesh, PS()) if v_head_params_partition_spec is None else jax.tree_util.tree_map(lambda ps: NamedSharding(mesh, ps), v_head_params_partition_spec), 
+                jax.tree_util.tree_map(lambda ps: NamedSharding(mesh, ps), q2_head_params_partition_spec), 
+                jax.tree_util.tree_map(lambda ps: NamedSharding(mesh, ps), v_head_params_partition_spec), 
                 NamedSharding(mesh, PS()), 
                 NamedSharding(mesh, PS()), 
                 NamedSharding(mesh, PS()), 

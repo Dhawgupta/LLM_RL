@@ -1,7 +1,7 @@
 from typing import Optional, Dict, Any, Tuple
 import tyro
 from JaxSeq.bucket_manager import open_with_bucket as open
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, GPT2TokenizerFast
 from JaxSeq.utils import jsonl_stream, convert_path, load_mesh, get_dtype, setup_experiment_save
 import jax
 import jax.numpy as jnp
@@ -111,8 +111,7 @@ def main(
     input_args = locals()
     print(input_args)
 
-    tokenizer = AutoTokenizer.from_pretrained('EleutherAI/gpt-j-6B')
-    tokenizer = 
+    tokenizer = GPT2TokenizerFast.from_pretrained('gpt2')
     tokenizer.add_special_tokens({'pad_token': '<|pad|>'})
 
     mesh = load_mesh((data_mesh_shape, fsdp_mesh_shape, model_mesh_shape), ('dp', 'fsdp', 'mp'))

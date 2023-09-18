@@ -19,7 +19,7 @@ def build_ilql_score_fn(
 ):
     assert (pi_beta_inference is None and logit_weight is None) or (pi_beta_inference is not None and logit_weight is not None)
     
-    def score_fn(text_histories: List[TextHistory]) -> List[float]:
+    def score_fn(text_histories: List[TextHistory], done:Optional[List]=None) -> List[float]:
         assert all([text_history[-1].is_action for text_history in text_histories])
         
         prev_token_histories = []
@@ -36,8 +36,8 @@ def build_ilql_score_fn(
         
         for i in range(0, len(text_histories), bsize):
             batch = tokens[i:i+bsize, :]
-
-            values = inference.get_values_from_tokens(batch)
+            embed()
+            values = inference.forward(batch)
 
             prefix_len = jnp.asarray([prev_token_histories[i+x].tokens.shape[0] for x in range(batch.shape[0])], dtype=jnp.int32)
             attention_mask = (batch != tokenizer.pad_token_id).astype(np.float32)

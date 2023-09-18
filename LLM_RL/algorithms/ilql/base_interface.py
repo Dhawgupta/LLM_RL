@@ -245,10 +245,7 @@ class ILQLInference(struct.PyTreeNode):
     value_inference: ValueRLInference
     target_value_inference: ValueRLInference
     _eval_loss: Callable = struct.field(pytree_node=False)
-
-class ILQLPolicy(BatchedTextPolicy):
-    def set_params(self, params: PyTree) -> None:
-        raise NotImplementedError 
+    use_target_base_for_loss: bool = struct.field(pytree_node=False, default=True)
 
     # def _eval_loss(
     #     base_params: PyTree, 
@@ -419,7 +416,7 @@ class ILQLPolicy(BatchedTextPolicy):
         
         loss, logs = self._eval_loss(
             self.value_inference.base_params, 
-            self.target_value_inference.base_params, 
+            self.target_value_inference.base_params if self.use_target_base_for_loss else None, 
             self.value_inference.q1_head_params, 
             self.value_inference.q2_head_params, 
             self.value_inference.v_head_params, 
