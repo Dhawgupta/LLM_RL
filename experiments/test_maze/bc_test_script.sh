@@ -12,7 +12,7 @@ python -m llm_rl_scripts.maze.bc.partially_observed_bc \
     gpt2 \
     gcs://rail-tpus-isadora/maze/data/double_t_maze_filtered_dialogue_history.jsonl \
     0.90 \
-    --exp-name maze_partial_observation_filtered_test1 \
+    --exp-name maze_partial_observation_filtered_test2 \
     --outputs-path gcs://rail-tpus-csnell-us/LLM_RL_outputs/maze/ \
     --data-mesh-shape 1 \
     --fsdp-mesh-shape -1 \

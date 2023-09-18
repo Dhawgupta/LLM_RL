@@ -115,19 +115,25 @@ def main(
     train_items = all_items[:int(len(all_items)*eval_frac)]
     eval_items = all_items[int(len(all_items)*eval_frac):]
     
-    def str_iterable(items: List[str]):
-        for item in items:
-            obj = json.loads(item)
-            for i in range(0, len(obj['text_history']), 2):
-                start_idx = max(0, i-traj_max_length)
-                in_text = " ".join(obj['text_history'][start_idx:i+1])
-                out_text = obj['text_history'][i+1]
-                yield {"in_text":in_text, "out_text":out_text}
+    class StrIterable:
+        def __init__(self, items: List[str]):
+            self.items = items
+        
+        def __iter__(self):
+            def str_iterable(items: List[str]):
+                for item in items:
+                    obj = json.loads(item)
+                    for i in range(0, len(obj['text_history']), 2):
+                        start_idx = max(0, i-traj_max_length)
+                        in_text = " ".join(obj['text_history'][start_idx:i+1])
+                        out_text = obj['text_history'][i+1]
+                        yield {"in_text":in_text, "out_text":out_text}
+            return str_iterable(self.items)
     
     train_data = Seq2SeqIterableDataset.from_str_iterable(
         MapIterable(
             lambda x: (tokenizer.bos_token+x['in_text'].removeprefix(tokenizer.bos_token), x['out_text']), 
-            str_iterable(train_items)), 
+            StrIterable(train_items)), 
         tokenizer=tokenizer, 
         in_blocking_strategy=BlockingStrategy(
             padding=Padding.LEFT, 
@@ -144,7 +150,7 @@ def main(
     eval_data = Seq2SeqIterableDataset.from_str_iterable(
         MapIterable(
             lambda x: (tokenizer.bos_token+x['in_text'].removeprefix(tokenizer.bos_token), x['out_text']), 
-            str_iterable(eval_items)), 
+            StrIterable(eval_items)), 
         tokenizer=tokenizer, 
         in_blocking_strategy=BlockingStrategy(
             padding=Padding.LEFT, 
