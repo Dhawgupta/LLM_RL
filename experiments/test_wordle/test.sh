@@ -23,7 +23,7 @@ python -m llm_rl_scripts.wordle.eval_bc \
     PARAMS \
     gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gptj_config_test2.2023-05-12-17-01-25.893.a16043b2f0e611ed890c5d20da9db470/step_237568/ \
     llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
-    --outputs-path gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gptj_config_test2.2023-05-12-17-01-25.893.a16043b2f0e611ed890c5d20da9db470/eval_bc_sample/ \
+    --outputs-path gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gptj_config_test2.2023-05-12-17-01-25.893.a16043b2f0e611ed890c5d20da9db470/step_237568/eval_bc_sample/ \
     \
     --data-mesh-shape -1 \
     --fsdp-mesh-shape 1 \
@@ -38,7 +38,7 @@ python -m llm_rl_scripts.wordle.eval_bc \
     PARAMS \
     gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gptj_config_test2.2023-05-12-17-01-25.893.a16043b2f0e611ed890c5d20da9db470/step_237568/ \
     llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
-    --outputs-path gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gptj_config_test2.2023-05-12-17-01-25.893.a16043b2f0e611ed890c5d20da9db470/eval_bc_greedy/ \
+    --outputs-path gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gptj_config_test2.2023-05-12-17-01-25.893.a16043b2f0e611ed890c5d20da9db470/step_237568/eval_bc_greedy/ \
     \
     --data-mesh-shape -1 \
     --fsdp-mesh-shape 1 \
