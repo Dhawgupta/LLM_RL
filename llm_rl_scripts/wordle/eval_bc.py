@@ -122,6 +122,8 @@ def main(
             print(text_history_to_str(item[-1].post_transition_history))
             print('='*25)
         
+        print(interaction_summary_results)
+        
         if outputs_path is not None:
             create_path(outputs_path)
             with open(os.path.join(convert_path(outputs_path), 'interactions.pkl'), 'wb') as f:
