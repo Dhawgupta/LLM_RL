@@ -37,7 +37,7 @@ from LLM_RL.algorithms.ilql.train import train_loop
 from LLM_RL.algorithms.ilql.data import ILQLData, ILQLDataset, ILQLIterableDataset
 from JaxSeq.utils import multihost_device_get
 from transformers import GPT2TokenizerFast
-from IPython import embed
+# from IPython import embed
 from llm_rl_scripts.maze.maze_utils import setup_maze_env, pick_start_position
 from llm_rl_scripts.maze.mazes import double_t_maze_optimal_directions, double_t_maze
 from llm_rl_scripts.maze.env import MazeEnv, describe_observation_give_position, manhatten_actions, describe_observation, maze_proposal_function, standard_reward
@@ -78,16 +78,16 @@ def main(
     gradient_checkpointing: bool=False, 
     gradient_checkpointing_policy: str='nothing_saveable', 
 
-    max_length: int=256, 
+    max_length: int=80, 
 
     log_every: int=256, 
-    eval_every_steps: Optional[int]=10000, 
-    eval_every_epochs: Optional[int]=None, 
-    eval_at_beginning: bool=True, 
+    eval_every_steps: Optional[int]=None, 
+    eval_every_epochs: Optional[int]=10, 
+    eval_at_beginning: bool=False, 
     eval_at_end: bool=True, 
 
-    save_every_steps: Optional[int]=100000, 
-    save_every_epochs: Optional[int]=None, 
+    save_every_steps: Optional[int]=None, 
+    save_every_epochs: Optional[int]=50, 
     save_at_beginning: bool=False, 
     save_at_end: bool=True, 
     save_best: bool=False, 
@@ -335,7 +335,39 @@ def main(
         hard_update_every=None, 
     )
     
-    value_rl_inference = GPT2ValueRLInference.load_inference(
+    # value_rl_inference = GPT2ValueRLInference.load_inference(
+    #     pi_beta_params=pi_beta_params,
+    #     base_params=base_train_state.params, 
+    #     q1_head_params=q1_head_train_state.params, 
+    #     q2_head_params=q2_head_train_state.params, 
+    #     v_head_params=v_head_train_state.params, 
+    #     pi_beta_model=base_model,
+    #     base_model=base_model, 
+    #     q_head_model=q_head, 
+    #     v_head_model=v_head, 
+    #     tokenizer=tokenizer,  
+    #     beta=128.0, 
+    #     dp_shard_logits=True, 
+    # )
+    
+    # target_value_rl_inference = GPT2ValueRLInference.load_inference(
+    #     pi_beta_params=pi_beta_params,
+    #     base_params=target_base_params,
+    #     q1_head_params=q1_target_head_params,
+    #     q2_head_params=q2_target_head_params,
+    #     v_head_params=v_head_train_state.params,
+    #     pi_beta_model=base_model,
+    #     base_model=base_model,
+    #     q_head_model=q_head,
+    #     v_head_model=v_head,
+    #     tokenizer=tokenizer,
+    #     beta=128.0,
+    #     dp_shard_logits=True,
+    # )
+    
+    # inference = GPT2ILQLInference.load_inference(value_rl_inference, target_value_rl_inference, loss_fn)
+    inference = GPT2ILQLInference.load_inference(
+        GPT2ValueRLInference.load_inference(
         pi_beta_params=pi_beta_params,
         base_params=base_train_state.params, 
         q1_head_params=q1_head_train_state.params, 
@@ -348,24 +380,23 @@ def main(
         tokenizer=tokenizer,  
         beta=128.0, 
         dp_shard_logits=True, 
-    )
-    
-    target_value_rl_inference = GPT2ValueRLInference.load_inference(
+    ), 
+        GPT2ValueRLInference.load_inference(
         pi_beta_params=pi_beta_params,
         base_params=target_base_params,
         q1_head_params=q1_target_head_params,
         q2_head_params=q2_target_head_params,
-        v_head_params=v_head_train_state.params,
+        v_head_params=None,
         pi_beta_model=base_model,
         base_model=base_model,
         q_head_model=q_head,
-        v_head_model=v_head,
+        v_head_model=None,
         tokenizer=tokenizer,
         beta=128.0,
         dp_shard_logits=True,
+    ),
+        loss_fn,
     )
-    
-    inference = GPT2ILQLInference.load_inference(value_rl_inference, target_value_rl_inference, loss_fn)
 
     save_dir, exp_name = setup_experiment_save(
         exp_name=exp_name, 
@@ -379,6 +410,7 @@ def main(
     def evaluate(inference: GPT2ILQLInference):
         nonlocal policy_prng
         policy_prng, new_key = jax.random.split(policy_prng)
+        # embed()
         sample_policy = ReRankerSamplePolicy(
             proposal_fn=maze_proposal_function,
             score_fn=build_ilql_score_fn(
@@ -462,6 +494,7 @@ def main(
                 env.position = position
                 observation = describe_observation_give_position(maze, position, env.goal)
                 text_history = (Text(observation, False),)
+                # embed()
                 output = policy.act(text_history)
                 prediction = output[-1].text
                 # output = policy.act(text_history)
