@@ -126,7 +126,7 @@ def main(
             create_path(outputs_path)
             with open(os.path.join(convert_path(outputs_path), 'interactions.pkl'), 'wb') as f:
                 pkl.dump(interation_raw_results, f)
-            with open(os.path.join(convert_path(outputs_path), 'interactions_summary.json'), 'wb') as f:
+            with open(os.path.join(convert_path(outputs_path), 'interactions_summary.json'), 'w') as f:
                 json.dump(interaction_summary_results, f)
         
 

@@ -16,9 +16,6 @@ conda activate LLM_RL
 
 # 9/17/23
 
-# export GCLOUD_PROJECT="rail-tpus"
-# export GCLOUD_TOKEN_PATH="${HOME}/.config/gcloud/rail-tpus.json"
-
 export GCLOUD_PROJECT="civic-boulder-204700"
 export GCLOUD_TOKEN_PATH="${HOME}/.config/gcloud/civic-boulder-204700-V2.json"
 
@@ -35,7 +32,57 @@ python -m llm_rl_scripts.wordle.eval_bc \
     --policy-n-rollouts 4096 \
     --policy-bsize 128 \
     --policy-max-input-length 128 \
+    --policy-max-output-length 16
+
+python -m llm_rl_scripts.wordle.eval_bc \
+    PARAMS \
+    gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gptj_config_test2.2023-05-12-17-01-25.893.a16043b2f0e611ed890c5d20da9db470/step_237568/ \
+    llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+    --outputs-path gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gptj_config_test2.2023-05-12-17-01-25.893.a16043b2f0e611ed890c5d20da9db470/eval_bc_greedy/ \
+    \
+    --data-mesh-shape -1 \
+    --fsdp-mesh-shape 1 \
+    --model-mesh-shape 1 \
+    \
+    --policy-n-rollouts 4096 \
+    --policy-bsize 128 \
+    --policy-max-input-length 128 \
     --policy-max-output-length 16 \
+    --no-policy-do-sample
+
+# export GCLOUD_PROJECT="rail-tpus"
+# export GCLOUD_TOKEN_PATH="${HOME}/.config/gcloud/rail-tpus.json"
+
+# python -m llm_rl_scripts.wordle.eval_bc \
+#     PARAMS \
+#     gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gptj_config_test2.2023-05-12-17-01-25.893.a16043b2f0e611ed890c5d20da9db470/step_237568/ \
+#     llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+#     --outputs-path gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gptj_config_test2.2023-05-12-17-01-25.893.a16043b2f0e611ed890c5d20da9db470/eval_bc_sample/ \
+#     \
+#     --data-mesh-shape -1 \
+#     --fsdp-mesh-shape 1 \
+#     --model-mesh-shape 1 \
+#     \
+#     --policy-n-rollouts 4096 \
+#     --policy-bsize 128 \
+#     --policy-max-input-length 128 \
+#     --policy-max-output-length 16
+
+# python -m llm_rl_scripts.wordle.eval_bc \
+#     PARAMS \
+#     gcs://rail-tpus-csnell-us/JaxSeq2_outputs/wordle_filtered_bc_50/wordle_gptj_config_test2_filtered_50.2023-09-16-06-18-04.344.cb859284545811ee9b91dd1a943a02f5/last \
+#     llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+#     --outputs-path gcs://rail-tpus-csnell-us/JaxSeq2_outputs/wordle_filtered_bc_50/wordle_gptj_config_test2_filtered_50.2023-09-16-06-18-04.344.cb859284545811ee9b91dd1a943a02f5/eval_bc_greedy/ \
+#     \
+#     --data-mesh-shape -1 \
+#     --fsdp-mesh-shape 1 \
+#     --model-mesh-shape 1 \
+#     \
+#     --policy-n-rollouts 4096 \
+#     --policy-bsize 128 \
+#     --policy-max-input-length 128 \
+#     --policy-max-output-length 16 \
+#     --no-policy-do-sample
 
 
 
