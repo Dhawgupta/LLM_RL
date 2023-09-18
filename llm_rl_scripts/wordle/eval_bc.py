@@ -127,8 +127,7 @@ def main(
             with open(os.path.join(convert_path(outputs_path), 'interactions.pkl'), 'wb') as f:
                 pkl.dump(interation_raw_results, f)
             with open(os.path.join(convert_path(outputs_path), 'interactions_summary.json'), 'w') as f:
-                json.dump(interaction_summary_results, f)
-        
+                json.dump(jax.tree_util.tree_map(lambda x: float(x), interaction_summary_results), f)
 
         return {'generation_metrics': interaction_summary_results}
     
