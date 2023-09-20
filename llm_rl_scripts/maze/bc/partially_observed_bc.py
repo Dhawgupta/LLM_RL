@@ -24,6 +24,8 @@ from JaxSeq.bucket_manager import open_with_bucket as open
 from LLM_RL.algorithms.ppo.reranker_policy import ReRankerSamplePolicy
 from LLM_RL.algorithms.ppo.score_fn import build_bc_score_fn
 import random
+from collections import defaultdict
+from flax.traverse_util import flatten_dict, unflatten_dict
 
 from LLM_RL.environment import text_env_eval
 from llm_rl_scripts.maze.env import maze_proposal_function
@@ -253,6 +255,7 @@ def main(
         )
         
         results = {}
+        avg_dict = defaultdict(float)
         for position in possible_positions:
             position = tuple(position)
             _, results[str(position)] = text_env_eval(
@@ -273,6 +276,11 @@ def main(
                 env_options={"init_position": position},
                 # save_config=None, 
             )
+            for k, v in flatten_dict(results[str(position)]).items():
+                avg_dict[k] += v
+        for k, v in avg_dict.items():
+            avg_dict[k] = v/len(possible_positions)
+        results["avg_reward"] = unflatten_dict(dict(avg_dict))
         # avg_position_results = results["avg_reward"]
         #TODO: accuracy metric
         return data_results['loss'], {'data': data_results, 'sample_env': results}
