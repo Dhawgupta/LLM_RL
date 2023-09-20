@@ -80,7 +80,7 @@ def main(
     gradient_checkpointing: bool=False, 
     gradient_checkpointing_policy: str='nothing_saveable', 
 
-    max_length: int=64, 
+    max_length: int=80, 
 
     log_every: int=256, 
     eval_every_steps: Optional[int]=10000, 
@@ -284,7 +284,7 @@ def main(
                 inference=inference,
                 pi_beta_inference=None,
                 tokenizer=tokenizer,
-                max_length=6, 
+                max_length=max_length, 
                 value_weight=1.0,
                 logit_weight=None,
                 bsize=4,
@@ -323,7 +323,7 @@ def main(
                 inference=inference,
                 pi_beta_inference=None,
                 tokenizer=tokenizer,
-                max_length=6,
+                max_length=max_length,
                 value_weight=1.0,
                 logit_weight=None,
                 bsize=4,

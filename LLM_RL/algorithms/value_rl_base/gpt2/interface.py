@@ -20,7 +20,7 @@ from LLM_RL.algorithms.value_rl_base.base_interface import ValueRLPolicy
 from transformers.generation import GenerationConfig
 from LLM_RL.environment import TextHistory, text_history_to_str, Text
 from JaxSeq.utils import strip_prompt_from_completion
-
+from IPython import embed
 
 class GPT2ValueRLInference(ValueRLInference):
     @classmethod
@@ -301,6 +301,7 @@ class GPT2ValuePolicy(ValueRLPolicy):
             eos_token if d else self.in_str_process(text_history_to_str(item)) \
                 for item, d in zip(text_history, done)
         ]
+        # embed()
 
         new_key = None
         if self.prng_key is not None:
