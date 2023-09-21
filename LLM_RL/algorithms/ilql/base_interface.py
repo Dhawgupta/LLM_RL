@@ -324,6 +324,11 @@ class ILQLInference(struct.PyTreeNode):
         train: bool=False, 
         prng_key: Optional[jax.random.PRNGKeyArray]=None, 
     ) -> ILQLForwardOutput:
+        input_ids_cp = input_ids.copy()
+        attention_mask_cp = attention_mask.copy() if attention_mask is not None else None
+        position_ids_cp = position_ids.copy() if position_ids is not None else None
+        output_attentions_cp = output_attentions.copy() if output_attentions is not None else None
+        prng_key_cp = prng_key.copy() if prng_key is not None else None
         return ILQLForwardOutput(
             output=self.value_inference.forward(
                 input_ids, 
@@ -334,12 +339,12 @@ class ILQLInference(struct.PyTreeNode):
                 prng_key=prng_key, 
             ), 
             target_output=self.target_value_inference.forward(
-                input_ids, 
-                attention_mask=attention_mask, 
-                position_ids=position_ids, 
-                output_attentions=output_attentions, 
+                input_ids_cp, 
+                attention_mask=attention_mask_cp, 
+                position_ids=position_ids_cp, 
+                output_attentions=output_attentions_cp, 
                 train=train, 
-                prng_key=prng_key, 
+                prng_key=prng_key_cp, 
             ), 
         )
     

@@ -78,20 +78,20 @@ def main(
     gradient_checkpointing: bool=False, 
     gradient_checkpointing_policy: str='nothing_saveable', 
 
-    max_length: int=256, 
+    max_length: int=80, 
 
     log_every: int=256, 
-    eval_every_steps: Optional[int]=10000, 
-    eval_every_epochs: Optional[int]=None, 
+    eval_every_steps: Optional[int]=None, 
+    eval_every_epochs: Optional[int]=10, 
     eval_at_beginning: bool=True, 
     eval_at_end: bool=True, 
 
-    save_every_steps: Optional[int]=100000, 
-    save_every_epochs: Optional[int]=None, 
+    save_every_steps: Optional[int]=None, 
+    save_every_epochs: Optional[int]=5, 
     save_at_beginning: bool=False, 
     save_at_end: bool=True, 
     save_best: bool=False, 
-    max_checkpoints: Optional[int]=None, 
+    max_checkpoints: Optional[int]=5, 
     save_train_state: bool=True, 
     save_bf16: bool=True, 
 
@@ -106,6 +106,7 @@ def main(
     force_pad_embeddings: bool=False, 
 
     should_restore_loop_state: bool=False, 
+    reranker: bool=True
 ):
     input_args = locals()
     print(input_args)
@@ -335,7 +336,39 @@ def main(
         hard_update_every=None, 
     )
     
-    value_rl_inference = GPT2ValueRLInference.load_inference(
+    # value_rl_inference = GPT2ValueRLInference.load_inference(
+    #     pi_beta_params=pi_beta_params,
+    #     base_params=base_train_state.params, 
+    #     q1_head_params=q1_head_train_state.params, 
+    #     q2_head_params=q2_head_train_state.params, 
+    #     v_head_params=v_head_train_state.params, 
+    #     pi_beta_model=base_model,
+    #     base_model=base_model, 
+    #     q_head_model=q_head, 
+    #     v_head_model=v_head, 
+    #     tokenizer=tokenizer,  
+    #     beta=128.0, 
+    #     dp_shard_logits=True, 
+    # )
+    
+    # target_value_rl_inference = GPT2ValueRLInference.load_inference(
+    #     pi_beta_params=pi_beta_params,
+    #     base_params=target_base_params,
+    #     q1_head_params=q1_target_head_params,
+    #     q2_head_params=q2_target_head_params,
+    #     v_head_params=v_head_train_state.params,
+    #     pi_beta_model=base_model,
+    #     base_model=base_model,
+    #     q_head_model=q_head,
+    #     v_head_model=v_head,
+    #     tokenizer=tokenizer,
+    #     beta=128.0,
+    #     dp_shard_logits=True,
+    # )
+    
+    # inference = GPT2ILQLInference.load_inference(value_rl_inference, target_value_rl_inference, loss_fn)
+    inference = GPT2ILQLInference.load_inference(
+        GPT2ValueRLInference.load_inference(
         pi_beta_params=pi_beta_params,
         base_params=base_train_state.params, 
         q1_head_params=q1_head_train_state.params, 
@@ -346,26 +379,25 @@ def main(
         q_head_model=q_head, 
         v_head_model=v_head, 
         tokenizer=tokenizer,  
-        beta=128.0, 
+        beta=8.0, 
         dp_shard_logits=True, 
-    )
-    
-    target_value_rl_inference = GPT2ValueRLInference.load_inference(
+    ), 
+        GPT2ValueRLInference.load_inference(
         pi_beta_params=pi_beta_params,
         base_params=target_base_params,
         q1_head_params=q1_target_head_params,
         q2_head_params=q2_target_head_params,
-        v_head_params=v_head_train_state.params,
+        v_head_params=None,
         pi_beta_model=base_model,
         base_model=base_model,
         q_head_model=q_head,
-        v_head_model=v_head,
+        v_head_model=None,
         tokenizer=tokenizer,
-        beta=128.0,
+        beta=8.0,
         dp_shard_logits=True,
+    ),
+        loss_fn,
     )
-    
-    inference = GPT2ILQLInference.load_inference(value_rl_inference, target_value_rl_inference, loss_fn)
 
     save_dir, exp_name = setup_experiment_save(
         exp_name=exp_name, 
@@ -374,43 +406,84 @@ def main(
         script__file__=__file__, 
         is_main_process=is_main_process, 
     )
+    print(save_dir)
+    if save_dir is None:
+        embed()
 
     policy_prng = jax.random.PRNGKey(0)
     def evaluate(inference: GPT2ILQLInference):
         nonlocal policy_prng
         policy_prng, new_key = jax.random.split(policy_prng)
-        sample_policy = ReRankerSamplePolicy(
-            proposal_fn=maze_proposal_function,
-            score_fn=build_ilql_score_fn(
-                inference=inference,
-                pi_beta_inference=None,
-                tokenizer=tokenizer,
-                max_length=6, 
-                value_weight=1.0,
-                logit_weight=None,
-                bsize=4,
+        # embed()
+        if reranker: 
+            sample_policy = ReRankerSamplePolicy(
+                proposal_fn=maze_proposal_function,
+                score_fn=build_ilql_score_fn(
+                    inference=inference,
+                    pi_beta_inference=None,
+                    tokenizer=tokenizer,
+                    max_length=80, 
+                    value_weight=1.0,
+                    logit_weight=None,
+                    bsize=4,
+                )
             )
-        )
-        # sample_policy = GPT2ValuePolicy(
-        #     inference=inference.value_inference, 
-        #     prng_key=new_key, 
-        #     generation_config=GenerationConfig(
-        #         do_sample=True, 
-        #         num_beams=policy_num_beams, 
-        #         temperature=policy_temperature, 
-        #         top_p=policy_top_p, 
-        #         top_k=policy_top_k, 
-        #         eos_token_id=tokenizer.encode('\n')[0], 
-        #         pad_token_id=tokenizer.pad_token_id, 
-        #         max_new_tokens=policy_max_output_length, 
-        #     ), 
-        #     blocking_strategy=BlockingStrategy(
-        #         padding=Padding.LEFT, 
-        #         truncation=Truncation.LEFT, 
-        #         max_length=policy_max_input_length, 
-        #     ), 
-        #     out_str_process=lambda x: x.removesuffix('\n')+'\n', 
-        # )
+            
+            policy = ReRankerPolicy(
+                proposal_fn=maze_proposal_function,
+                score_fn=build_ilql_score_fn(
+                    inference=inference,
+                    pi_beta_inference=None,
+                    tokenizer=tokenizer,
+                    max_length=80,
+                    value_weight=1.0,
+                    logit_weight=None,
+                    bsize=4,
+                )
+            )
+        else:
+            sample_policy = GPT2ValuePolicy(
+                inference=inference.value_inference, 
+                prng_key=new_key, 
+                generation_config=GenerationConfig(
+                    do_sample=True, 
+                    num_beams=policy_num_beams, 
+                    temperature=policy_temperature, 
+                    top_p=policy_top_p, 
+                    top_k=policy_top_k, 
+                    eos_token_id=tokenizer.encode('\n')[0], 
+                    pad_token_id=tokenizer.pad_token_id, 
+                    max_new_tokens=policy_max_output_length, 
+                ), 
+                blocking_strategy=BlockingStrategy(
+                    padding=Padding.LEFT, 
+                    truncation=Truncation.LEFT, 
+                    max_length=policy_max_input_length, 
+                ), 
+                out_str_process=lambda x: x.removesuffix('\n')+'\n', 
+            )
+            
+            policy = GPT2ValuePolicy(
+                inference=inference.value_inference, 
+                prng_key=new_key, 
+                generation_config=GenerationConfig(
+                    do_sample=False, 
+                    num_beams=policy_num_beams, 
+                    temperature=policy_temperature, 
+                    top_p=policy_top_p, 
+                    top_k=policy_top_k, 
+                    eos_token_id=tokenizer.encode('\n')[0], 
+                    pad_token_id=tokenizer.pad_token_id, 
+                    max_new_tokens=policy_max_output_length, 
+                ), 
+                blocking_strategy=BlockingStrategy(
+                    padding=Padding.LEFT, 
+                    truncation=Truncation.LEFT, 
+                    max_length=policy_max_input_length, 
+                ), 
+                out_str_process=lambda x: x.removesuffix('\n')+'\n', 
+            )
+        
         maze_name = "double_t_maze"
         describe_function = "describe_observation_give_position"
         reward_function = "standard_reward"
@@ -418,39 +491,7 @@ def main(
         env = setup_maze_env(maze_name=maze_name, describe_function=describe_function, reward_function=reward_function)
         start_position = pick_start_position(maze_name=maze_name)
         
-        policy = ReRankerPolicy(
-            proposal_fn=maze_proposal_function,
-            score_fn=build_ilql_score_fn(
-                inference=inference,
-                pi_beta_inference=None,
-                tokenizer=tokenizer,
-                max_length=6,
-                value_weight=1.0,
-                logit_weight=None,
-                bsize=4,
-            )
-        )
-        
-        # policy = GPT2ValuePolicy(
-        #     inference=inference.value_inference, 
-        #     prng_key=new_key, 
-        #     generation_config=GenerationConfig(
-        #         do_sample=False, 
-        #         num_beams=policy_num_beams, 
-        #         temperature=policy_temperature, 
-        #         top_p=policy_top_p, 
-        #         top_k=policy_top_k, 
-        #         eos_token_id=tokenizer.encode('\n')[0], 
-        #         pad_token_id=tokenizer.pad_token_id, 
-        #         max_new_tokens=policy_max_output_length, 
-        #     ), 
-        #     blocking_strategy=BlockingStrategy(
-        #         padding=Padding.LEFT, 
-        #         truncation=Truncation.LEFT, 
-        #         max_length=policy_max_input_length, 
-        #     ), 
-        #     out_str_process=lambda x: x.removesuffix('\n')+'\n', 
-        # )
+
         
         maze = double_t_maze()
         goal = (8, 6)
@@ -462,8 +503,13 @@ def main(
                 env.position = position
                 observation = describe_observation_give_position(maze, position, env.goal)
                 text_history = (Text(observation, False),)
-                output = policy.act(text_history)
-                prediction = output[-1].text
+                # embed()
+                if reranker:
+                    output = policy.act(text_history)
+                    prediction = output[-1].text
+                else:
+                    output = policy.act([text_history], done=[False])
+                    prediction = output[-1][-1].text
                 # output = policy.act(text_history)
                 # prediction = output[-1].text
                 if position[0] == goal[0] and position[1] == goal[1]:

@@ -37,7 +37,7 @@ def build_ilql_score_fn(
         for i in range(0, len(text_histories), bsize):
             batch = tokens[i:i+bsize, :]
             values = inference.forward(batch)
-
+            # check prefix len is getting action
             prefix_len = jnp.asarray([prev_token_histories[i+x].tokens.shape[0] for x in range(batch.shape[0])], dtype=jnp.int32)
             attention_mask = (batch != tokenizer.pad_token_id).astype(np.float32)
             # embed()
@@ -46,6 +46,7 @@ def build_ilql_score_fn(
             action_advs = jnp.empty(prefix_len.shape, dtype=jnp.float32)
             for x in range(len(prefix_len)):
                 # embed()
+                # check if this is getting rid of non-action states
                 action_advs = action_advs.at[x].set(value_weight * ((qsa[x] - values.output.v[x, :-1]) * attention_mask[x, 1:])[(prefix_len[x]-1):].sum(axis=0))
 
             if logit_weight is not None:
