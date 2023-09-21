@@ -17,14 +17,14 @@ source ~/miniconda3/bin/activate
 conda activate LLM_RL
 
 
-export GCLOUD_PROJECT="rail-tpus"
-export GCLOUD_TOKEN_PATH="${HOME}/.config/gcloud/rail-tpus.json"
+export GCLOUD_PROJECT="civic-boulder-204700"
+export GCLOUD_TOKEN_PATH="${HOME}/.config/gcloud/civic-boulder-204700-V2.json"
 
 python -m llm_rl_scripts.wordle.train_bc \
     HF \
     gpt2 \
-    gcs://rail-tpus-csnell-us/LLM_RL_data/wordle/bc_data1.jsonl \
-    gcs://rail-tpus-csnell-us/LLM_RL_data/wordle/bc_data_eval1.jsonl \
+    gcs://charlie-bucket2/LLM_RL_data/wordle/bc_data1.jsonl \
+    gcs://charlie-bucket2/LLM_RL_data/wordle/bc_data_eval1.jsonl \
     llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
     --exp-name "wordle_gpt2_test2" \
     --outputs-path gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/ \
