@@ -20,7 +20,7 @@ conda activate LLM_RL
 export GCLOUD_PROJECT="civic-boulder-204700"
 export GCLOUD_TOKEN_PATH="${HOME}/.config/gcloud/civic-boulder-204700-V2.json"
 
-python -m llm_rl_scripts.wordle.train_bc \
+python -m llm_rl_scripts.wordle.train_bc_gpt2 \
     HF \
     gpt2 \
     gcs://charlie-bucket2/LLM_RL_data/wordle/bc_data1.jsonl \

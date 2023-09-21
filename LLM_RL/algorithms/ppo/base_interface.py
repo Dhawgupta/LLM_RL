@@ -589,7 +589,7 @@ class PPOInference(struct.PyTreeNode):
                 rewards=combined_token_trajectory_chains[i].rewards - kl_weight * log_ratio[i], 
             )
 
-        advantage_chains, return_chains = [], []
+        all_advantages, all_returns = [], []
         for i in range(n_chains):
             action_idxs, state_idxs, next_state_idxs = get_action_state_next_state_idxs(
                 combined_token_trajectory_chains[i].should_take_action, 
@@ -605,14 +605,28 @@ class PPOInference(struct.PyTreeNode):
                 action_rewards=action_rewards[None], 
                 gamma=gamma, 
                 lam=lam, 
-                use_whitening=use_advantage_whitening, 
+                use_whitening=False, 
             )
 
+            all_advantages.append(advantages[0])
+            all_returns.append(returns[0])
+        
+        # do advantage whitening over the full batch
+        if use_advantage_whitening:
+            whitened_advantages = whiten(np.concatenate(all_advantages, axis=0), shift_mean=True)
+            curr_pos = 0
+            for i in range(n_chains):
+                curr_len = all_advantages[i].shape[0]
+                all_advantages[i] = whitened_advantages[curr_pos:(curr_pos+curr_len)]
+                curr_pos += curr_len
+
+        advantage_chains, return_chains = [], []
+        for i in range(n_chains):
             advantage_chain = np.zeros((values_chains[i].shape[0]-1,), dtype=np.float32)
-            advantage_chain[action_idxs] = advantages[0]
+            advantage_chain[action_idxs] = all_advantages[i]
 
             return_chain = np.zeros((values_chains[i].shape[0]-1,), dtype=np.float32)
-            return_chain[action_idxs] = returns[0]
+            return_chain[action_idxs] = all_returns[i]
 
             advantage_chains.append(advantage_chain)
             return_chains.append(return_chain)
