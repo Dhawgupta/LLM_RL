@@ -614,7 +614,6 @@ class PPOInference(struct.PyTreeNode):
         # do advantage whitening over the full batch
         if use_advantage_whitening:
             whitened_advantages = whiten(np.concatenate(all_advantages, axis=0), shift_mean=True)
-            print(whitened_advantages)
             curr_pos = 0
             for i in range(n_chains):
                 curr_len = all_advantages[i].shape[0]
