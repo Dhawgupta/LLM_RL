@@ -26,7 +26,7 @@ python -m llm_rl_scripts.wordle.train_bc_gpt2 \
     gcs://charlie-bucket2/LLM_RL_data/wordle/bc_data1.jsonl \
     gcs://charlie-bucket2/LLM_RL_data/wordle/bc_data_eval1.jsonl \
     llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
-    --exp-name "wordle_gpt2_test2" \
+    --exp-name "wordle_gpt2_test3" \
     --outputs-path gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/ \
     --use-wandb \
     --wandb-project "wordle_bc" \
