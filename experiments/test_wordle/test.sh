@@ -20,19 +20,18 @@ conda activate LLM_RL
 export GCLOUD_PROJECT="civic-boulder-204700"
 export GCLOUD_TOKEN_PATH="${HOME}/.config/gcloud/civic-boulder-204700-V2.json"
 
-# 50% BC
 python -m llm_rl_scripts.wordle.train_bc_gpt2 \
     HF \
     gpt2 \
-    gcs://charlie-bucket2/LLM_RL_data/wordle/bc_data1_filtered_50.0.jsonl \
+    gcs://charlie-bucket2/LLM_RL_data/wordle/bc_data1.jsonl \
     gcs://charlie-bucket2/LLM_RL_data/wordle/bc_data_eval1.jsonl \
     llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
-    --exp-name "wordle_gpt2_config_test1_filtered_50" \
+    --exp-name "wordle_gpt2_test2" \
     --outputs-path gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/ \
     --use-wandb \
     --wandb-project "wordle_bc" \
     \
-    --epochs 10 \
+    --epochs 100 \
     --train-bsize 128 \
     --grad-accum-steps None \
     --max-length 128 \
@@ -50,77 +49,113 @@ python -m llm_rl_scripts.wordle.train_bc_gpt2 \
     --no-save-best \
     --no-save-train-state \
     \
-    --data-mesh-shape -1 \
-    --fsdp-mesh-shape 1 \
+    --data-mesh-shape 1 \
+    --fsdp-mesh-shape -1 \
     --model-mesh-shape 1 \
 
-# 30% BC
-python -m llm_rl_scripts.wordle.train_bc_gpt2 \
-    HF \
-    gpt2 \
-    gcs://charlie-bucket2/LLM_RL_data/wordle/bc_data1_filtered_30.0.jsonl \
-    gcs://charlie-bucket2/LLM_RL_data/wordle/bc_data_eval1.jsonl \
-    llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
-    --exp-name "wordle_gpt2_config_test1_filtered_30" \
-    --outputs-path gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/ \
-    --use-wandb \
-    --wandb-project "wordle_bc" \
-    \
-    --epochs 10 \
-    --train-bsize 128 \
-    --grad-accum-steps None \
-    --max-length 128 \
-    --eval-loss-bsize 128 \
-    --eval-loss-batches 256 \
-    --policy-bsize 128 \
-    --policy-n-rollouts 256 \
-    --policy-max-input-length 128 \
-    --policy-max-output-length 16 \
-    \
-    --log-every 256 \
-    --eval-every-steps 1024 \
-    --save-every-steps 1024 \
-    --save-at-end \
-    --no-save-best \
-    --no-save-train-state \
-    \
-    --data-mesh-shape -1 \
-    --fsdp-mesh-shape 1 \
-    --model-mesh-shape 1 \
 
-# 10% BC
-python -m llm_rl_scripts.wordle.train_bc_gpt2 \
-    HF \
-    gpt2 \
-    gcs://charlie-bucket2/LLM_RL_data/wordle/bc_data1_filtered_10.0.jsonl \
-    gcs://charlie-bucket2/LLM_RL_data/wordle/bc_data_eval1.jsonl \
-    llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
-    --exp-name "wordle_gpt2_config_test1_filtered_10" \
-    --outputs-path gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/ \
-    --use-wandb \
-    --wandb-project "wordle_bc" \
-    \
-    --epochs 10 \
-    --train-bsize 128 \
-    --grad-accum-steps None \
-    --max-length 128 \
-    --eval-loss-bsize 128 \
-    --eval-loss-batches 256 \
-    --policy-bsize 128 \
-    --policy-n-rollouts 256 \
-    --policy-max-input-length 128 \
-    --policy-max-output-length 16 \
-    \
-    --log-every 256 \
-    --eval-every-steps 1024 \
-    --save-every-steps 1024 \
-    --save-at-end \
-    --no-save-best \
-    --no-save-train-state \
-    \
-    --data-mesh-shape -1 \
-    --fsdp-mesh-shape 1 \
-    --model-mesh-shape 1 \
+
+# # 50% BC
+# python -m llm_rl_scripts.wordle.train_bc_gpt2 \
+#     HF \
+#     gpt2 \
+#     gcs://charlie-bucket2/LLM_RL_data/wordle/bc_data1_filtered_50.0.jsonl \
+#     gcs://charlie-bucket2/LLM_RL_data/wordle/bc_data_eval1.jsonl \
+#     llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+#     --exp-name "wordle_gpt2_config_test1_filtered_50" \
+#     --outputs-path gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/ \
+#     --use-wandb \
+#     --wandb-project "wordle_bc" \
+#     \
+#     --epochs 10 \
+#     --train-bsize 128 \
+#     --grad-accum-steps None \
+#     --max-length 128 \
+#     --eval-loss-bsize 128 \
+#     --eval-loss-batches 256 \
+#     --policy-bsize 128 \
+#     --policy-n-rollouts 256 \
+#     --policy-max-input-length 128 \
+#     --policy-max-output-length 16 \
+#     \
+#     --log-every 256 \
+#     --eval-every-steps 1024 \
+#     --save-every-steps 1024 \
+#     --save-at-end \
+#     --no-save-best \
+#     --no-save-train-state \
+#     \
+#     --data-mesh-shape -1 \
+#     --fsdp-mesh-shape 1 \
+#     --model-mesh-shape 1 \
+
+# # 30% BC
+# python -m llm_rl_scripts.wordle.train_bc_gpt2 \
+#     HF \
+#     gpt2 \
+#     gcs://charlie-bucket2/LLM_RL_data/wordle/bc_data1_filtered_30.0.jsonl \
+#     gcs://charlie-bucket2/LLM_RL_data/wordle/bc_data_eval1.jsonl \
+#     llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+#     --exp-name "wordle_gpt2_config_test1_filtered_30" \
+#     --outputs-path gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/ \
+#     --use-wandb \
+#     --wandb-project "wordle_bc" \
+#     \
+#     --epochs 10 \
+#     --train-bsize 128 \
+#     --grad-accum-steps None \
+#     --max-length 128 \
+#     --eval-loss-bsize 128 \
+#     --eval-loss-batches 256 \
+#     --policy-bsize 128 \
+#     --policy-n-rollouts 256 \
+#     --policy-max-input-length 128 \
+#     --policy-max-output-length 16 \
+#     \
+#     --log-every 256 \
+#     --eval-every-steps 1024 \
+#     --save-every-steps 1024 \
+#     --save-at-end \
+#     --no-save-best \
+#     --no-save-train-state \
+#     \
+#     --data-mesh-shape -1 \
+#     --fsdp-mesh-shape 1 \
+#     --model-mesh-shape 1 \
+
+# # 10% BC
+# python -m llm_rl_scripts.wordle.train_bc_gpt2 \
+#     HF \
+#     gpt2 \
+#     gcs://charlie-bucket2/LLM_RL_data/wordle/bc_data1_filtered_10.0.jsonl \
+#     gcs://charlie-bucket2/LLM_RL_data/wordle/bc_data_eval1.jsonl \
+#     llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+#     --exp-name "wordle_gpt2_config_test1_filtered_10" \
+#     --outputs-path gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/ \
+#     --use-wandb \
+#     --wandb-project "wordle_bc" \
+#     \
+#     --epochs 10 \
+#     --train-bsize 128 \
+#     --grad-accum-steps None \
+#     --max-length 128 \
+#     --eval-loss-bsize 128 \
+#     --eval-loss-batches 256 \
+#     --policy-bsize 128 \
+#     --policy-n-rollouts 256 \
+#     --policy-max-input-length 128 \
+#     --policy-max-output-length 16 \
+#     \
+#     --log-every 256 \
+#     --eval-every-steps 1024 \
+#     --save-every-steps 1024 \
+#     --save-at-end \
+#     --no-save-best \
+#     --no-save-train-state \
+#     \
+#     --data-mesh-shape -1 \
+#     --fsdp-mesh-shape 1 \
+#     --model-mesh-shape 1 \
 
 
 # 9/20/23
