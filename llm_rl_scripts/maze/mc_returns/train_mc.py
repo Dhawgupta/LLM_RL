@@ -108,6 +108,7 @@ def main(
     force_pad_embeddings: bool=False, 
 
     should_restore_loop_state: bool=False, 
+    reranker: bool=False,
 ):
     input_args = locals()
     print(input_args)
@@ -278,78 +279,83 @@ def main(
     def evaluate(inference: GPT2MCInference):
         nonlocal policy_prng
         policy_prng, new_key = jax.random.split(policy_prng)
-        sample_policy = ReRankerSamplePolicy(
-            proposal_fn=maze_proposal_function,
-            score_fn=build_mc_score_fn(
-                inference=inference,
-                pi_beta_inference=None,
-                tokenizer=tokenizer,
-                max_length=max_length, 
-                value_weight=1.0,
-                logit_weight=None,
-                bsize=4,
+        
+        if reranker: 
+            
+            sample_policy = ReRankerSamplePolicy(
+                proposal_fn=maze_proposal_function,
+                score_fn=build_mc_score_fn(
+                    inference=inference,
+                    pi_beta_inference=None,
+                    tokenizer=tokenizer,
+                    max_length=max_length, 
+                    value_weight=1.0,
+                    logit_weight=None,
+                    bsize=4,
+                )
             )
-        )
-        # sample_policy = GPT2ValuePolicy(
-        #     inference=inference.value_inference, 
-        #     prng_key=new_key, 
-        #     generation_config=GenerationConfig(
-        #         do_sample=True, 
-        #         num_beams=policy_num_beams, 
-        #         temperature=policy_temperature, 
-        #         top_p=policy_top_p, 
-        #         top_k=policy_top_k, 
-        #         eos_token_id=tokenizer.encode('\n')[0], 
-        #         pad_token_id=tokenizer.pad_token_id, 
-        #         max_new_tokens=policy_max_output_length, 
-        #     ), 
-        #     blocking_strategy=BlockingStrategy(
-        #         padding=Padding.LEFT, 
-        #         truncation=Truncation.LEFT, 
-        #         max_length=policy_max_input_length, 
-        #     ), 
-        #     out_str_process=lambda x: x.removesuffix('\n')+'\n', 
-        # )
+            policy = ReRankerPolicy(
+                proposal_fn=maze_proposal_function,
+                score_fn=build_mc_score_fn(
+                    inference=inference,
+                    pi_beta_inference=None,
+                    tokenizer=tokenizer,
+                    max_length=max_length,
+                    value_weight=1.0,
+                    logit_weight=None,
+                    bsize=4,
+                )
+            )
+        else:
+            sample_policy = GPT2ValuePolicy(
+                inference=inference, 
+                prng_key=new_key, 
+                generation_config=GenerationConfig(
+                    do_sample=True, 
+                    num_beams=policy_num_beams, 
+                    temperature=policy_temperature, 
+                    top_p=policy_top_p, 
+                    top_k=policy_top_k, 
+                    eos_token_id=tokenizer.encode('\n')[0], 
+                    pad_token_id=tokenizer.pad_token_id, 
+                    max_new_tokens=policy_max_output_length, 
+                ), 
+                blocking_strategy=BlockingStrategy(
+                    padding=Padding.LEFT, 
+                    truncation=Truncation.LEFT, 
+                    max_length=policy_max_input_length, 
+                ), 
+                out_str_process=lambda x: x.removesuffix('\n')+'\n', 
+            )
+            
+            policy = GPT2ValuePolicy(
+                inference=inference, 
+                prng_key=new_key, 
+                generation_config=GenerationConfig(
+                    do_sample=False, 
+                    num_beams=policy_num_beams, 
+                    temperature=policy_temperature, 
+                    top_p=policy_top_p, 
+                    top_k=policy_top_k, 
+                    eos_token_id=tokenizer.encode('\n')[0], 
+                    pad_token_id=tokenizer.pad_token_id, 
+                    max_new_tokens=policy_max_output_length, 
+                ), 
+                blocking_strategy=BlockingStrategy(
+                    padding=Padding.LEFT, 
+                    truncation=Truncation.LEFT, 
+                    max_length=policy_max_input_length, 
+                ), 
+                out_str_process=lambda x: x.removesuffix('\n')+'\n', 
+            )
+                
+            
         maze_name = "double_t_maze"
         describe_function = "describe_observation_give_position"
         reward_function = "standard_reward"
 
         env = setup_maze_env(maze_name=maze_name, describe_function=describe_function, reward_function=reward_function)
         start_position = pick_start_position(maze_name=maze_name)
-        
-        policy = ReRankerPolicy(
-            proposal_fn=maze_proposal_function,
-            score_fn=build_mc_score_fn(
-                inference=inference,
-                pi_beta_inference=None,
-                tokenizer=tokenizer,
-                max_length=max_length,
-                value_weight=1.0,
-                logit_weight=None,
-                bsize=4,
-            )
-        )
-        
-        # policy = GPT2ValuePolicy(
-        #     inference=inference.value_inference, 
-        #     prng_key=new_key, 
-        #     generation_config=GenerationConfig(
-        #         do_sample=False, 
-        #         num_beams=policy_num_beams, 
-        #         temperature=policy_temperature, 
-        #         top_p=policy_top_p, 
-        #         top_k=policy_top_k, 
-        #         eos_token_id=tokenizer.encode('\n')[0], 
-        #         pad_token_id=tokenizer.pad_token_id, 
-        #         max_new_tokens=policy_max_output_length, 
-        #     ), 
-        #     blocking_strategy=BlockingStrategy(
-        #         padding=Padding.LEFT, 
-        #         truncation=Truncation.LEFT, 
-        #         max_length=policy_max_input_length, 
-        #     ), 
-        #     out_str_process=lambda x: x.removesuffix('\n')+'\n', 
-        # )
         
         maze = double_t_maze()
         goal = (8, 6)
@@ -361,8 +367,13 @@ def main(
                 env.position = position
                 observation = describe_observation_give_position(maze, position, env.goal)
                 text_history = (Text(observation, False),)
-                output = policy.act(text_history)
-                prediction = output[-1].text
+                if reranker:
+                    
+                    output = policy.act(text_history)
+                    prediction = output[-1].text
+                else:
+                    output = policy.act([text_history], done=[False])
+                    prediction = output[-1][-1].text
                 # output = policy.act(text_history)
                 # prediction = output[-1].text
                 if position[0] == goal[0] and position[1] == goal[1]:

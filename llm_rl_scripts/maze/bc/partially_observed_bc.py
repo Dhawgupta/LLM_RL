@@ -240,7 +240,7 @@ def main(
     
     maze = double_t_maze()
     
-    env = setup_maze_env(maze_name=maze_name, describe_function=describe_function, reward_function=reward_function)
+    env = setup_maze_env(maze_name=maze_name, describe_function=describe_function, reward_function=reward_function, last_k=40)
     start_position = pick_start_position(maze_name=maze_name)
     possible_positions = list(zip(*np.where(maze==0)))
     possible_positions.remove((8, 6))

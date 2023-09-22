@@ -1,8 +1,9 @@
 from llm_rl_scripts.maze.env import MazeEnv, describe_observation, describe_observation_give_position, illegal_penalty_reward, illegal_penalty_diff_scale, manhatten_actions, standard_reward, describe_observation_only_walls
-from llm_rl_scripts.maze.mazes import maze2d_umaze, double_t_maze
+from llm_rl_scripts.maze.mazes import double_t_maze_optimal_directions, maze2d_umaze, double_t_maze
 import numpy as np
+from LLM_RL.environment import Text
 
-def setup_maze_env(maze_name, describe_function, reward_function=None):
+def setup_maze_env(maze_name, describe_function, reward_function=None, last_k=1):
     # setup environment
     if maze_name == 'umaze':
         maze = maze2d_umaze()
@@ -43,7 +44,7 @@ def setup_maze_env(maze_name, describe_function, reward_function=None):
         display_initial_position=True,
         describe_function=describe_function,
         reward_function=reward_function,
-        last_k=1,
+        last_k=last_k,
     )
     return env
 
@@ -54,3 +55,32 @@ def pick_start_position(maze_name):
         return (1, 1)
     else:
         raise ValueError(f'unknown maze name: {maze_name}')
+    
+
+def compute_move_accuracy(policy, positions, goal, correct_answers, reranker):
+    maze = double_t_maze()
+    goal = (8, 6)
+    correct_answers = double_t_maze_optimal_directions()
+    positions = np.argwhere(maze == 0).tolist()    # note make sure to set temperature to 0
+    num_correct = 0
+    for position in positions:
+        observation = describe_observation_give_position(maze, position, env.goal)
+        text_history = (Text(observation, False),)
+        # embed()
+        if reranker:
+            output = policy.act(text_history)
+            prediction = output[-1].text
+        else:
+            output = policy.act([text_history], done=[False])
+            prediction = output[-1][-1].text
+        # output = policy.act(text_history)
+        # prediction = output[-1].text
+        if position[0] == goal[0] and position[1] == goal[1]:
+            continue
+        if prediction == correct_answers[tuple(position)]:
+            num_correct += 1
+            print("correct!", observation, position, prediction, correct_answers[tuple(position)])
+        else:
+            print("incorrect!", observation, position, prediction, correct_answers[tuple(position)])
+    accuracy = num_correct/(len(positions)-1)*100
+    return accuracy
