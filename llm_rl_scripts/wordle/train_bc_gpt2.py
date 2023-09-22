@@ -131,6 +131,8 @@ def main(
         ), 
     )
 
+    import IPython; IPython.embed()
+
     vocab = Vocabulary.from_file(
         vocab_file=vocab_file, 
         fill_cache=False, 
