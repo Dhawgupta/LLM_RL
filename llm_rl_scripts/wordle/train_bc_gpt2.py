@@ -131,8 +131,6 @@ def main(
         ), 
     )
 
-    import IPython; IPython.embed()
-
     vocab = Vocabulary.from_file(
         vocab_file=vocab_file, 
         fill_cache=False, 
@@ -249,6 +247,8 @@ def main(
             n_rollouts=policy_n_rollouts, 
             bsize=policy_bsize, 
         )
+
+        import IPython; IPython.embed()
 
         for item in interation_raw_results:
             print('='*25)

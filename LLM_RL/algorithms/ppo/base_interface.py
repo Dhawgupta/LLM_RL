@@ -480,7 +480,8 @@ class PPOInference(struct.PyTreeNode):
         gamma: Union[float, jax.Array], 
         lam: Union[float, jax.Array], 
         kl_weight: Union[float, jax.Array], 
-        use_advantage_whitening: bool=True, 
+        use_advantage_whitening: bool=True,
+        use_new_advantage_whitening: bool=False,
     ) -> Tuple[List[PPOData], np.ndarray]:
         assert self.initial_policy_model is not None and self.initial_policy_params is not None
         n_chains = len(token_trajectory_chains)
@@ -604,14 +605,14 @@ class PPOInference(struct.PyTreeNode):
                 action_rewards=action_rewards[None], 
                 gamma=gamma, 
                 lam=lam, 
-                use_whitening=False, 
+                use_whitening=use_advantage_whitening, 
             )
 
             all_advantages.append(advantages[0])
             all_returns.append(returns[0])
         
         # do advantage whitening over the full batch
-        if use_advantage_whitening:
+        if use_new_advantage_whitening:
             whitened_advantages = whiten(np.concatenate(all_advantages, axis=0), shift_mean=True)
             curr_pos = 0
             for i in range(n_chains):
@@ -668,7 +669,8 @@ class PPOInference(struct.PyTreeNode):
         gamma: Union[float, jax.Array], 
         lam: Union[float, jax.Array], 
         kl_weight: Union[float, jax.Array], 
-        use_advantage_whitening: bool=True, 
+        use_advantage_whitening: bool=True,
+        use_new_advantage_whitening: bool=False,
     ) -> Tuple[List[PPOData], np.ndarray]:
         
         token_trajectory_chains = [
@@ -690,6 +692,7 @@ class PPOInference(struct.PyTreeNode):
             lam=lam, 
             kl_weight=kl_weight, 
             use_advantage_whitening=use_advantage_whitening, 
+            use_new_advantage_whitening=use_new_advantage_whitening,
         )
     
     def eval_loss(

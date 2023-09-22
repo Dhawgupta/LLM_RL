@@ -340,6 +340,8 @@ def main(
 
             if len(text_trajectory.text_history) < 3:
                 continue
+            if TokenTrajectory.from_text_trajectory(text_trajectory, tokenizer).tokens.shape[0] >= max_input_length+max_output_length:
+                continue
             
             text_trajectory_chains.append(TextTrajectoryChain(text_trajectory, None))
         
