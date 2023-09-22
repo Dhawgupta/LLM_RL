@@ -31,7 +31,7 @@ python -m llm_rl_scripts.wordle.train_bc_gpt2 \
     --use-wandb \
     --wandb-project "wordle_bc" \
     \
-    --epochs 100 \
+    --epochs 10 \
     --train-bsize 128 \
     --grad-accum-steps None \
     --max-length 128 \
