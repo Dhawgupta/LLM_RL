@@ -36,6 +36,7 @@ from LLM_RL.algorithms.ilql.data import ILQLData, ILQLDataset, ILQLIterableDatas
 from JaxSeq.utils import multihost_device_get
 from llm_rl_scripts.wordle.env import ReformatWordleEnvironment, WordleEnvironment
 from llm_rl_scripts.wordle.game import Vocabulary
+from jax.sharding import PartitionSpec as PS
 
 def main(
     model_load_mode: ModelLoadMode, 
