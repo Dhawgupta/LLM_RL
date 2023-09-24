@@ -14,7 +14,7 @@ from transformers.generation import FlaxBeamSearchOutput, FlaxGreedySearchOutput
 from LLM_RL.algorithms.value_rl_base.gpt2.generation import GPT2ValueRLGeneration
 from LLM_RL.algorithms.value_rl_base.base_interface import ValueRLForwardOutput, ValueRLInference
 from JaxSeq.stream_tokens import StreamingGenerationConfig
-from transformers.modeling_flax_outputs import FlaxCausalLMOutput
+from transformers.modeling_flax_outputs import FlaxCausalLMOutputWithCrossAttentions
 from LLM_RL.algorithms.value_rl_base.base_interface import ValueRLPolicy
 from transformers.generation import GenerationConfig
 from LLM_RL.environment import TextHistory, text_history_to_str, Text
