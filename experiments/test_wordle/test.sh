@@ -60,7 +60,7 @@ export GCLOUD_TOKEN_PATH="${HOME}/.config/gcloud/civic-boulder-204700-V2.json"
 #     --no-save-train-state
 
 python -m llm_rl_scripts.wordle.train_ilql_gpt2 \
-    HF \
+    PARAMS \
     gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_test3.2023-09-22-21-53-58.938.88bf2e58599211ee812d4554a3c5cde2/last \
     gcs://charlie-bucket2/LLM_RL_data/wordle/bc_data1.jsonl \
     gcs://charlie-bucket2/LLM_RL_data/wordle/bc_data_eval1.jsonl \
@@ -78,7 +78,7 @@ python -m llm_rl_scripts.wordle.train_ilql_gpt2 \
     --policy-max-output-length 16 \
     --eval-loss-bsize 8 \
     --eval-loss-batches 64 \
-    --epochs 100 \
+    --epochs 1000 \
     --log-every 64 \
     --eval-every-steps 1024 \
     --weight-decay 1e-6 \
