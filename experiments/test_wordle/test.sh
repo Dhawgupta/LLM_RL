@@ -11,7 +11,7 @@ export TOKENIZERS_PARALLELISM=false
 export PROJECT_ROOT=${PWD}
 source ${PWD}/secrets.sh
 
-# 9/22/23
+# 9/24/23
 
 source ~/miniconda3/bin/activate
 conda activate LLM_RL
@@ -19,6 +19,92 @@ conda activate LLM_RL
 
 export GCLOUD_PROJECT="civic-boulder-204700"
 export GCLOUD_TOKEN_PATH="${HOME}/.config/gcloud/civic-boulder-204700-V2.json"
+
+python -m llm_rl_scripts.wordle.train_mc_returns_gpt2 \
+    PARAMS \
+    gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_test3.2023-09-22-21-53-58.938.88bf2e58599211ee812d4554a3c5cde2/last \
+    gcs://charlie-bucket2/LLM_RL_data/wordle/bc_data1.jsonl \
+    gcs://charlie-bucket2/LLM_RL_data/wordle/bc_data_eval1.jsonl \
+    llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+    --exp-name "wordle_gpt2_mc_test1" \
+    --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_mc_test1/ \
+    --use-wandb \
+    --wandb-project "LLM_RL_wordle_ilql" \
+    --train-bsize 8 \
+    --grad-accum-steps 4 \
+    --max-length 128 \
+    --policy-bsize 64 \
+    --policy-n-rollouts 512 \
+    --policy-max-input-length 128 \
+    --policy-max-output-length 16 \
+    --eval-loss-bsize 8 \
+    --eval-loss-batches 64 \
+    --epochs 1000 \
+    --log-every 64 \
+    --eval-every-steps 1024 \
+    --weight-decay 1e-6 \
+    --lr 3e-5 \
+    \
+    --data-mesh-shape 1 \
+    --fsdp-mesh-shape -1 \
+    --model-mesh-shape 1 \
+    \
+    --beta 16.0 \
+    --gamma 1.0 \
+    \
+    --bf16-activations \
+    --no-save-best \
+    --save-every-steps 1024 \
+    --save-every-epochs 1 \
+    --save-at-end \
+    --no-save-train-state
+
+# python -m llm_rl_scripts.wordle.train_ilql_gpt2 \
+#     HF \
+#     gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_test3.2023-09-22-21-53-58.938.88bf2e58599211ee812d4554a3c5cde2/last \
+#     gcs://charlie-bucket2/LLM_RL_data/wordle/bc_data1.jsonl \
+#     gcs://charlie-bucket2/LLM_RL_data/wordle/bc_data_eval1.jsonl \
+#     llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+#     --exp-name "wordle_gpt2_ilql_test1" \
+#     --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/ \
+#     --use-wandb \
+#     --wandb-project "LLM_RL_wordle_ilql" \
+#     --train-bsize 8 \
+#     --grad-accum-steps 4 \
+#     --max-length 128 \
+#     --policy-bsize 8 \
+#     --policy-n-rollouts 512 \
+#     --policy-max-input-length 128 \
+#     --policy-max-output-length 16 \
+#     --eval-loss-bsize 8 \
+#     --eval-loss-batches 64 \
+#     --epochs 100 \
+#     --log-every 64 \
+#     --eval-every-steps 1024 \
+#     --weight-decay 1e-6 \
+#     --lr 3e-5 \
+#     \
+#     --data-mesh-shape 1 \
+#     --fsdp-mesh-shape -1 \
+#     --model-mesh-shape 1 \
+#     \
+#     --beta 16.0 \
+#     \
+#     --bf16-activations \
+#     --no-save-best \
+#     --save-every-steps 1024 \
+#     --save-every-epochs 1 \
+#     --save-at-end \
+#     --no-save-train-state
+
+# 9/22/23
+
+# source ~/miniconda3/bin/activate
+# conda activate LLM_RL
+
+
+# export GCLOUD_PROJECT="civic-boulder-204700"
+# export GCLOUD_TOKEN_PATH="${HOME}/.config/gcloud/civic-boulder-204700-V2.json"
 
 # python -m llm_rl_scripts.wordle.train_bc_gpt2 \
 #     HF \
@@ -56,106 +142,106 @@ export GCLOUD_TOKEN_PATH="${HOME}/.config/gcloud/civic-boulder-204700-V2.json"
 
 
 # 50% BC
-python -m llm_rl_scripts.wordle.train_bc_gpt2 \
-    HF \
-    gpt2 \
-    gcs://charlie-bucket2/LLM_RL_data/wordle/bc_data1_filtered_50.0.jsonl \
-    gcs://charlie-bucket2/LLM_RL_data/wordle/bc_data_eval1.jsonl \
-    llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
-    --exp-name "wordle_gpt2_config_test1_filtered_50" \
-    --outputs-path gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/ \
-    --use-wandb \
-    --wandb-project "wordle_bc" \
-    \
-    --epochs 10 \
-    --train-bsize 128 \
-    --grad-accum-steps None \
-    --max-length 128 \
-    --eval-loss-bsize 128 \
-    --eval-loss-batches 256 \
-    --policy-bsize 128 \
-    --policy-n-rollouts 256 \
-    --policy-max-input-length 128 \
-    --policy-max-output-length 16 \
-    \
-    --log-every 256 \
-    --eval-every-steps 1024 \
-    --save-every-steps 1024 \
-    --save-at-end \
-    --no-save-best \
-    --no-save-train-state \
-    \
-    --data-mesh-shape -1 \
-    --fsdp-mesh-shape 1 \
-    --model-mesh-shape 1 \
+# python -m llm_rl_scripts.wordle.train_bc_gpt2 \
+#     HF \
+#     gpt2 \
+#     gcs://charlie-bucket2/LLM_RL_data/wordle/bc_data1_filtered_50.0.jsonl \
+#     gcs://charlie-bucket2/LLM_RL_data/wordle/bc_data_eval1.jsonl \
+#     llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+#     --exp-name "wordle_gpt2_config_test1_filtered_50" \
+#     --outputs-path gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/ \
+#     --use-wandb \
+#     --wandb-project "wordle_bc" \
+#     \
+#     --epochs 10 \
+#     --train-bsize 128 \
+#     --grad-accum-steps None \
+#     --max-length 128 \
+#     --eval-loss-bsize 128 \
+#     --eval-loss-batches 256 \
+#     --policy-bsize 128 \
+#     --policy-n-rollouts 256 \
+#     --policy-max-input-length 128 \
+#     --policy-max-output-length 16 \
+#     \
+#     --log-every 256 \
+#     --eval-every-steps 1024 \
+#     --save-every-steps 1024 \
+#     --save-at-end \
+#     --no-save-best \
+#     --no-save-train-state \
+#     \
+#     --data-mesh-shape -1 \
+#     --fsdp-mesh-shape 1 \
+#     --model-mesh-shape 1 \
 
 # 30% BC
-python -m llm_rl_scripts.wordle.train_bc_gpt2 \
-    HF \
-    gpt2 \
-    gcs://charlie-bucket2/LLM_RL_data/wordle/bc_data1_filtered_30.0.jsonl \
-    gcs://charlie-bucket2/LLM_RL_data/wordle/bc_data_eval1.jsonl \
-    llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
-    --exp-name "wordle_gpt2_config_test1_filtered_30" \
-    --outputs-path gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/ \
-    --use-wandb \
-    --wandb-project "wordle_bc" \
-    \
-    --epochs 10 \
-    --train-bsize 128 \
-    --grad-accum-steps None \
-    --max-length 128 \
-    --eval-loss-bsize 128 \
-    --eval-loss-batches 256 \
-    --policy-bsize 128 \
-    --policy-n-rollouts 256 \
-    --policy-max-input-length 128 \
-    --policy-max-output-length 16 \
-    \
-    --log-every 256 \
-    --eval-every-steps 1024 \
-    --save-every-steps 1024 \
-    --save-at-end \
-    --no-save-best \
-    --no-save-train-state \
-    \
-    --data-mesh-shape -1 \
-    --fsdp-mesh-shape 1 \
-    --model-mesh-shape 1 \
+# python -m llm_rl_scripts.wordle.train_bc_gpt2 \
+#     HF \
+#     gpt2 \
+#     gcs://charlie-bucket2/LLM_RL_data/wordle/bc_data1_filtered_30.0.jsonl \
+#     gcs://charlie-bucket2/LLM_RL_data/wordle/bc_data_eval1.jsonl \
+#     llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+#     --exp-name "wordle_gpt2_config_test1_filtered_30" \
+#     --outputs-path gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/ \
+#     --use-wandb \
+#     --wandb-project "wordle_bc" \
+#     \
+#     --epochs 10 \
+#     --train-bsize 128 \
+#     --grad-accum-steps None \
+#     --max-length 128 \
+#     --eval-loss-bsize 128 \
+#     --eval-loss-batches 256 \
+#     --policy-bsize 128 \
+#     --policy-n-rollouts 256 \
+#     --policy-max-input-length 128 \
+#     --policy-max-output-length 16 \
+#     \
+#     --log-every 256 \
+#     --eval-every-steps 1024 \
+#     --save-every-steps 1024 \
+#     --save-at-end \
+#     --no-save-best \
+#     --no-save-train-state \
+#     \
+#     --data-mesh-shape -1 \
+#     --fsdp-mesh-shape 1 \
+#     --model-mesh-shape 1 \
 
 # 10% BC
-python -m llm_rl_scripts.wordle.train_bc_gpt2 \
-    HF \
-    gpt2 \
-    gcs://charlie-bucket2/LLM_RL_data/wordle/bc_data1_filtered_10.0.jsonl \
-    gcs://charlie-bucket2/LLM_RL_data/wordle/bc_data_eval1.jsonl \
-    llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
-    --exp-name "wordle_gpt2_config_test1_filtered_10" \
-    --outputs-path gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/ \
-    --use-wandb \
-    --wandb-project "wordle_bc" \
-    \
-    --epochs 10 \
-    --train-bsize 128 \
-    --grad-accum-steps None \
-    --max-length 128 \
-    --eval-loss-bsize 128 \
-    --eval-loss-batches 256 \
-    --policy-bsize 128 \
-    --policy-n-rollouts 256 \
-    --policy-max-input-length 128 \
-    --policy-max-output-length 16 \
-    \
-    --log-every 256 \
-    --eval-every-steps 1024 \
-    --save-every-steps 1024 \
-    --save-at-end \
-    --no-save-best \
-    --no-save-train-state \
-    \
-    --data-mesh-shape -1 \
-    --fsdp-mesh-shape 1 \
-    --model-mesh-shape 1 \
+# python -m llm_rl_scripts.wordle.train_bc_gpt2 \
+#     HF \
+#     gpt2 \
+#     gcs://charlie-bucket2/LLM_RL_data/wordle/bc_data1_filtered_10.0.jsonl \
+#     gcs://charlie-bucket2/LLM_RL_data/wordle/bc_data_eval1.jsonl \
+#     llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+#     --exp-name "wordle_gpt2_config_test1_filtered_10" \
+#     --outputs-path gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/ \
+#     --use-wandb \
+#     --wandb-project "wordle_bc" \
+#     \
+#     --epochs 10 \
+#     --train-bsize 128 \
+#     --grad-accum-steps None \
+#     --max-length 128 \
+#     --eval-loss-bsize 128 \
+#     --eval-loss-batches 256 \
+#     --policy-bsize 128 \
+#     --policy-n-rollouts 256 \
+#     --policy-max-input-length 128 \
+#     --policy-max-output-length 16 \
+#     \
+#     --log-every 256 \
+#     --eval-every-steps 1024 \
+#     --save-every-steps 1024 \
+#     --save-at-end \
+#     --no-save-best \
+#     --no-save-train-state \
+#     \
+#     --data-mesh-shape -1 \
+#     --fsdp-mesh-shape 1 \
+#     --model-mesh-shape 1 \
 
 
 # 9/20/23
