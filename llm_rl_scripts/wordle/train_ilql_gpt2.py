@@ -280,9 +280,19 @@ def main(
         params=q2_target_head_params, 
     )
 
+    class ValueMLPHeadConfig(MLPHeadConfig):
+        @staticmethod
+        def get_partition_rules():
+            return [
+                (re.escape("['dense1']['kernel']"), PS("fsdp", "mp")),
+                (re.escape("['dense1']['bias']"), PS("mp")), 
+                (re.escape("['dense2']['kernel']"), PS("fsdp", None)),
+                (re.escape("['dense2']['bias']"), PS()), 
+            ]
+
     v_prng_key = jax.random.PRNGKey(6)
     v_head_train_state, v_head = load_head_train_state_from_config(
-        model_config=MLPHeadConfig(
+        model_config=ValueMLPHeadConfig(
             input_dim=base_model.config.n_embd, 
             hidden_dim=base_model.config.n_embd, 
             output_dim=1, 
