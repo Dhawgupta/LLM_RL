@@ -389,7 +389,7 @@ def main(
         nonlocal policy_prng
         policy_prng, new_key = jax.random.split(policy_prng)
         policy = GPT2ValuePolicy(
-            inference=inference.target_value_inference, 
+            inference=inference.value_inference, 
             prng_key=new_key, 
             generation_config=GenerationConfig(
                 do_sample=policy_do_sample, 
