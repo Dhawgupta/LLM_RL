@@ -20,45 +20,13 @@ source ${PWD}/secrets.sh
 export GCLOUD_PROJECT="civic-boulder-204700"
 export GCLOUD_TOKEN_PATH="${HOME}/.config/gcloud/civic-boulder-204700-V2.json"
 
-CUDA_VISIBLE_DEVICES=5 python -m llm_rl_scripts.wordle.train_ppo_gpt2 \
-    PARAMS \
-    gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_test3.2023-09-22-21-53-58.938.88bf2e58599211ee812d4554a3c5cde2/last \
-    gcs://charlie-bucket2/LLM_RL_data/wordle/bc_data1.jsonl \
-    llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
-    --exp-name None \
-    --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ppo_test1/ \
-    --use-wandb \
-    --wandb-project "LLM_RL_wordle_ppo" \
-    --n-rollouts 512 \
-    --train-bsize 8 \
-    --grad-accum-steps 4 \
-    --rollout-bsize 64 \
-    --ppo-data-bsize 64 \
-    --n-rounds 1000 \
-    --epochs 4 \
-    --log-every 32 \
-    --weight-decay 1e-6 \
-    --lr 3e-5 \
-    --init-kl-coef 0.001 \
-    --kl-target 0.1 \
-    --kl-horizon 10000 \
-    --value-loss-coef 1.0 \
-    \
-    --data-mesh-shape 1 \
-    --fsdp-mesh-shape -1 \
-    --model-mesh-shape 1 \
-    \
-    --bf16-activations \
-    --no-save-best \
-    --bc-loss-weight 0.0
-
 # CUDA_VISIBLE_DEVICES=5 python -m llm_rl_scripts.wordle.train_ppo_gpt2 \
 #     PARAMS \
 #     gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_test3.2023-09-22-21-53-58.938.88bf2e58599211ee812d4554a3c5cde2/last \
 #     gcs://charlie-bucket2/LLM_RL_data/wordle/bc_data1.jsonl \
 #     llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
 #     --exp-name None \
-#     --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ppo_test2/ \
+#     --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ppo_test1/ \
 #     --use-wandb \
 #     --wandb-project "LLM_RL_wordle_ppo" \
 #     --n-rollouts 512 \
@@ -82,7 +50,39 @@ CUDA_VISIBLE_DEVICES=5 python -m llm_rl_scripts.wordle.train_ppo_gpt2 \
 #     \
 #     --bf16-activations \
 #     --no-save-best \
-#     --bc-loss-weight 10.0
+#     --bc-loss-weight 0.0
+
+CUDA_VISIBLE_DEVICES=5 python -m llm_rl_scripts.wordle.train_ppo_gpt2 \
+    PARAMS \
+    gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_test3.2023-09-22-21-53-58.938.88bf2e58599211ee812d4554a3c5cde2/last \
+    gcs://charlie-bucket2/LLM_RL_data/wordle/bc_data1.jsonl \
+    llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+    --exp-name None \
+    --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ppo_test2/ \
+    --use-wandb \
+    --wandb-project "LLM_RL_wordle_ppo" \
+    --n-rollouts 512 \
+    --train-bsize 8 \
+    --grad-accum-steps 4 \
+    --rollout-bsize 64 \
+    --ppo-data-bsize 64 \
+    --n-rounds 1000 \
+    --epochs 4 \
+    --log-every 32 \
+    --weight-decay 1e-6 \
+    --lr 3e-5 \
+    --init-kl-coef 0.001 \
+    --kl-target 0.1 \
+    --kl-horizon 10000 \
+    --value-loss-coef 1.0 \
+    \
+    --data-mesh-shape 1 \
+    --fsdp-mesh-shape -1 \
+    --model-mesh-shape 1 \
+    \
+    --bf16-activations \
+    --no-save-best \
+    --bc-loss-weight 10.0
 
 # 9/24/23
 
