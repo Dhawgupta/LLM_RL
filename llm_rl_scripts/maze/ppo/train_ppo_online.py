@@ -12,12 +12,13 @@ from JaxSeq.models.gpt2.interface import GPT2Train, GPT2Inference
 from JaxSeq.models.gpt2.load import load_train_state, ModelLoadMode
 import pickle as pkl
 from JaxSeq.data import Seq2SeqDataset
+from LLM_RL.algorithms.ppo.score_fn import build_ppo_score_fn
 from LLM_RL.algorithms.ppo.train import train_loop
 from LLM_RL.algorithms.ppo.base_interface import ppo_loss_fn, FixedKLController, AdaptiveKLController
 from transformers.generation import GenerationConfig
 from jaxtyping import PyTree
 import re
-from LLM_RL.environment import TextEnv, TextHistory, Text, interact_environment, text_env_eval, TextTrajectory, TextTrajectoryChain
+from LLM_RL.environment import TextEnv, TextHistory, Text, TokenHistory, TokenTrajectory, interact_environment, text_env_eval, TextTrajectory, TextTrajectoryChain, TokenTrajectoryChain, text_history_to_str
 from LLM_RL.algorithms.ppo.gpt2.interface import GPT2PPOPolicy, GPT2PPOInference, GPT2PPOTrain
 from LLM_RL.heads.linear_head import load_train_state_from_config as load_head_train_state_from_config
 from LLM_RL.heads.linear_head import LinearHeadConfig
@@ -30,31 +31,35 @@ from JaxSeq.logs import label_logs, log, pull_logs
 import json
 from JaxSeq.utils import multihost_device_get
 from IPython import embed
+from llm_rl_scripts.chess.data import get_random_positions_not_in_test
+from tqdm.auto import tqdm
+from JaxSeq.checkpointing import save_pytree_to_bucket, save_dataset_to_bucket
+from llm_rl_scripts.maze.mazes import double_t_maze_optimal_directions, maze2d_large, maze2d_medium, maze2d_umaze, double_t_maze
+from JaxSeq.data import MaskDataset
+from JaxSeq.models.gpt2.interface import loss_fn_mask
 
-from llm_rl_scripts.chess.env import FenChessHistoryEnv, FenChessHistoryEnvSingleTurn
+from llm_rl_scripts.chess.env import FenChessHistoryEnv, FenChessHistoryEnvSingleTurn, large_piece_random_endgame, text_env_eval_chess_positions
+from llm_rl_scripts.maze.env import MazeEnv, describe_observation_give_position, manhatten_actions, describe_observation, maze_proposal_function, illegal_penalty_reward, illegal_penalty_diff_scale, standard_reward
+from LLM_RL.algorithms.ppo.reranker_policy import ReRankerPolicy, ReRankerSamplePolicy
+from JaxSeq.utils import pad_sequence, block_sequences
+from llm_rl_scripts.maze.maze_utils import setup_maze_env, pick_start_position, compute_move_accuracy
+from JaxSeq.generation_eval import generate_language
 
-class BitsTestEnv(TextEnv):
-    def __init__(self, n: int):
-        self.n = n
-
-    def step(self, text_history: TextHistory) -> Tuple[TextHistory, float, bool]:
-        try:
-            bits = list(map(int, text_history[-1].text.strip().split(' ')))
-        except:
-            bits = []
-        return text_history, float(sum(bits) > (self.n // 2))*10.0, True
-
-    def reset(self, seed: Optional[int]=None, options: Optional[Dict]=None) -> TextHistory:
-        return (Text(text='<|endoftext|>', is_action=False),)
+# from LLM_RL.gpt2 import load_gpt2_from_pretrained
 
 def main(
     model_load_mode: ModelLoadMode, 
     model_load_path: str, 
-
+    
     /,  # Mark the end of positional arguments.
-
+    bc_data_path: Optional[str]=None,
+    train_bc_bsize: int=8,
+    bc_loss_weight:int=0,
+    model_str:str="gpt2",
+    
     exp_name: Optional[str]=None, 
     outputs_path: Optional[str]=None, 
+    maze_name: str="medium",
 
     data_mesh_shape: int=1, 
     fsdp_mesh_shape: int=1, 
@@ -67,39 +72,40 @@ def main(
     epochs: int=1, 
     max_steps: Optional[int]=None, 
     
-    lr: float=1e-7, 
-    weight_decay: float=0.001, 
+    lr: float=1e-5, 
+    weight_decay: float=0.0, 
 
     train_bsize: int=32, 
-    grad_accum_steps: int=4, 
+    grad_accum_steps: int=1, 
     rollout_bsize: int=32, 
     n_rollouts: int=128, 
     ppo_data_bsize: int=32, 
+    num_pos_per_setup: int=4,
 
     gradient_checkpointing: bool=False, 
     gradient_checkpointing_policy: str='nothing_saveable', 
     use_fp16_activations: bool=False, 
     use_fp16_params: bool=False, 
 
-    max_input_length: int=512, 
-    max_output_length: int=512, 
+    max_input_length: int=64, 
+    max_output_length: int=32, 
 
     log_every: int=256, 
-    eval_every_steps: Optional[int]=256, 
+    eval_every_steps: Optional[int]=None, 
     eval_every_epochs: Optional[int]=None, 
-    eval_every_rounds: Optional[int]=None, 
+    eval_every_rounds: Optional[int]=1, 
     eval_at_beginning: bool=True, 
     eval_at_end: bool=True, 
 
-    save_every_steps: Optional[int]=256, 
+    save_every_steps: Optional[int]=None, 
     save_every_epochs: Optional[int]=None, 
-    save_every_rounds: Optional[int]=None, 
+    save_every_rounds: Optional[int]=10, 
     save_at_beginning: bool=False, 
-    save_at_end: bool=False, 
+    save_at_end: bool=True, 
     save_best: bool=True, 
-    max_checkpoints: Optional[int]=None, 
+    max_checkpoints: Optional[int]=20, 
     save_train_state: bool=True, 
-    save_ppo_dataset: bool=False, 
+    save_ppo_dataset: bool=True, 
     save_bf16: bool=True, 
 
     policy_do_sample: bool=True, 
@@ -118,12 +124,18 @@ def main(
 
     cliprange_value: float=0.2, 
     cliprange: float=0.2, 
-    value_loss_coef: float=1.0, 
+    value_loss_coef: float=0.5, 
 
     force_pad_embeddings: bool=False, 
 
     should_restore_loop_state: bool=False, 
+    
+    describe_function: str= "describe_observation",
+    reranker_policy: bool=False,
+    
+    reward_function: str="standard_reward",
 ):
+    
     input_args = locals().copy()
     print(input_args)
 
@@ -133,6 +145,28 @@ def main(
 
     tokenizer = AutoTokenizer.from_pretrained('gpt2')
     tokenizer.add_special_tokens({'pad_token': '<|pad|>'})
+    
+    if bc_data_path is not None:
+        with open(bc_data_path, 'rb') as f:
+            text_histories = pkl.load(f)
+
+        blocking_strategy = BlockingStrategy(Padding.RIGHT, Truncation.RIGHT, max_input_length+max_output_length)
+        
+        # in_tokens = list(map(lambda x: block_sequences([x.tokens], tokenizer.pad_token_id, dtype=np.int32, blocking_strategy=BlockingStrategy(Padding.RIGHT, Truncation.RIGHT, max_input_length))[0], text_histories))
+        # text_histories = list(map(lambda x: x.text_history, text_trajectories))
+        # no this doesn't work because we also need to pad the is_actions
+        token_histories = list(map(lambda x: TokenHistory.from_text_history(x, tokenizer), text_histories))
+        in_tokens = list(map(lambda x: block_sequences([x.tokens], tokenizer.pad_token_id, dtype=np.int32, blocking_strategy=blocking_strategy)[0], token_histories))
+        is_actions = list(map(lambda x: block_sequences([x.is_action], 0.0, dtype=np.float32, blocking_strategy=blocking_strategy)[0], token_histories))
+        # tokens = list(map(lambda x: token_process(x.tokens), token_histories))
+        # is_actions = list(map(lambda x: x.is_action, token_histories))
+
+        bc_data = MaskDataset(
+            in_tokens = jnp.array(in_tokens),
+            in_training_mask = jnp.array(is_actions),
+        )
+    else:
+        bc_data = None
 
     mesh = load_mesh((data_mesh_shape, fsdp_mesh_shape, model_mesh_shape), ('dp', 'fsdp', 'mp'))
     is_main_process = jax.process_index() == 0
@@ -198,8 +232,6 @@ def main(
         model=policy_model, 
         tokenizer=tokenizer, 
     )
-
-    env = FenChessHistoryEnv()
     
     policy_prng = jax.random.PRNGKey(0)
     policy = GPT2PPOPolicy(
@@ -244,6 +276,7 @@ def main(
             output_dim=1, 
             use_bias=True, 
             initializer_range=0.0, 
+            bias_init=-1,
         ), 
         model_dtype=jnp.float32, 
         optim_getter=value_head_optim_getter, 
@@ -264,6 +297,8 @@ def main(
         value_head_model=value_head, 
         tokenizer=tokenizer, 
         loss_fn=loss_f, 
+        bc_loss_fn=loss_fn_mask if bc_data is not None else None,
+        bc_loss_weight=bc_loss_weight if bc_data is not None else 0.0,
     )
 
     ppo_trainer = GPT2PPOTrain.load_train(
@@ -273,21 +308,143 @@ def main(
         value_head_model=value_head, 
         tokenizer=tokenizer, 
         loss_fn=loss_f, 
+        bc_loss_fn=loss_fn_mask if bc_data is not None else None,
+        bc_loss_weight=bc_loss_weight if bc_data is not None else 0.0,
     )
 
     if use_adaptive_kl:
         kl_controller = AdaptiveKLController(init_kl_coef=init_kl_coef, target=kl_target, horizon=kl_horizon)
     else:
         kl_controller = FixedKLController(kl_coef=init_kl_coef)
+        
+    # if maze_name == "double_t_maze":
+    #     maze = double_t_maze()
+    #     valid_goals = np.array(zip(*np.where(maze == 0)))
+
+    # if describe_function == "describe_observation":
+    #     describe_function = describe_observation
+    # elif describe_function == "describe_observation_give_position":
+    #     describe_function = describe_observation_give_position
+    # else:
+    #     raise ValueError(f'unknown describe function: {describe_function}')
+    
+    # if reward_function is None or reward_function == "standard_reward":
+    #     reward_function = standard_reward
+    # elif reward_function == "illegal_penalty_reward":
+    #     reward_function = illegal_penalty_reward
+    # elif reward_function == "illegal_penalty_diff_scale":
+    #     reward_function = illegal_penalty_diff_scale
+    # else:
+    #     raise ValueError(f'unknown reward function: {reward_function}')
+    
+    # env = MazeEnv(
+    #     maze=maze, 
+    #     valid_goals=valid_goals, 
+    #     actions=manhatten_actions, 
+    #     max_steps=100, 
+    #     display_initial_position=True,
+    #     describe_function=describe_function,
+    #     reward_function=reward_function,
+    # )
+    
+    env = setup_maze_env(maze_name=maze_name, describe_function=describe_function, reward_function=reward_function)
+    start_position = pick_start_position(maze_name=maze_name)
 
     data_round = 0
     def ppo_dataset_loader(ppo_inference: GPT2PPOInference, policy: GPT2PPOPolicy) -> PPODataset:
+        
+        # # reranker_policy = 
+        # if reranker_policy:
+        #     print("reranker policy!")
+        #     policy = ReRankerSamplePolicy(
+        #         proposal_fn=maze_proposal_function, 
+        #         score_fn=build_ppo_score_fn(
+        #             inference=ppo_inference,
+        #             tokenizer=tokenizer,
+        #             max_length=max_input_length+max_output_length,
+        #             bsize=ppo_data_bsize,
+        #         )
+                
+        #     )
+        
+        # generation_examples = []
+        # maze = double_t_maze()
+        # correct_answers = double_t_maze_optimal_directions()
+        # positions = zip(*np.where(maze == 0))
+        # goal = (8, 6)
+        # for position in positions:
+        #     generation_examples.append([describe_observation_give_position(maze, position, goal), [correct_answers[position]]])
+            
+        # generation_data = generate_language(
+        #     inference=ppo_inference, 
+        #     prompts=list(map(lambda x: tokenizer.bos_token+x['in_text'].removeprefix(tokenizer.bos_token), generation_examples)), 
+        #     references=list(map(lambda x: x['stockfish_actions'], generation_examples)), 
+        #     prng_key=jax.random.PRNGKey(0), 
+        #     bsize=8, 
+        #     generation_batches=None, 
+        #     blocking_strategy=BlockingStrategy(
+        #         padding=Padding.LEFT, 
+        #         truncation=Truncation.LEFT, 
+        #         max_length=max_input_length
+        #     ), 
+        #     generation_config=GenerationConfig(
+        #         max_length=max_input_length+max_output_length, 
+        #         do_sample=False, 
+        #         num_beams=1, 
+        #         pad_token_id=tokenizer.pad_token_id, 
+        #         eos_token_id=tokenizer.encode('\n')[0], 
+        #         temperature=None, 
+        #         top_k=None, 
+        #         top_p=None, 
+        #     ), 
+        # )
+        
+        reranker_policy = ReRankerPolicy(
+            proposal_fn=maze_proposal_function,
+            score_fn=build_ppo_score_fn(
+                inference=ppo_inference,
+                tokenizer=tokenizer,
+                max_length=max_input_length+max_output_length,
+                bsize=ppo_data_bsize,
+            ),
+        )
+        
+        maze = double_t_maze()
+        goal = (8, 6)
+        correct_answers = double_t_maze_optimal_directions()
+        positions = np.argwhere(maze == 0).tolist()    # note make sure to set temperature to 0
+        with mesh:
+            num_correct = 0
+            for position in positions:
+                env.position = position
+                observation = describe_observation_give_position(maze, position, env.goal)
+                text_history = (Text(observation, False),)
+                # embed()
+                # if reranker:
+                output = reranker_policy.act(text_history)
+                prediction = output[-1].text
+                # output = policy.act([text_history], done=[False])
+                # prediction = output[-1][-1].text
+                # output = policy.act(text_history)
+                # prediction = output[-1].text
+                if position[0] == goal[0] and position[1] == goal[1]:
+                    continue
+                if prediction == correct_answers[tuple(position)]:
+                    num_correct += 1
+                    print("correct!", observation, position, prediction, correct_answers[tuple(position)])
+                else:
+                    print("incorrect!", observation, position, prediction, correct_answers[tuple(position)])
+        accuracy = num_correct/(len(positions)-1)*100
+        print("Accuracy: ", accuracy)
+        
+        print("collecting data ...")
         nonlocal data_round
         raw_results, summary_results = text_env_eval(
-            env=env, 
-            policy=policy, 
-            n_rollouts=n_rollouts, 
-            bsize=rollout_bsize, 
+            env=env,
+            policy=policy,
+            n_rollouts=n_rollouts,
+            bsize=rollout_bsize,
+            # env_options={"init_position": start_position},
         )
         summary_results = pull_logs(summary_results)
 
@@ -339,6 +496,7 @@ def main(
                 kl_ctrl_value=kl_controller.value, 
             ), 
             env_interaction=summary_results, 
+            accuracy=accuracy,
         )
 
         logs = pull_logs(label_logs(logs, 'data_collection', {'round': data_round}))
@@ -346,6 +504,8 @@ def main(
 
         if save_dir is not None and save_ppo_dataset:
             print('saving ppo dataset ...')
+            print(save_dir)
+            # save_dataset_to_bucket(ppo_dataset, save_dir, data_round, is_main_process, text_trajectory_chains, raw_results, summary_results)
             data_save_path = os.path.join(save_dir, 'data_saves', f'{data_round}')
             if is_main_process:
                 create_path(data_save_path)
@@ -379,15 +539,41 @@ def main(
 
         return ppo_dataset
 
-    outputs_path = f"gcs://rail-tpus-isadora/llm-rl-outputs/outputs/chess/{exp_name}/"
+    # outputs_path = convert_path(f"outputs/chess/{exp_name}/")
+    outputs_path = f"gcs://rail-tpus-isadora/maze/maze_{maze_name}/{exp_name}"
     save_dir, exp_name = setup_experiment_save(
         exp_name=exp_name, 
-        outputs_path=convert_path(outputs_path), 
+        outputs_path=outputs_path, 
         input_args=input_args, 
         script__file__=__file__, 
         is_main_process=is_main_process, 
     )
     
+    # def evaluate(ppo_inference: GPT2PPOInference, ppo_policy: GPT2PPOPolicy):
+    #     policy = GPT2PPOPolicy(
+    #         inference=ppo_inference, 
+    #         prng_key=policy_prng, 
+    #         generation_config=GenerationConfig(
+    #             do_sample=False, 
+    #             num_beams=policy_num_beams, 
+    #             temperature=policy_temperature, 
+    #             top_p=policy_top_p, 
+    #             top_k=policy_top_k, 
+    #             eos_token_id=tokenizer.encode('\n')[0], 
+    #             pad_token_id=tokenizer.pad_token_id, 
+    #             max_new_tokens=max_output_length, 
+    #         ), 
+    #         blocking_strategy=BlockingStrategy(
+    #             padding=Padding.LEFT, 
+    #             truncation=Truncation.LEFT, 
+    #             max_length=max_input_length, 
+    #         ), 
+    #         out_str_process=lambda x: x.removesuffix('\n')+'\n', 
+    #     )
+        
+    #     accuracy = compute_move_accuracy(policy)
+    #     return {"accuracy": accuracy}
+        
     train_prng = jax.random.PRNGKey(1)
     save_dtype = jnp.bfloat16 if save_bf16 else jnp.float32
     ppo_trainer, ppo_inference, policy = train_loop(
@@ -421,7 +607,9 @@ def main(
         wandb_project=wandb_project, 
         wandb_run_name=exp_name, 
         wandb_config=None, 
-        is_main_process=is_main_process, 
+        is_main_process=is_main_process,
+        bc_dataset=bc_data,
+        bc_bsize=train_bc_bsize, 
         **loop_state, 
     )
 

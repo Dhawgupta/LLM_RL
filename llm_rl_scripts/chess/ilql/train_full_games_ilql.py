@@ -8,7 +8,6 @@ import jax.numpy as jnp
 from JaxSeq.utils import BlockingStrategy, Padding, Truncation, uuid_name, jsonl_load, get_weight_decay_mask, create_path, get_enabled_save_path
 import os
 import optax
-from JaxSeq.models.gpt2.interface import GPT2Train, GPT2Inference
 from JaxSeq.models.gpt2.load import load_train_state, ModelLoadMode
 import pickle as pkl
 from JaxSeq.data import Seq2SeqDataset
@@ -37,11 +36,7 @@ from LLM_RL.algorithms.ilql.data import ILQLData, ILQLDataset, ILQLIterableDatas
 from JaxSeq.utils import multihost_device_get
 from transformers import GPT2TokenizerFast
 from IPython import embed
-from llm_rl_scripts.maze.maze_utils import setup_maze_env, pick_start_position
-from llm_rl_scripts.maze.mazes import double_t_maze_optimal_directions, double_t_maze
-from llm_rl_scripts.maze.env import MazeEnv, describe_observation_give_position, manhatten_actions, describe_observation, maze_proposal_function, standard_reward
-from LLM_RL.algorithms.ppo.reranker_policy import ReRankerPolicy, ReRankerSamplePolicy
-from LLM_RL.algorithms.ilql.gpt2.score_fn import build_ilql_score_fn
+from llm_rl_scripts.chess.env import FenChessHistoryEnv, text_env_eval_chess_positions
 import random 
 
 def main(
@@ -59,7 +54,7 @@ def main(
     model_mesh_shape: int=-1, 
 
     use_wandb: bool=True, 
-    wandb_project: Optional[str]="llm_rl_repo_give_position_ilql", 
+    wandb_project: Optional[str]="llm_rl_repo_endgames_ilql", 
 
     n_rounds: int=1, 
     epochs: int=1, 
@@ -67,8 +62,8 @@ def main(
     
     lr: float=1e-4, 
     weight_decay: float=0.0, 
-    tau: float=0.95,
-    cql_weight: float=0.0,
+    tau: float=0.7,
+    cql_weight: float=1.0,
     gamma: float=0.99,
 
     train_bsize: int=32, 
@@ -77,7 +72,7 @@ def main(
     gradient_checkpointing: bool=False, 
     gradient_checkpointing_policy: str='nothing_saveable', 
 
-    max_length: int=80, 
+    max_length: int=160, 
 
     log_every: int=256, 
     eval_every_steps: Optional[int]=None, 
@@ -137,19 +132,8 @@ def main(
                 while token_trajectory_chain.next is not None:
                     yield ILQLData.from_token_trajectory_chain(token_trajectory_chain)
                     token_trajectory_chain = token_trajectory_chain.next
-                # first_trajectory = TextTrajectory([Text(obj[0]["state"], False), Text(obj[0]["action"], True)],
-                #                                 [0, obj[0]["reward"]], obj[0]["done"])
-                # next_trajectory = TextTrajectory([Text(obj[1]["state"], False), Text(obj[1]["action"], True)],
-                #                                         [0, obj[1]["reward"]], obj[1]["done"])
-                
-                # text_trajectory_chain = TextTrajectoryChain(text_trajectory=first_trajectory, 
-                #                                             next=TextTrajectoryChain(text_trajectory=next_trajectory, next=next_trajectory))
-                # token_trajectory_chain = TokenTrajectoryChain.from_text_trajectory_chain(text_trajectory_chain, tokenizer)
-                # yield ILQLData.from_token_trajectory_chain(token_trajectory_chain)
-                # if next_trajectory.done:
-                #     text_trajectory_chain = TextTrajectoryChain(text_trajectory=next_trajectory, next=next_trajectory)
-                #     token_trajectory_chain = TokenTrajectoryChain.from_text_trajectory_chain(text_trajectory_chain, tokenizer)
-                #     yield ILQLData.from_token_trajectory_chain(token_trajectory_chain)
+        
+        
     ilql_data_lst = list(ilql_data_generator(train_data_path))
     random.shuffle(ilql_data_lst)
     
@@ -167,31 +151,25 @@ def main(
     #                                   max_length=max_length,
     #                               ))
     
-    def optim_getter(params: PyTree):
+    def policy_optim_getter(params: PyTree):
         mask = get_weight_decay_mask((
-            "".join([r"\['ln_\d+'\]", re.escape("['bias']")]), 
-            "".join([r"\['ln_\d+'\]", re.escape("['scale']")]), 
+            "".join([r"\['ln_[0-9]+'\]", re.escape("['bias']")]), 
+            "".join([r"\['ln_[0-9]+'\]", re.escape("['scale']")]), 
             re.escape("['ln_f']['bias']"), 
             re.escape("['ln_f']['scale']"), 
             "bias", 
         ))(params)
-
-        optimizer_config = GPT3Optimizer(
-            init_lr=init_lr, 
-            end_lr=end_lr, 
-            lr=lr, 
-            lr_warmup_steps=lr_warmup_steps, 
-            lr_decay_steps=lr_decay_steps, 
-            weight_decay=weight_decay, 
-            bf16_momentum=bf16_momentum, 
-            multiply_by_parameter_scale=multiply_by_parameter_scale, 
+        return optax.MultiSteps(
+            optax.adamw(
+                learning_rate=lr, 
+                b1=0.9, 
+                b2=0.95, 
+                eps=1e-8, 
+                weight_decay=weight_decay, 
+                mask=mask, 
+            ), 
+            every_k_schedule=grad_accum_steps, 
         )
-
-        optim, _ = optimizer_config.get_optim(mask)
-
-        if grad_accum_steps is not None:
-            return optax.MultiSteps(optim, every_k_schedule=grad_accum_steps)
-        return optim
     
     def value_head_optim_getter(params: PyTree):
         mask = get_weight_decay_mask(("bias",))(params)
@@ -341,36 +319,6 @@ def main(
         hard_update_every=None, 
     )
     
-    # value_rl_inference = GPT2ValueRLInference.load_inference(
-    #     pi_beta_params=pi_beta_params,
-    #     base_params=base_train_state.params, 
-    #     q1_head_params=q1_head_train_state.params, 
-    #     q2_head_params=q2_head_train_state.params, 
-    #     v_head_params=v_head_train_state.params, 
-    #     pi_beta_model=base_model,
-    #     base_model=base_model, 
-    #     q_head_model=q_head, 
-    #     v_head_model=v_head, 
-    #     tokenizer=tokenizer,  
-    #     beta=128.0, 
-    #     dp_shard_logits=True, 
-    # )
-    
-    # target_value_rl_inference = GPT2ValueRLInference.load_inference(
-    #     pi_beta_params=pi_beta_params,
-    #     base_params=target_base_params,
-    #     q1_head_params=q1_target_head_params,
-    #     q2_head_params=q2_target_head_params,
-    #     v_head_params=v_head_train_state.params,
-    #     pi_beta_model=base_model,
-    #     base_model=base_model,
-    #     q_head_model=q_head,
-    #     v_head_model=v_head,
-    #     tokenizer=tokenizer,
-    #     beta=128.0,
-    #     dp_shard_logits=True,
-    # )
-    
     # inference = GPT2ILQLInference.load_inference(value_rl_inference, target_value_rl_inference, loss_fn)
     inference = GPT2ILQLInference.load_inference(
         GPT2ValueRLInference.load_inference(
@@ -414,40 +362,12 @@ def main(
     print(save_dir)
     if save_dir is None:
         embed()
-
+        
     policy_prng = jax.random.PRNGKey(0)
     def evaluate(inference: GPT2ILQLInference):
         nonlocal policy_prng
         policy_prng, new_key = jax.random.split(policy_prng)
-        # embed()
-        if reranker: 
-            sample_policy = ReRankerSamplePolicy(
-                proposal_fn=maze_proposal_function,
-                score_fn=build_ilql_score_fn(
-                    inference=inference,
-                    pi_beta_inference=None,
-                    tokenizer=tokenizer,
-                    max_length=80, 
-                    value_weight=1.0,
-                    logit_weight=None,
-                    bsize=4,
-                )
-            )
-            
-            policy = ReRankerPolicy(
-                proposal_fn=maze_proposal_function,
-                score_fn=build_ilql_score_fn(
-                    inference=inference,
-                    pi_beta_inference=None,
-                    tokenizer=tokenizer,
-                    max_length=80,
-                    value_weight=1.0,
-                    logit_weight=None,
-                    bsize=4,
-                )
-            )
-        else:
-            sample_policy = GPT2ValuePolicy(
+        policy = GPT2ValuePolicy(
                 inference=inference.value_inference, 
                 prng_key=new_key, 
                 generation_config=GenerationConfig(
@@ -467,83 +387,16 @@ def main(
                 ), 
                 out_str_process=lambda x: x.removesuffix('\n')+'\n', 
             )
-            
-            policy = GPT2ValuePolicy(
-                inference=inference.value_inference, 
-                prng_key=new_key, 
-                generation_config=GenerationConfig(
-                    do_sample=False, 
-                    num_beams=policy_num_beams, 
-                    temperature=policy_temperature, 
-                    top_p=policy_top_p, 
-                    top_k=policy_top_k, 
-                    eos_token_id=tokenizer.encode('\n')[0], 
-                    pad_token_id=tokenizer.pad_token_id, 
-                    max_new_tokens=policy_max_output_length, 
-                ), 
-                blocking_strategy=BlockingStrategy(
-                    padding=Padding.LEFT, 
-                    truncation=Truncation.LEFT, 
-                    max_length=policy_max_input_length, 
-                ), 
-                out_str_process=lambda x: x.removesuffix('\n')+'\n', 
-            )
+        env = FenChessHistoryEnv()
+        raw_results, summary_results = text_env_eval(
+            env=env,
+            policy=policy,
+            n_rollouts=100,
+            bsize=8,
+        )
+        summary_results = pull_logs(summary_results)
         
-        maze_name = "double_t_maze"
-        describe_function = "describe_observation_give_position"
-        reward_function = "standard_reward"
-
-        env = setup_maze_env(maze_name=maze_name, describe_function=describe_function, reward_function=reward_function)
-        start_position = pick_start_position(maze_name=maze_name)
-        
-
-        
-        maze = double_t_maze()
-        goal = (8, 6)
-        correct_answers = double_t_maze_optimal_directions()
-        positions = np.argwhere(maze == 0).tolist()    # note make sure to set temperature to 0
-        with mesh:
-            num_correct = 0
-            for position in positions:
-                env.position = position
-                observation = describe_observation_give_position(maze, position, env.goal)
-                text_history = (Text(observation, False),)
-                # embed()
-                if reranker:
-                    output = policy.act(text_history)
-                    prediction = output[-1].text
-                else:
-                    output = policy.act([text_history], done=[False])
-                    prediction = output[-1][-1].text
-                # output = policy.act(text_history)
-                # prediction = output[-1].text
-                if position[0] == goal[0] and position[1] == goal[1]:
-                    continue
-                if prediction == correct_answers[tuple(position)]:
-                    num_correct += 1
-                    print("correct!", observation, position, prediction, correct_answers[tuple(position)])
-                else:
-                    print("incorrect!", observation, position, prediction, correct_answers[tuple(position)])
-        accuracy = num_correct/(len(positions)-1)*100
-        print("Accuracy: ", accuracy)
-        with mesh: 
-            raw_results, summary_results = text_env_eval(
-                env=env,
-                policy=sample_policy,
-                n_rollouts=16,
-                bsize=16,
-                env_options={"init_position": start_position},
-            )
-
-        for item in raw_results:
-            print('='*25)
-            print(text_history_to_str(item[-1].post_transition_history))
-            print('='*25)
-
-        logs = pull_logs(summary_results)
-        log({"sample": logs, "move_accuracy": accuracy}, use_wandb and is_main_process)
-
-        return float('inf'), logs
+        return 0.0, {"interaction_env": summary_results}
     
     train_prng = jax.random.PRNGKey(1)
     save_dtype = jnp.bfloat16 if save_bf16 else jnp.float32

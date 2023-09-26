@@ -13,28 +13,24 @@ from JaxSeq.models.gpt2.interface import GPT2Train, GPT2Inference
 from JaxSeq.models.gpt2.load import load_train_state, ModelLoadMode
 import pickle as pkl
 from JaxSeq.data import Seq2SeqDataset
-from LLM_RL.algorithms.ilql.base_interface import ilql_loss, ILQLTrain
 from JaxSeq.generation_eval import generate_language, compute_metrics
 from transformers.generation import GenerationConfig
 from jaxtyping import PyTree
 import re
 from LLM_RL.environment import TextEnv, TextHistory, Text, interact_environment, text_env_eval, TextTrajectory, TextTrajectoryChain, TokenTrajectoryChain, text_history_to_str
-from LLM_RL.algorithms.ilql.gpt2.interface import GPT2ILQLTrain, GPT2ILQLInference
+from LLM_RL.algorithms.mc_returns.data import MCData, MCDataset
 from LLM_RL.algorithms.value_rl_base.gpt2.interface import GPT2ValuePolicy, GPT2ValueRLInference
-# GPT2InferenceFull, GPT2ILQLTrain
 from LLM_RL.heads.mlp_head import load_train_state_from_config as load_head_train_state_from_config
 from LLM_RL.heads.mlp_head import MLPHeadConfig
 from JaxSeq.shard_model import shard_params_from_params
 from flax.training.train_state import TrainState
-from LLM_RL.algorithms.ilql.data import ILQLDataset, ILQLIterableDataset
+from LLM_RL.algorithms.mc_returns.gpt2.interface import GPT2MCTrain, GPT2MCInference
 from LLM_RL.utils import get_tensor_stats_np
 from functools import partial
 import numpy as np
 from JaxSeq.logs import label_logs, log, pull_logs
 import json
 from LLM_RL.heads.mlp_head import load_train_state as load_head_train_state, ModelLoadMode as HeadModelLoadMode
-from LLM_RL.algorithms.ilql.train import eval_loss, train_loop
-from LLM_RL.algorithms.ilql.data import ILQLData, ILQLDataset, ILQLIterableDataset
 from JaxSeq.utils import multihost_device_get
 from transformers import GPT2TokenizerFast
 from IPython import embed
@@ -43,7 +39,14 @@ from llm_rl_scripts.maze.mazes import double_t_maze_optimal_directions, double_t
 from llm_rl_scripts.maze.env import MazeEnv, describe_observation_give_position, manhatten_actions, describe_observation, maze_proposal_function, standard_reward
 from LLM_RL.algorithms.ppo.reranker_policy import ReRankerPolicy, ReRankerSamplePolicy
 from LLM_RL.algorithms.ilql.gpt2.score_fn import build_ilql_score_fn
+from JaxSeq.shard_model import shard_params_from_params, copy_sharded_pytree
 import random 
+from LLM_RL.heads.linear_head import LinearHeadConfig
+from LLM_RL.algorithms.mc_returns.base_interface import mc_loss, MCTrain
+from LLM_RL.algorithms.mc_returns.train import train_loop, eval_loss
+from LLM_RL.algorithms.mc_returns.data import MCData, MCDataset, MCIterableDataset
+from LLM_RL.algorithms.mc_returns.gptj.interface import GPTJMCTrain, GPTJMCInference
+from LLM_RL.algorithms.mc_returns.score_fn import build_mc_score_fn
 from tqdm.auto import tqdm
 from flax.traverse_util import flatten_dict, unflatten_dict
 from JaxSeq.optimizers import GPT3Optimizer
@@ -63,7 +66,7 @@ def main(
     model_mesh_shape: int=-1, 
 
     use_wandb: bool=True, 
-    wandb_project: Optional[str]="llm_rl_repo_give_position_ilql", 
+    wandb_project: Optional[str]="llm_rl_repo_dialogue_history_mc", 
 
     n_rounds: int=1, 
     epochs: int=1, 
@@ -86,15 +89,15 @@ def main(
     log_every: int=256, 
     eval_every_steps: Optional[int]=None, 
     eval_every_epochs: Optional[int]=10, 
-    eval_at_beginning: bool=False, 
+    eval_at_beginning: bool=True, 
     eval_at_end: bool=True, 
 
     save_every_steps: Optional[int]=None, 
     save_every_epochs: Optional[int]=5, 
-    save_at_beginning: bool=False, 
+    save_at_beginning: bool=True, 
     save_at_end: bool=True, 
     save_best: bool=False, 
-    max_checkpoints: Optional[int]=5, 
+    max_checkpoints: Optional[int]=2, 
     save_train_state: bool=True, 
     save_bf16: bool=True, 
 
@@ -109,13 +112,18 @@ def main(
     force_pad_embeddings: bool=False, 
 
     should_restore_loop_state: bool=False, 
-    reranker: bool=True
+    reranker: bool=False,
 ):
     input_args = locals()
     print(input_args)
 
     tokenizer = GPT2TokenizerFast.from_pretrained('gpt2')
     tokenizer.add_special_tokens({'pad_token': '<|pad|>'})
+
+    mesh = load_mesh((data_mesh_shape, fsdp_mesh_shape, model_mesh_shape), ('dp', 'fsdp', 'mp'))
+    is_main_process = jax.process_index() == 0
+    print(f"Mesh: {mesh}")
+    print(f"Is main process: {is_main_process}")
     
     PATH = train_data_path
     STEPS_BACK = 40 # maximum number of steps back to look
@@ -166,42 +174,37 @@ def main(
         eval_chains.extend(chains_from_item(item))
 
     # use iterable class so that we can perform multiple epochs
-    class ILQLDataIterable:
+    class MCDataIterable:
         def __init__(self, chains):
             self.chains = chains
         
         def __iter__(self):
-            def ilql_data_generator(chains):
+            def mc_data_generator(chains):
                 for chain in chains:
                     token_trajectory_chain = TokenTrajectoryChain.from_text_trajectory_chain(chain, tokenizer)
-                    yield ILQLData.from_token_trajectory_chain(token_trajectory_chain)
+                    yield MCData.from_token_trajectory_chain(token_trajectory_chain, gamma=gamma)
             # IMPORTANT: reshuffle data before each epoch to decorelate batch
             shuffle_idxs = list(range(len(self.chains)))
             random.shuffle(shuffle_idxs)
             shuffled_chains = [self.chains[i] for i in shuffle_idxs]
-            return ilql_data_generator(shuffled_chains)
+            return mc_data_generator(shuffled_chains)
     
     # example of iterating through the data
-    train_iterable = ILQLDataIterable(train_chains)
-    dataset = ILQLIterableDataset.from_ilql_data_iterable(train_iterable, tokenizer,
+    train_iterable = MCDataIterable(train_chains)
+    dataset = MCIterableDataset.from_mc_data_iterable(train_iterable, tokenizer,
                                     BlockingStrategy(
                                         padding=Padding.RIGHT,
                                         truncation=Truncation.RIGHT,
                                         max_length=max_length,
                                     ))
-    eval_iterable = ILQLDataIterable(eval_chains)
-    eval_dataset = ILQLIterableDataset.from_ilql_data_iterable(eval_iterable, tokenizer,
+    eval_iterable = MCDataIterable(eval_chains)
+    eval_dataset = MCIterableDataset.from_mc_data_iterable(eval_iterable, tokenizer,
                                     BlockingStrategy(
                                         padding=Padding.RIGHT,
                                         truncation=Truncation.RIGHT,
                                         max_length=max_length,
                                     ))
     
-
-    mesh = load_mesh((data_mesh_shape, fsdp_mesh_shape, model_mesh_shape), ('dp', 'fsdp', 'mp'))
-    is_main_process = jax.process_index() == 0
-    print(f"Mesh: {mesh}")
-    print(f"Is main process: {is_main_process}")
     
     def model_load_optim_getter(params: PyTree):
         mask = get_weight_decay_mask((
@@ -275,29 +278,16 @@ def main(
         force_pad_embeddings=force_pad_embeddings, 
         params_dtype=jnp.float32, 
     )
-    # base_train_state.config.gradient_checkpointing = gradient_checkpointing
-    # base_train_state.config.gradient_checkpointing_policy = gradient_checkpointing_policy
-    with jax.default_device(jax.devices('cpu')[0]):
-        target_base_params = jax.tree_util.tree_map(
-            lambda x: multihost_device_get(x, mesh=mesh).copy(), 
-            base_train_state.params, 
-        )
-    target_base_params = shard_params_from_params(
+    base_model.config.gradient_checkpointing = gradient_checkpointing
+    base_model.config.gradient_checkpointing_policy = gradient_checkpointing_policy
+    pi_beta_params = copy_sharded_pytree(
         model=base_model, 
-        params=target_base_params, 
-    )
-    with jax.default_device(jax.devices('cpu')[0]):
-        pi_beta_params = jax.tree_util.tree_map(
-            lambda x: multihost_device_get(x, mesh=mesh).copy(), 
-            base_train_state.params, 
-        )
-    pi_beta_params = shard_params_from_params(
-        model=base_model, 
-        params=pi_beta_params, 
+        pytree=base_train_state.params, 
     )
 
-    q1_prng_key = jax.random.PRNGKey(4)
-    q1_head_train_state, q_head = load_head_train_state_from_config(
+    q_prng_key = jax.random.PRNGKey(4)
+    # embed()
+    q_head_train_state, q_head = load_head_train_state_from_config(
         model_config=MLPHeadConfig(
             input_dim=base_model.config.n_embd, 
             hidden_dim=base_model.config.n_embd, 
@@ -309,61 +299,7 @@ def main(
         model_dtype=jnp.float32, 
         optim_getter=value_head_optim_getter, 
         mesh=mesh, 
-        prng_key=q1_prng_key, 
-        pad_to_output_dim=None, 
-        params_dtype=jnp.float32, 
-    )
-    with jax.default_device(jax.devices('cpu')[0]):
-        q1_target_head_params = jax.tree_util.tree_map(
-            lambda x: multihost_device_get(x, mesh=mesh).copy(), 
-            q1_head_train_state.params, 
-        )
-    q1_target_head_params = shard_params_from_params(
-        model=q_head, 
-        params=q1_target_head_params, 
-    )
-
-    q2_prng_key = jax.random.PRNGKey(5)
-    q2_head_train_state, _ = load_head_train_state_from_config(
-        model_config=MLPHeadConfig(
-            input_dim=base_model.config.n_embd, 
-            hidden_dim=base_model.config.n_embd, 
-            output_dim=base_model.config.vocab_size, 
-            use_bias=True, 
-            layer2_initializer_range=0.0, 
-            layer2_bias_init=0.0, 
-        ), 
-        model_dtype=jnp.float32, 
-        optim_getter=value_head_optim_getter, 
-        mesh=mesh, 
-        prng_key=q2_prng_key, 
-        pad_to_output_dim=None, 
-        params_dtype=jnp.float32, 
-    )
-    with jax.default_device(jax.devices('cpu')[0]):
-        q2_target_head_params = jax.tree_util.tree_map(
-            lambda x: multihost_device_get(x, mesh=mesh).copy(), 
-            q2_head_train_state.params, 
-        )
-    q2_target_head_params = shard_params_from_params(
-        model=q_head, 
-        params=q2_target_head_params, 
-    )
-
-    v_prng_key = jax.random.PRNGKey(6)
-    v_head_train_state, v_head = load_head_train_state_from_config(
-        model_config=MLPHeadConfig(
-            input_dim=base_model.config.n_embd, 
-            hidden_dim=base_model.config.n_embd, 
-            output_dim=1, 
-            use_bias=True, 
-            layer2_initializer_range=0.0, 
-            layer2_bias_init=0.0, 
-        ), 
-        model_dtype=jnp.float32, 
-        optim_getter=value_head_optim_getter, 
-        mesh=mesh, 
-        prng_key=v_prng_key, 
+        prng_key=q_prng_key, 
         pad_to_output_dim=None, 
         params_dtype=jnp.float32, 
     )
@@ -375,58 +311,29 @@ def main(
         with open(os.path.join(convert_path(model_load_path), 'loop_state.pkl'), 'rb') as f:
             loop_state = pkl.load(f)
     
-    loss_fn = partial(ilql_loss, gamma=gamma, tau=tau, cql_weight=cql_weight)
+    loss_fn = partial(mc_loss, cql_weight=cql_weight)
 
-    train = GPT2ILQLTrain.load_train(
+    train = GPT2MCTrain.load_train(
         base_train_state=base_train_state, 
-        target_base_params=target_base_params, 
-        q1_head_train_state=q1_head_train_state, 
-        q2_head_train_state=q2_head_train_state, 
-        v_head_train_state=v_head_train_state, 
-        q1_target_head_params=q1_target_head_params, 
-        q2_target_head_params=q2_target_head_params, 
+        q_head_train_state=q_head_train_state, 
         base_model=base_model, 
         q_head_model=q_head, 
-        v_head_model=v_head, 
         tokenizer=tokenizer, 
         loss_fn=loss_fn, 
-        detach_q1=False, 
-        detach_q2=False, 
-        detach_v=False, 
-        polyak_alpha=0.005, 
-        hard_update_every=None, 
+        detach_q=False, 
     )
-    
-    inference = GPT2ILQLInference.load_inference(
-        GPT2ValueRLInference.load_inference(
-        pi_beta_params=pi_beta_params,
+
+    inference = GPT2MCInference.load_inference(
+        pi_beta_params=pi_beta_params, 
         base_params=base_train_state.params, 
-        q1_head_params=q1_head_train_state.params, 
-        q2_head_params=q2_head_train_state.params, 
-        v_head_params=v_head_train_state.params, 
-        pi_beta_model=base_model,
+        q_head_params=q_head_train_state.params, 
+        pi_beta_model=base_model, 
         base_model=base_model, 
         q_head_model=q_head, 
-        v_head_model=v_head, 
-        tokenizer=tokenizer,  
+        tokenizer=tokenizer, 
+        loss_fn=loss_fn, 
         beta=8.0, 
         dp_shard_logits=True, 
-    ), 
-        GPT2ValueRLInference.load_inference(
-        pi_beta_params=pi_beta_params,
-        base_params=target_base_params,
-        q1_head_params=q1_target_head_params,
-        q2_head_params=q2_target_head_params,
-        v_head_params=None,
-        pi_beta_model=base_model,
-        base_model=base_model,
-        q_head_model=q_head,
-        v_head_model=None,
-        tokenizer=tokenizer,
-        beta=8.0,
-        dp_shard_logits=True,
-    ),
-        loss_fn,
     )
 
     save_dir, exp_name = setup_experiment_save(
@@ -436,19 +343,17 @@ def main(
         script__file__=__file__, 
         is_main_process=is_main_process, 
     )
-    print(save_dir)
-    if save_dir is None:
-        embed()
 
     policy_prng = jax.random.PRNGKey(0)
-    def evaluate(inference: GPT2ILQLInference):
+    def evaluate(inference: GPT2MCInference):
         nonlocal policy_prng
         policy_prng, new_key = jax.random.split(policy_prng)
-        # embed()
+        
         if reranker: 
+            
             sample_policy = ReRankerSamplePolicy(
                 proposal_fn=maze_proposal_function,
-                score_fn=build_ilql_score_fn(
+                score_fn=build_mc_score_fn(
                     inference=inference,
                     pi_beta_inference=None,
                     tokenizer=tokenizer,
@@ -458,10 +363,9 @@ def main(
                     bsize=4,
                 )
             )
-            
             policy = ReRankerPolicy(
                 proposal_fn=maze_proposal_function,
-                score_fn=build_ilql_score_fn(
+                score_fn=build_mc_score_fn(
                     inference=inference,
                     pi_beta_inference=None,
                     tokenizer=tokenizer,
@@ -473,7 +377,7 @@ def main(
             )
         else:
             sample_policy = GPT2ValuePolicy(
-                inference=inference.value_inference, 
+                inference=inference, 
                 prng_key=new_key, 
                 generation_config=GenerationConfig(
                     do_sample=True, 
@@ -494,7 +398,7 @@ def main(
             )
             
             policy = GPT2ValuePolicy(
-                inference=inference.value_inference, 
+                inference=inference, 
                 prng_key=new_key, 
                 generation_config=GenerationConfig(
                     do_sample=False, 
@@ -513,7 +417,8 @@ def main(
                 ), 
                 out_str_process=lambda x: x.removesuffix('\n')+'\n', 
             )
-        
+                
+            
         maze_name = "double_t_maze"
         describe_function = "describe_observation_only_walls"
         reward_function = "standard_reward"
@@ -533,6 +438,26 @@ def main(
         possible_positions.remove((8, 6))
         # possible_positions = [(1, 1)]
         
+        # with mesh:
+        #     results = {}
+        #     avg_dict = defaultdict(float)
+        #     for position in possible_positions:
+        #         position = tuple(position)
+        #         _, results[str(position)] = text_env_eval(
+        #             env=env, 
+        #             policy=sample_policy, 
+        #             n_rollouts=1, 
+        #             verbose=True, 
+        #             # save_path=None, 
+        #             # seed=1, 
+        #             env_options={"init_position": position},
+        #             # save_config=None, 
+        #         )
+        #         for k, v in flatten_dict(results[str(position)]).items():
+        #             avg_dict[k] += v
+        #     for k, v in avg_dict.items():
+        #         avg_dict[k] = v/len(possible_positions)
+        #     results["avg_reward"] = unflatten_dict(dict(avg_dict))
         with mesh: 
             _, avg_results = text_env_eval(
                 env=env,

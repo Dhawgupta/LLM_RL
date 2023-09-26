@@ -57,14 +57,14 @@ def pick_start_position(maze_name):
         raise ValueError(f'unknown maze name: {maze_name}')
     
 
-def compute_move_accuracy(policy, positions, goal, correct_answers, reranker):
+def compute_move_accuracy(policy, reranker=False):
     maze = double_t_maze()
     goal = (8, 6)
     correct_answers = double_t_maze_optimal_directions()
     positions = np.argwhere(maze == 0).tolist()    # note make sure to set temperature to 0
     num_correct = 0
     for position in positions:
-        observation = describe_observation_give_position(maze, position, env.goal)
+        observation = describe_observation_give_position(maze, position, goal)
         text_history = (Text(observation, False),)
         # embed()
         if reranker:

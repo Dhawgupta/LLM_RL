@@ -70,7 +70,7 @@ def main(
     gradient_checkpointing_policy: str='nothing_saveable', 
     bf16_activations: bool=False, 
 
-    max_input_length: int=256, 
+    max_input_length: int=1024, 
     max_output_length: int=16, 
 
     log_every: int=256, 

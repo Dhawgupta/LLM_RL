@@ -7,6 +7,7 @@ import numpy as np
 from LLM_RL.environment import BatchedTextPolicy, TextEnv, Text, TextHistory, TextPolicy, interact_environment
 from typing import Callable, Dict, List, NamedTuple, Optional, Tuple, Union, Any, Iterator
 import chess
+from IPython import embed
 
 CHESS_ENGINE_PATH = os.environ.get("CHESS_ENGINE_PATH", convert_path("stockfish/stockfish-ubuntu-20.04-x86-64-avx2"))
 
@@ -56,6 +57,7 @@ class ChessEnv():
         self.stockfish = Stockfish(path=CHESS_ENGINE_PATH, parameters=self.stockfish_params)
         self.stockfish.set_fen_position(self.starting_position)
         self.random_opponent = random_opponent
+        self.prev_moves = []
     
     def reset(self):
         self.board = chess.Board(fen=self.starting_position)
@@ -63,6 +65,7 @@ class ChessEnv():
         # starting_position = self.board.fen()
 
         self.stockfish.set_fen_position(self.starting_position)
+        self.prev_moves = []
         return self.starting_position, {}
 
     def sample_valid_action(self):
@@ -101,14 +104,21 @@ class ChessEnv():
         reward: 0 for non-terminal states and draws, 1 for victory, -1 for illegal moves and loss
         """
         # move = self.board.parse_san(action) # throws an error if not a legal move
+        self.prev_moves.append(action)
+        if self.board.turn == chess.BLACK:
+            embed()
         assert self.board.turn == chess.WHITE
         reward, done = -1, 0
         opponent = None
         try: 
             move : chess.Move = self.board.push_san(action)
+            if move == chess.Move.null():
+                self.board.pop()
+                return self.board.fen(), -1, True, {}
         except:
             assert self.board.turn == chess.WHITE
             pass
+        
         else:
             assert self.board.turn == chess.BLACK
             self.stockfish.make_moves_from_current_position([move.uci()])

@@ -19,7 +19,7 @@ from transformers.generation import GenerationConfig
 from jaxtyping import PyTree
 import re
 from LLM_RL.environment import TextEnv, TextHistory, Text, TokenHistory, TokenTrajectory, interact_environment, text_env_eval, TextTrajectory, TextTrajectoryChain, TokenTrajectoryChain, text_history_to_str
-from LLM_RL.algorithms.ppo.gpt2.interface import GPT2ILQLPolicy, GPT2ILQLInference, GPT2PPOTrain
+from LLM_RL.algorithms.ppo.gpt2.interface import GPT2PPOPolicy, GPT2PPOInference, GPT2PPOTrain
 from LLM_RL.heads.linear_head import load_train_state_from_config as load_head_train_state_from_config
 from LLM_RL.heads.linear_head import LinearHeadConfig
 from JaxSeq.shard_model import shard_params_from_params
@@ -42,7 +42,9 @@ from llm_rl_scripts.chess.env import FenChessHistoryEnv, FenChessHistoryEnvSingl
 from llm_rl_scripts.maze.env import MazeEnv, describe_observation_give_position, manhatten_actions, describe_observation, maze_proposal_function, illegal_penalty_reward, illegal_penalty_diff_scale, standard_reward
 from LLM_RL.algorithms.ppo.reranker_policy import ReRankerPolicy, ReRankerSamplePolicy
 from JaxSeq.utils import pad_sequence, block_sequences
-from llm_rl_scripts.maze.maze_utils import setup_maze_env, pick_start_position
+from llm_rl_scripts.maze.maze_utils import setup_maze_env, pick_start_position, compute_move_accuracy
+from JaxSeq.generation_eval import generate_language
+
 # from LLM_RL.gpt2 import load_gpt2_from_pretrained
 
 def main(
@@ -89,9 +91,9 @@ def main(
     max_output_length: int=32, 
 
     log_every: int=256, 
-    eval_every_steps: Optional[int]=256, 
+    eval_every_steps: Optional[int]=None, 
     eval_every_epochs: Optional[int]=None, 
-    eval_every_rounds: Optional[int]=2, 
+    eval_every_rounds: Optional[int]=1, 
     eval_at_beginning: bool=True, 
     eval_at_end: bool=True, 
 
@@ -232,7 +234,7 @@ def main(
     )
     
     policy_prng = jax.random.PRNGKey(0)
-    policy = GPT2ILQLPolicy(
+    policy = GPT2PPOPolicy(
         inference=policy_inference, 
         prng_key=policy_prng, 
         generation_config=GenerationConfig(
@@ -286,7 +288,7 @@ def main(
 
     loss_f = partial(ppo_loss_fn, cliprange_value=cliprange_value, cliprange=cliprange, value_loss_coef=value_loss_coef)
 
-    ppo_inference = GPT2ILQLInference.load_inference(
+    ppo_inference = GPT2PPOInference.load_inference(
         initial_policy_params=initial_policy_params, 
         policy_params=policy_train_state.params, 
         value_head_params=value_head_train_state.params, 
@@ -345,11 +347,11 @@ def main(
     #     reward_function=reward_function,
     # )
     
-    env = setup_maze_env(maze_name=maze_name, describe_function=describe_function, reward_function=reward_function)
+    env = setup_maze_env(maze_name=maze_name, describe_function=describe_function, reward_function=reward_function, last_k=40)
     start_position = pick_start_position(maze_name=maze_name)
 
     data_round = 0
-    def ppo_dataset_loader(ppo_inference: GPT2ILQLInference, policy: GPT2ILQLPolicy) -> PPODataset:
+    def ppo_dataset_loader(ppo_inference: GPT2PPOInference, policy: GPT2PPOPolicy) -> PPODataset:
         
         # reranker_policy = 
         if reranker_policy:
@@ -364,6 +366,37 @@ def main(
                 )
                 
             )
+        
+        generation_examples = []
+        positions = # todo get from maze
+        for position in positions:
+            generation_examples.append([describe_observation_give_position(maze, position, goal), optimal_move])
+            
+        generation_data = generate_language(
+            inference=ppo_inference, 
+            prompts=list(map(lambda x: tokenizer.bos_token+x['in_text'].removeprefix(tokenizer.bos_token), generation_examples)), 
+            references=list(map(lambda x: x['stockfish_actions'], generation_examples)), 
+            prng_key=jax.random.PRNGKey(0), 
+            bsize=8, 
+            generation_batches=None, 
+            blocking_strategy=BlockingStrategy(
+                padding=Padding.LEFT, 
+                truncation=Truncation.LEFT, 
+                max_length=max_input_length
+            ), 
+            generation_config=GenerationConfig(
+                max_length=max_input_length+max_output_length, 
+                do_sample=False, 
+                num_beams=1, 
+                pad_token_id=tokenizer.pad_token_id, 
+                eos_token_id=tokenizer.encode('\n')[0], 
+                temperature=None, 
+                top_k=None, 
+                top_p=None, 
+            ), 
+        )
+        
+        
         
         print("collecting data ...")
         nonlocal data_round
@@ -476,6 +509,31 @@ def main(
         is_main_process=is_main_process, 
     )
     
+    # def evaluate(ppo_inference: GPT2PPOInference, ppo_policy: GPT2PPOPolicy):
+    #     policy = GPT2PPOPolicy(
+    #         inference=ppo_inference, 
+    #         prng_key=policy_prng, 
+    #         generation_config=GenerationConfig(
+    #             do_sample=False, 
+    #             num_beams=policy_num_beams, 
+    #             temperature=policy_temperature, 
+    #             top_p=policy_top_p, 
+    #             top_k=policy_top_k, 
+    #             eos_token_id=tokenizer.encode('\n')[0], 
+    #             pad_token_id=tokenizer.pad_token_id, 
+    #             max_new_tokens=max_output_length, 
+    #         ), 
+    #         blocking_strategy=BlockingStrategy(
+    #             padding=Padding.LEFT, 
+    #             truncation=Truncation.LEFT, 
+    #             max_length=max_input_length, 
+    #         ), 
+    #         out_str_process=lambda x: x.removesuffix('\n')+'\n', 
+    #     )
+        
+    #     accuracy = compute_move_accuracy(policy)
+    #     return {"accuracy": accuracy}
+        
     train_prng = jax.random.PRNGKey(1)
     save_dtype = jnp.bfloat16 if save_bf16 else jnp.float32
     ppo_trainer, ppo_inference, policy = train_loop(
