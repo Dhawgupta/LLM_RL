@@ -140,16 +140,26 @@ def main(
         params_dtype=jnp.float32,
     )
 
+    v_head_params, v_head = load_head_params(
+        model_load_mode=model_load_mode.value,
+        model_load_path=convert_path(os.path.join(model_load_path, 'v_head')),
+        model_dtype=jnp.bfloat16 if bf16_activations else jnp.float32,
+        mesh=mesh,
+        prng_key=jax.random.PRNGKey(0),
+        pad_to_output_dim=None,
+        params_dtype=jnp.float32,
+    )
+
     inference = GPT2ValueRLInference.load_inference(
         pi_beta_params=pi_beta_params, 
         base_params=base_params, 
         q1_head_params=q1_head_params, 
         q2_head_params=q2_head_params, 
-        v_head_params=None,
+        v_head_params=v_head_params,
         pi_beta_model=base_model, 
         base_model=base_model, 
         q_head_model=q_head, 
-        v_head_model=None, 
+        v_head_model=v_head, 
         tokenizer=tokenizer, 
         beta=policy_beta, 
         dp_shard_logits=True, 

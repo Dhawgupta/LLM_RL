@@ -146,7 +146,8 @@ class GPT2ValueRLInference(ValueRLInference):
                     logits=NamedSharding(mesh, PS(("dp", "fsdp"), None, None)) if dp_shard_logits else NamedSharding(mesh, PS()), 
                     hidden_states=NamedSharding(mesh, PS()), # assume no sharding for hidden states
                     attentions=NamedSharding(mesh, PS()), # assume no sharding for attentions
-                    cross_attentions=NamedSharding(mesh, PS()) # assume no sharding for cross attentions
+                    cross_attentions=NamedSharding(mesh, PS()), # assume no sharding for cross attentions
+                    past_key_values=NamedSharding(mesh, PS()), # assume no sharding for past key values
                 ), 
                 q1=NamedSharding(mesh, PS(("dp", "fsdp"), None, None)) if dp_shard_logits else NamedSharding(mesh, PS()), 
                 q2=NamedSharding(mesh, PS(("dp", "fsdp"), None, None)) if (dp_shard_logits and q2_head_params is not None) else NamedSharding(mesh, PS()), 
