@@ -1,7 +1,9 @@
+from typing import Tuple, List, Dict
 from llm_rl_scripts.maze.env import MazeEnv, describe_observation, describe_observation_give_position, illegal_penalty_reward, illegal_penalty_diff_scale, manhatten_actions, standard_reward, describe_observation_only_walls
 from llm_rl_scripts.maze.mazes import double_t_maze_optimal_directions, maze2d_umaze, double_t_maze
 import numpy as np
 from LLM_RL.environment import Text
+from collections import deque
 
 def setup_maze_env(maze_name, describe_function, reward_function=None, last_k=1):
     # setup environment
@@ -84,3 +86,30 @@ def compute_move_accuracy(policy, reranker=False):
             print("incorrect!", observation, position, prediction, correct_answers[tuple(position)])
     accuracy = num_correct/(len(positions)-1)*100
     return accuracy
+
+def maze_solver(maze: np.ndarray, goal_positions: List[Tuple[int, int]]) -> Dict[Tuple[int, int], str]:
+    maze = maze.tolist()
+    assert len(maze) > 0 and len(maze[0]) > 0, 'maze must be non-zero in area'
+    assert all([maze[goal_pos[0]][goal_pos[1]] == 1 for goal_pos in goal_positions]), 'goal pos must be 1'
+    move_mapping = {
+        (0, 1): 'move right\n',
+        (0, -1): 'move left\n',
+        (1, 0): 'move down\n',
+        (-1, 0): 'move up\n',
+    }
+    x_size, y_size = len(maze), len(maze[0])
+    out_of_bounds = lambda x, y: x < 0 or x >= x_size or y < 0 or y >= y_size
+    directions = [(1, 0), (0, 1), (-1, 0), (0, -1)]
+    optimal_policy = dict()
+    queue = deque(goal_positions)
+    seen_pos = set(goal_positions)
+    while len(queue) > 0:
+        x, y = queue.popleft()
+        for dx, dy in directions:
+            new_pos = (x+dx, y+dy)
+            if new_pos in seen_pos or out_of_bounds(*new_pos) or maze[new_pos[0]][new_pos[1]] == 0:
+                continue
+            queue.append(new_pos)
+            seen_pos.add(new_pos)
+            optimal_policy[new_pos] = move_mapping[(-dx, -dy)]
+    return optimal_policy
