@@ -20,7 +20,7 @@ source ${PWD}/secrets.sh
 export GCLOUD_PROJECT="civic-boulder-204700"
 export GCLOUD_TOKEN_PATH="${HOME}/.config/gcloud/civic-boulder-204700-V2.json"
 
-# CUDA_VISIBLE_DEVICES=5 python -m llm_rl_scripts.wordle.train_ppo_gpt2 \
+# python -m llm_rl_scripts.wordle.train_ppo_gpt2 \
 #     PARAMS \
 #     gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_test3.2023-09-22-21-53-58.938.88bf2e58599211ee812d4554a3c5cde2/last \
 #     gcs://charlie-bucket2/LLM_RL_data/wordle/bc_data1.jsonl \
@@ -33,7 +33,7 @@ export GCLOUD_TOKEN_PATH="${HOME}/.config/gcloud/civic-boulder-204700-V2.json"
 #     --train-bsize 8 \
 #     --grad-accum-steps 4 \
 #     --rollout-bsize 64 \
-#     --ppo-data-bsize 64 \
+#     --ppo-data-bsize 8 \
 #     --n-rounds 1000 \
 #     --epochs 4 \
 #     --log-every 32 \
@@ -52,7 +52,7 @@ export GCLOUD_TOKEN_PATH="${HOME}/.config/gcloud/civic-boulder-204700-V2.json"
 #     --no-save-best \
 #     --bc-loss-weight 0.0
 
-CUDA_VISIBLE_DEVICES=5 python -m llm_rl_scripts.wordle.train_ppo_gpt2 \
+python -m llm_rl_scripts.wordle.train_ppo_gpt2 \
     PARAMS \
     gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_test3.2023-09-22-21-53-58.938.88bf2e58599211ee812d4554a3c5cde2/last \
     gcs://charlie-bucket2/LLM_RL_data/wordle/bc_data1.jsonl \
@@ -65,7 +65,7 @@ CUDA_VISIBLE_DEVICES=5 python -m llm_rl_scripts.wordle.train_ppo_gpt2 \
     --train-bsize 8 \
     --grad-accum-steps 4 \
     --rollout-bsize 64 \
-    --ppo-data-bsize 64 \
+    --ppo-data-bsize 8 \
     --n-rounds 1000 \
     --epochs 4 \
     --log-every 32 \
