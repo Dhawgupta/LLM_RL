@@ -52,13 +52,14 @@ def main(
     policy_temperature: Optional[float]=None, 
     policy_top_p: Optional[float]=None, 
     policy_top_k: Optional[int]=None, 
+    policy_beta: float=16.0,
 
     force_pad_embeddings: bool=False, 
 ):
     input_args = locals()
     print(input_args)
 
-    tokenizer = AutoTokenizer.from_pretrained('EleutherAI/gpt-j-6B')
+    tokenizer = AutoTokenizer.from_pretrained('gpt2')
     tokenizer.add_special_tokens({'pad_token': '<|pad|>'})
 
     mesh = load_mesh((data_mesh_shape, fsdp_mesh_shape, model_mesh_shape), ('dp', 'fsdp', 'mp'))
@@ -72,29 +73,70 @@ def main(
     )
     env = ReformatWordleEnvironment(WordleEnvironment(vocab))
 
-    model_prng_key = jax.random.PRNGKey(2)
-    params, model = load_params(
-        model_load_mode=model_load_mode, 
-        model_load_path=convert_path(model_load_path) if model_load_mode != ModelLoadMode.HF else model_load_path, 
+    pi_beta_prng_key = jax.random.PRNGKey(0)
+    pi_beta_params, _ = load_params(
+        model_load_mode=pi_beta_load_mode, 
+        model_load_path=convert_path(pi_beta_load_path) if pi_beta_load_mode != ModelLoadMode.HF else pi_beta_load_path, 
         model_dtype=jnp.bfloat16 if bf16_activations else jnp.float32, 
         tokenizer=tokenizer, 
         mesh=mesh, 
-        prng_key=model_prng_key, 
+        prng_key=pi_beta_prng_key, 
         force_pad_embeddings=force_pad_embeddings, 
         params_dtype=jnp.float32, 
     )
 
-    inference = GPT2InferenceMask.load_inference(
-        params=params, 
-        model=model, 
+    base_prng_key = jax.random.PRNGKey(0)
+    base_params, base_model = load_params(
+        model_load_mode=model_load_mode, 
+        model_load_path=convert_path(os.path.join(model_load_path, 'base')), 
+        model_dtype=jnp.bfloat16 if bf16_activations else jnp.float32, 
         tokenizer=tokenizer, 
+        mesh=mesh, 
+        prng_key=base_prng_key, 
+        force_pad_embeddings=force_pad_embeddings, 
+        params_dtype=jnp.float32, 
+    )
+
+    q1_head_params, q_head = load_head_params(
+        model_load_mode=model_load_mode.value,
+        model_load_path=convert_path(os.path.join(model_load_path, 'q1_head')),
+        model_dtype=jnp.bfloat16 if bf16_activations else jnp.float32,
+        mesh=mesh,
+        prng_key=jax.random.PRNGKey(0),
+        pad_to_output_dim=None,
+        params_dtype=jnp.float32,
+    )
+
+    q2_head_params, _ = load_head_params(
+        model_load_mode=model_load_mode.value,
+        model_load_path=convert_path(os.path.join(model_load_path, 'q2_head')),
+        model_dtype=jnp.bfloat16 if bf16_activations else jnp.float32,
+        mesh=mesh,
+        prng_key=jax.random.PRNGKey(0),
+        pad_to_output_dim=None,
+        params_dtype=jnp.float32,
+    )
+
+    inference = GPT2ValueRLInference.load_inference(
+        pi_beta_params=pi_beta_params, 
+        base_params=base_params, 
+        q1_head_params=q1_head_params, 
+        q2_head_params=q2_head_params, 
+        v_head_params=None,
+        pi_beta_model=base_model, 
+        base_model=base_model, 
+        q_head_model=q_head, 
+        v_head_model=None, 
+        tokenizer=tokenizer, 
+        beta=policy_beta, 
+        dp_shard_logits=True, 
     )
 
     policy_prng = jax.random.PRNGKey(0)
     def evaluator(inference: GPT2InferenceMask):
         nonlocal policy_prng
         policy_prng, new_key = jax.random.split(policy_prng)
-        policy = GPT2PPOPolicy(
+        policy = GPT2ValuePolicy(
             inference=inference, 
             prng_key=new_key, 
             generation_config=GenerationConfig(
