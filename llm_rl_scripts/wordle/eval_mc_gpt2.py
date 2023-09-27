@@ -23,8 +23,8 @@ from llm_rl_scripts.wordle.game import Vocabulary
 from LLM_RL.algorithms.ppo.gpt2.interface import GPT2PPOPolicy
 from LLM_RL.environment import text_history_to_str, text_env_eval
 from LLM_RL.algorithms.value_rl_base.gpt2.interface import GPT2ValuePolicy, GPT2ValueRLInference
-from LLM_RL.heads.mlp_head import load_params as load_head_params
-from LLM_RL.heads.mlp_head import ModelLoadMode as HeadModelLoadMode
+from LLM_RL.heads.linear_head import load_params as load_head_params
+from LLM_RL.heads.linear_head import ModelLoadMode as HeadModelLoadMode
 
 def main(
     model_load_mode: ModelLoadMode, 
