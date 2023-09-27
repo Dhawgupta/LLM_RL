@@ -24,303 +24,603 @@ source ${PWD}/secrets.sh
 export GCLOUD_PROJECT="civic-boulder-204700"
 export GCLOUD_TOKEN_PATH="${HOME}/.config/gcloud/civic-boulder-204700-V2.json"
 
+# mc
+
+python -m llm_rl_scripts.wordle.eval_mc_gpt2 \
+    PARAMS \
+    gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_mc_test1/wordle_gpt2_mc_test1.2023-09-24-23-22-57.716.4bbb75345b3111ee812d4554a3c5cde2/epoch_3/ \
+    PARAMS \
+    gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_test3.2023-09-22-21-53-58.938.88bf2e58599211ee812d4554a3c5cde2/last/ \
+    llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+    --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_mc_test1/wordle_gpt2_mc_test1.2023-09-24-23-22-57.716.4bbb75345b3111ee812d4554a3c5cde2/epoch_3/eval_mc_beta1_sample/ \
+    \
+    --data-mesh-shape 1 \
+    --fsdp-mesh-shape -1 \
+    --model-mesh-shape 1 \
+    \
+    --policy-n-rollouts 4096 \
+    --policy-bsize 128 \
+    --policy-max-input-length 128 \
+    --policy-max-output-length 16 \
+    --policy-beta 1.0
+
+python -m llm_rl_scripts.wordle.eval_mc_gpt2 \
+    PARAMS \
+    gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_mc_test1/wordle_gpt2_mc_test1.2023-09-24-23-22-57.716.4bbb75345b3111ee812d4554a3c5cde2/epoch_3/ \
+    PARAMS \
+    gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_test3.2023-09-22-21-53-58.938.88bf2e58599211ee812d4554a3c5cde2/last/ \
+    llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+    --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_mc_test1/wordle_gpt2_mc_test1.2023-09-24-23-22-57.716.4bbb75345b3111ee812d4554a3c5cde2/epoch_3/eval_mc_beta1_greedy/ \
+    \
+    --data-mesh-shape 1 \
+    --fsdp-mesh-shape -1 \
+    --model-mesh-shape 1 \
+    \
+    --policy-n-rollouts 4096 \
+    --policy-bsize 128 \
+    --policy-max-input-length 128 \
+    --policy-max-output-length 16 \
+    --no-policy-do-sample \
+    --policy-beta 1.0
+
+
+python -m llm_rl_scripts.wordle.eval_mc_gpt2 \
+    PARAMS \
+    gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_mc_test1/wordle_gpt2_mc_test1.2023-09-24-23-22-57.716.4bbb75345b3111ee812d4554a3c5cde2/epoch_3/ \
+    PARAMS \
+    gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_test3.2023-09-22-21-53-58.938.88bf2e58599211ee812d4554a3c5cde2/last/ \
+    llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+    --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_mc_test1/wordle_gpt2_mc_test1.2023-09-24-23-22-57.716.4bbb75345b3111ee812d4554a3c5cde2/epoch_3/eval_mc_beta2_sample/ \
+    \
+    --data-mesh-shape 1 \
+    --fsdp-mesh-shape -1 \
+    --model-mesh-shape 1 \
+    \
+    --policy-n-rollouts 4096 \
+    --policy-bsize 128 \
+    --policy-max-input-length 128 \
+    --policy-max-output-length 16 \
+    --policy-beta 2.0
+
+python -m llm_rl_scripts.wordle.eval_mc_gpt2 \
+    PARAMS \
+    gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_mc_test1/wordle_gpt2_mc_test1.2023-09-24-23-22-57.716.4bbb75345b3111ee812d4554a3c5cde2/epoch_3/ \
+    PARAMS \
+    gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_test3.2023-09-22-21-53-58.938.88bf2e58599211ee812d4554a3c5cde2/last/ \
+    llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+    --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_mc_test1/wordle_gpt2_mc_test1.2023-09-24-23-22-57.716.4bbb75345b3111ee812d4554a3c5cde2/epoch_3/eval_mc_beta2_greedy/ \
+    \
+    --data-mesh-shape 1 \
+    --fsdp-mesh-shape -1 \
+    --model-mesh-shape 1 \
+    \
+    --policy-n-rollouts 4096 \
+    --policy-bsize 128 \
+    --policy-max-input-length 128 \
+    --policy-max-output-length 16 \
+    --no-policy-do-sample \
+    --policy-beta 2.0
+
+
+python -m llm_rl_scripts.wordle.eval_mc_gpt2 \
+    PARAMS \
+    gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_mc_test1/wordle_gpt2_mc_test1.2023-09-24-23-22-57.716.4bbb75345b3111ee812d4554a3c5cde2/epoch_3/ \
+    PARAMS \
+    gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_test3.2023-09-22-21-53-58.938.88bf2e58599211ee812d4554a3c5cde2/last/ \
+    llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+    --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_mc_test1/wordle_gpt2_mc_test1.2023-09-24-23-22-57.716.4bbb75345b3111ee812d4554a3c5cde2/epoch_3/eval_mc_beta4_sample/ \
+    \
+    --data-mesh-shape 1 \
+    --fsdp-mesh-shape -1 \
+    --model-mesh-shape 1 \
+    \
+    --policy-n-rollouts 4096 \
+    --policy-bsize 128 \
+    --policy-max-input-length 128 \
+    --policy-max-output-length 16 \
+    --policy-beta 4.0
+
+python -m llm_rl_scripts.wordle.eval_mc_gpt2 \
+    PARAMS \
+    gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_mc_test1/wordle_gpt2_mc_test1.2023-09-24-23-22-57.716.4bbb75345b3111ee812d4554a3c5cde2/epoch_3/ \
+    PARAMS \
+    gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_test3.2023-09-22-21-53-58.938.88bf2e58599211ee812d4554a3c5cde2/last/ \
+    llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+    --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_mc_test1/wordle_gpt2_mc_test1.2023-09-24-23-22-57.716.4bbb75345b3111ee812d4554a3c5cde2/epoch_3/eval_mc_beta4_greedy/ \
+    \
+    --data-mesh-shape 1 \
+    --fsdp-mesh-shape -1 \
+    --model-mesh-shape 1 \
+    \
+    --policy-n-rollouts 4096 \
+    --policy-bsize 128 \
+    --policy-max-input-length 128 \
+    --policy-max-output-length 16 \
+    --no-policy-do-sample \
+    --policy-beta 4.0
+
+python -m llm_rl_scripts.wordle.eval_mc_gpt2 \
+    PARAMS \
+    gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_mc_test1/wordle_gpt2_mc_test1.2023-09-24-23-22-57.716.4bbb75345b3111ee812d4554a3c5cde2/epoch_3/ \
+    PARAMS \
+    gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_test3.2023-09-22-21-53-58.938.88bf2e58599211ee812d4554a3c5cde2/last/ \
+    llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+    --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_mc_test1/wordle_gpt2_mc_test1.2023-09-24-23-22-57.716.4bbb75345b3111ee812d4554a3c5cde2/epoch_3/eval_mc_beta8_sample/ \
+    \
+    --data-mesh-shape 1 \
+    --fsdp-mesh-shape -1 \
+    --model-mesh-shape 1 \
+    \
+    --policy-n-rollouts 4096 \
+    --policy-bsize 128 \
+    --policy-max-input-length 128 \
+    --policy-max-output-length 16 \
+    --policy-beta 8.0
+
+python -m llm_rl_scripts.wordle.eval_mc_gpt2 \
+    PARAMS \
+    gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_mc_test1/wordle_gpt2_mc_test1.2023-09-24-23-22-57.716.4bbb75345b3111ee812d4554a3c5cde2/epoch_3/ \
+    PARAMS \
+    gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_test3.2023-09-22-21-53-58.938.88bf2e58599211ee812d4554a3c5cde2/last/ \
+    llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+    --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_mc_test1/wordle_gpt2_mc_test1.2023-09-24-23-22-57.716.4bbb75345b3111ee812d4554a3c5cde2/epoch_3/eval_mc_beta8_greedy/ \
+    \
+    --data-mesh-shape 1 \
+    --fsdp-mesh-shape -1 \
+    --model-mesh-shape 1 \
+    \
+    --policy-n-rollouts 4096 \
+    --policy-bsize 128 \
+    --policy-max-input-length 128 \
+    --policy-max-output-length 16 \
+    --no-policy-do-sample \
+    --policy-beta 8.0
+
+python -m llm_rl_scripts.wordle.eval_mc_gpt2 \
+    PARAMS \
+    gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_mc_test1/wordle_gpt2_mc_test1.2023-09-24-23-22-57.716.4bbb75345b3111ee812d4554a3c5cde2/epoch_3/ \
+    PARAMS \
+    gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_test3.2023-09-22-21-53-58.938.88bf2e58599211ee812d4554a3c5cde2/last/ \
+    llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+    --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_mc_test1/wordle_gpt2_mc_test1.2023-09-24-23-22-57.716.4bbb75345b3111ee812d4554a3c5cde2/epoch_3/eval_mc_beta16_sample/ \
+    \
+    --data-mesh-shape 1 \
+    --fsdp-mesh-shape -1 \
+    --model-mesh-shape 1 \
+    \
+    --policy-n-rollouts 4096 \
+    --policy-bsize 128 \
+    --policy-max-input-length 128 \
+    --policy-max-output-length 16 \
+    --policy-beta 16.0
+
+python -m llm_rl_scripts.wordle.eval_mc_gpt2 \
+    PARAMS \
+    gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_mc_test1/wordle_gpt2_mc_test1.2023-09-24-23-22-57.716.4bbb75345b3111ee812d4554a3c5cde2/epoch_3/ \
+    PARAMS \
+    gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_test3.2023-09-22-21-53-58.938.88bf2e58599211ee812d4554a3c5cde2/last/ \
+    llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+    --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_mc_test1/wordle_gpt2_mc_test1.2023-09-24-23-22-57.716.4bbb75345b3111ee812d4554a3c5cde2/epoch_3/eval_mc_beta16_greedy/ \
+    \
+    --data-mesh-shape 1 \
+    --fsdp-mesh-shape -1 \
+    --model-mesh-shape 1 \
+    \
+    --policy-n-rollouts 4096 \
+    --policy-bsize 128 \
+    --policy-max-input-length 128 \
+    --policy-max-output-length 16 \
+    --no-policy-do-sample \
+    --policy-beta 16.0
+
+python -m llm_rl_scripts.wordle.eval_mc_gpt2 \
+    PARAMS \
+    gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_mc_test1/wordle_gpt2_mc_test1.2023-09-24-23-22-57.716.4bbb75345b3111ee812d4554a3c5cde2/epoch_3/ \
+    PARAMS \
+    gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_test3.2023-09-22-21-53-58.938.88bf2e58599211ee812d4554a3c5cde2/last/ \
+    llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+    --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_mc_test1/wordle_gpt2_mc_test1.2023-09-24-23-22-57.716.4bbb75345b3111ee812d4554a3c5cde2/epoch_3/eval_mc_beta32_sample/ \
+    \
+    --data-mesh-shape 1 \
+    --fsdp-mesh-shape -1 \
+    --model-mesh-shape 1 \
+    \
+    --policy-n-rollouts 4096 \
+    --policy-bsize 128 \
+    --policy-max-input-length 128 \
+    --policy-max-output-length 16 \
+    --policy-beta 32.0
+
+python -m llm_rl_scripts.wordle.eval_mc_gpt2 \
+    PARAMS \
+    gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_mc_test1/wordle_gpt2_mc_test1.2023-09-24-23-22-57.716.4bbb75345b3111ee812d4554a3c5cde2/epoch_3/ \
+    PARAMS \
+    gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_test3.2023-09-22-21-53-58.938.88bf2e58599211ee812d4554a3c5cde2/last/ \
+    llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+    --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_mc_test1/wordle_gpt2_mc_test1.2023-09-24-23-22-57.716.4bbb75345b3111ee812d4554a3c5cde2/epoch_3/eval_mc_beta32_greedy/ \
+    \
+    --data-mesh-shape 1 \
+    --fsdp-mesh-shape -1 \
+    --model-mesh-shape 1 \
+    \
+    --policy-n-rollouts 4096 \
+    --policy-bsize 128 \
+    --policy-max-input-length 128 \
+    --policy-max-output-length 16 \
+    --no-policy-do-sample \
+    --policy-beta 32.0
+
+python -m llm_rl_scripts.wordle.eval_mc_gpt2 \
+    PARAMS \
+    gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_mc_test1/wordle_gpt2_mc_test1.2023-09-24-23-22-57.716.4bbb75345b3111ee812d4554a3c5cde2/epoch_3/ \
+    PARAMS \
+    gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_test3.2023-09-22-21-53-58.938.88bf2e58599211ee812d4554a3c5cde2/last/ \
+    llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+    --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_mc_test1/wordle_gpt2_mc_test1.2023-09-24-23-22-57.716.4bbb75345b3111ee812d4554a3c5cde2/epoch_3/eval_mc_beta64_sample/ \
+    \
+    --data-mesh-shape 1 \
+    --fsdp-mesh-shape -1 \
+    --model-mesh-shape 1 \
+    \
+    --policy-n-rollouts 4096 \
+    --policy-bsize 128 \
+    --policy-max-input-length 128 \
+    --policy-max-output-length 16 \
+    --policy-beta 64.0
+
+python -m llm_rl_scripts.wordle.eval_mc_gpt2 \
+    PARAMS \
+    gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_mc_test1/wordle_gpt2_mc_test1.2023-09-24-23-22-57.716.4bbb75345b3111ee812d4554a3c5cde2/epoch_3/ \
+    PARAMS \
+    gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_test3.2023-09-22-21-53-58.938.88bf2e58599211ee812d4554a3c5cde2/last/ \
+    llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+    --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_mc_test1/wordle_gpt2_mc_test1.2023-09-24-23-22-57.716.4bbb75345b3111ee812d4554a3c5cde2/epoch_3/eval_mc_beta64_greedy/ \
+    \
+    --data-mesh-shape 1 \
+    --fsdp-mesh-shape -1 \
+    --model-mesh-shape 1 \
+    \
+    --policy-n-rollouts 4096 \
+    --policy-bsize 128 \
+    --policy-max-input-length 128 \
+    --policy-max-output-length 16 \
+    --no-policy-do-sample \
+    --policy-beta 64.0
+
+python -m llm_rl_scripts.wordle.eval_mc_gpt2 \
+    PARAMS \
+    gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_mc_test1/wordle_gpt2_mc_test1.2023-09-24-23-22-57.716.4bbb75345b3111ee812d4554a3c5cde2/epoch_3/ \
+    PARAMS \
+    gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_test3.2023-09-22-21-53-58.938.88bf2e58599211ee812d4554a3c5cde2/last/ \
+    llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+    --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_mc_test1/wordle_gpt2_mc_test1.2023-09-24-23-22-57.716.4bbb75345b3111ee812d4554a3c5cde2/epoch_3/eval_mc_beta128_sample/ \
+    \
+    --data-mesh-shape 1 \
+    --fsdp-mesh-shape -1 \
+    --model-mesh-shape 1 \
+    \
+    --policy-n-rollouts 4096 \
+    --policy-bsize 128 \
+    --policy-max-input-length 128 \
+    --policy-max-output-length 16 \
+    --policy-beta 128.0
+
+python -m llm_rl_scripts.wordle.eval_mc_gpt2 \
+    PARAMS \
+    gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_mc_test1/wordle_gpt2_mc_test1.2023-09-24-23-22-57.716.4bbb75345b3111ee812d4554a3c5cde2/epoch_3/ \
+    PARAMS \
+    gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_test3.2023-09-22-21-53-58.938.88bf2e58599211ee812d4554a3c5cde2/last/ \
+    llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+    --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_mc_test1/wordle_gpt2_mc_test1.2023-09-24-23-22-57.716.4bbb75345b3111ee812d4554a3c5cde2/epoch_3/eval_mc_beta128_greedy/ \
+    \
+    --data-mesh-shape 1 \
+    --fsdp-mesh-shape -1 \
+    --model-mesh-shape 1 \
+    \
+    --policy-n-rollouts 4096 \
+    --policy-bsize 128 \
+    --policy-max-input-length 128 \
+    --policy-max-output-length 16 \
+    --no-policy-do-sample \
+    --policy-beta 128.0
+
 # ilql
 
-python -m llm_rl_scripts.wordle.eval_ilql_gpt2 \
-    PARAMS \
-    gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/wordle_gpt2_ilql_test1.2023-09-24-23-55-18.774.d0b16fba5b3511eeaa2d5bbde740719c/epoch_8/ \
-    PARAMS \
-    gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_test3.2023-09-22-21-53-58.938.88bf2e58599211ee812d4554a3c5cde2/last/ \
-    llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
-    --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/wordle_gpt2_ilql_test1.2023-09-24-23-55-18.774.d0b16fba5b3511eeaa2d5bbde740719c/epoch_8/eval_ilql_beta1_sample/ \
-    \
-    --data-mesh-shape 1 \
-    --fsdp-mesh-shape -1 \
-    --model-mesh-shape 1 \
-    \
-    --policy-n-rollouts 4096 \
-    --policy-bsize 128 \
-    --policy-max-input-length 128 \
-    --policy-max-output-length 16 \
-    --policy-beta 1.0
+# python -m llm_rl_scripts.wordle.eval_ilql_gpt2 \
+#     PARAMS \
+#     gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/wordle_gpt2_ilql_test1.2023-09-24-23-55-18.774.d0b16fba5b3511eeaa2d5bbde740719c/epoch_8/ \
+#     PARAMS \
+#     gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_test3.2023-09-22-21-53-58.938.88bf2e58599211ee812d4554a3c5cde2/last/ \
+#     llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+#     --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/wordle_gpt2_ilql_test1.2023-09-24-23-55-18.774.d0b16fba5b3511eeaa2d5bbde740719c/epoch_8/eval_ilql_beta1_sample/ \
+#     \
+#     --data-mesh-shape 1 \
+#     --fsdp-mesh-shape -1 \
+#     --model-mesh-shape 1 \
+#     \
+#     --policy-n-rollouts 4096 \
+#     --policy-bsize 128 \
+#     --policy-max-input-length 128 \
+#     --policy-max-output-length 16 \
+#     --policy-beta 1.0
 
-python -m llm_rl_scripts.wordle.eval_ilql_gpt2 \
-    PARAMS \
-    gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/wordle_gpt2_ilql_test1.2023-09-24-23-55-18.774.d0b16fba5b3511eeaa2d5bbde740719c/epoch_8/ \
-    PARAMS \
-    gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_test3.2023-09-22-21-53-58.938.88bf2e58599211ee812d4554a3c5cde2/last/ \
-    llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
-    --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/wordle_gpt2_ilql_test1.2023-09-24-23-55-18.774.d0b16fba5b3511eeaa2d5bbde740719c/epoch_8/eval_ilql_beta1_greedy/ \
-    \
-    --data-mesh-shape 1 \
-    --fsdp-mesh-shape -1 \
-    --model-mesh-shape 1 \
-    \
-    --policy-n-rollouts 4096 \
-    --policy-bsize 128 \
-    --policy-max-input-length 128 \
-    --policy-max-output-length 16 \
-    --no-policy-do-sample \
-    --policy-beta 1.0
+# python -m llm_rl_scripts.wordle.eval_ilql_gpt2 \
+#     PARAMS \
+#     gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/wordle_gpt2_ilql_test1.2023-09-24-23-55-18.774.d0b16fba5b3511eeaa2d5bbde740719c/epoch_8/ \
+#     PARAMS \
+#     gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_test3.2023-09-22-21-53-58.938.88bf2e58599211ee812d4554a3c5cde2/last/ \
+#     llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+#     --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/wordle_gpt2_ilql_test1.2023-09-24-23-55-18.774.d0b16fba5b3511eeaa2d5bbde740719c/epoch_8/eval_ilql_beta1_greedy/ \
+#     \
+#     --data-mesh-shape 1 \
+#     --fsdp-mesh-shape -1 \
+#     --model-mesh-shape 1 \
+#     \
+#     --policy-n-rollouts 4096 \
+#     --policy-bsize 128 \
+#     --policy-max-input-length 128 \
+#     --policy-max-output-length 16 \
+#     --no-policy-do-sample \
+#     --policy-beta 1.0
 
-python -m llm_rl_scripts.wordle.eval_ilql_gpt2 \
-    PARAMS \
-    gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/wordle_gpt2_ilql_test1.2023-09-24-23-55-18.774.d0b16fba5b3511eeaa2d5bbde740719c/epoch_8/ \
-    PARAMS \
-    gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_test3.2023-09-22-21-53-58.938.88bf2e58599211ee812d4554a3c5cde2/last/ \
-    llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
-    --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/wordle_gpt2_ilql_test1.2023-09-24-23-55-18.774.d0b16fba5b3511eeaa2d5bbde740719c/epoch_8/eval_ilql_beta2_sample/ \
-    \
-    --data-mesh-shape 1 \
-    --fsdp-mesh-shape -1 \
-    --model-mesh-shape 1 \
-    \
-    --policy-n-rollouts 4096 \
-    --policy-bsize 128 \
-    --policy-max-input-length 128 \
-    --policy-max-output-length 16 \
-    --policy-beta 2.0
+# python -m llm_rl_scripts.wordle.eval_ilql_gpt2 \
+#     PARAMS \
+#     gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/wordle_gpt2_ilql_test1.2023-09-24-23-55-18.774.d0b16fba5b3511eeaa2d5bbde740719c/epoch_8/ \
+#     PARAMS \
+#     gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_test3.2023-09-22-21-53-58.938.88bf2e58599211ee812d4554a3c5cde2/last/ \
+#     llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+#     --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/wordle_gpt2_ilql_test1.2023-09-24-23-55-18.774.d0b16fba5b3511eeaa2d5bbde740719c/epoch_8/eval_ilql_beta2_sample/ \
+#     \
+#     --data-mesh-shape 1 \
+#     --fsdp-mesh-shape -1 \
+#     --model-mesh-shape 1 \
+#     \
+#     --policy-n-rollouts 4096 \
+#     --policy-bsize 128 \
+#     --policy-max-input-length 128 \
+#     --policy-max-output-length 16 \
+#     --policy-beta 2.0
 
-python -m llm_rl_scripts.wordle.eval_ilql_gpt2 \
-    PARAMS \
-    gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/wordle_gpt2_ilql_test1.2023-09-24-23-55-18.774.d0b16fba5b3511eeaa2d5bbde740719c/epoch_8/ \
-    PARAMS \
-    gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_test3.2023-09-22-21-53-58.938.88bf2e58599211ee812d4554a3c5cde2/last/ \
-    llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
-    --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/wordle_gpt2_ilql_test1.2023-09-24-23-55-18.774.d0b16fba5b3511eeaa2d5bbde740719c/epoch_8/eval_ilql_beta2_greedy/ \
-    \
-    --data-mesh-shape 1 \
-    --fsdp-mesh-shape -1 \
-    --model-mesh-shape 1 \
-    \
-    --policy-n-rollouts 4096 \
-    --policy-bsize 128 \
-    --policy-max-input-length 128 \
-    --policy-max-output-length 16 \
-    --no-policy-do-sample \
-    --policy-beta 2.0
+# python -m llm_rl_scripts.wordle.eval_ilql_gpt2 \
+#     PARAMS \
+#     gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/wordle_gpt2_ilql_test1.2023-09-24-23-55-18.774.d0b16fba5b3511eeaa2d5bbde740719c/epoch_8/ \
+#     PARAMS \
+#     gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_test3.2023-09-22-21-53-58.938.88bf2e58599211ee812d4554a3c5cde2/last/ \
+#     llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+#     --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/wordle_gpt2_ilql_test1.2023-09-24-23-55-18.774.d0b16fba5b3511eeaa2d5bbde740719c/epoch_8/eval_ilql_beta2_greedy/ \
+#     \
+#     --data-mesh-shape 1 \
+#     --fsdp-mesh-shape -1 \
+#     --model-mesh-shape 1 \
+#     \
+#     --policy-n-rollouts 4096 \
+#     --policy-bsize 128 \
+#     --policy-max-input-length 128 \
+#     --policy-max-output-length 16 \
+#     --no-policy-do-sample \
+#     --policy-beta 2.0
 
-python -m llm_rl_scripts.wordle.eval_ilql_gpt2 \
-    PARAMS \
-    gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/wordle_gpt2_ilql_test1.2023-09-24-23-55-18.774.d0b16fba5b3511eeaa2d5bbde740719c/epoch_8/ \
-    PARAMS \
-    gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_test3.2023-09-22-21-53-58.938.88bf2e58599211ee812d4554a3c5cde2/last/ \
-    llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
-    --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/wordle_gpt2_ilql_test1.2023-09-24-23-55-18.774.d0b16fba5b3511eeaa2d5bbde740719c/epoch_8/eval_ilql_beta4_sample/ \
-    \
-    --data-mesh-shape 1 \
-    --fsdp-mesh-shape -1 \
-    --model-mesh-shape 1 \
-    \
-    --policy-n-rollouts 4096 \
-    --policy-bsize 128 \
-    --policy-max-input-length 128 \
-    --policy-max-output-length 16 \
-    --policy-beta 4.0
+# python -m llm_rl_scripts.wordle.eval_ilql_gpt2 \
+#     PARAMS \
+#     gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/wordle_gpt2_ilql_test1.2023-09-24-23-55-18.774.d0b16fba5b3511eeaa2d5bbde740719c/epoch_8/ \
+#     PARAMS \
+#     gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_test3.2023-09-22-21-53-58.938.88bf2e58599211ee812d4554a3c5cde2/last/ \
+#     llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+#     --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/wordle_gpt2_ilql_test1.2023-09-24-23-55-18.774.d0b16fba5b3511eeaa2d5bbde740719c/epoch_8/eval_ilql_beta4_sample/ \
+#     \
+#     --data-mesh-shape 1 \
+#     --fsdp-mesh-shape -1 \
+#     --model-mesh-shape 1 \
+#     \
+#     --policy-n-rollouts 4096 \
+#     --policy-bsize 128 \
+#     --policy-max-input-length 128 \
+#     --policy-max-output-length 16 \
+#     --policy-beta 4.0
 
-python -m llm_rl_scripts.wordle.eval_ilql_gpt2 \
-    PARAMS \
-    gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/wordle_gpt2_ilql_test1.2023-09-24-23-55-18.774.d0b16fba5b3511eeaa2d5bbde740719c/epoch_8/ \
-    PARAMS \
-    gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_test3.2023-09-22-21-53-58.938.88bf2e58599211ee812d4554a3c5cde2/last/ \
-    llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
-    --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/wordle_gpt2_ilql_test1.2023-09-24-23-55-18.774.d0b16fba5b3511eeaa2d5bbde740719c/epoch_8/eval_ilql_beta4_greedy/ \
-    \
-    --data-mesh-shape 1 \
-    --fsdp-mesh-shape -1 \
-    --model-mesh-shape 1 \
-    \
-    --policy-n-rollouts 4096 \
-    --policy-bsize 128 \
-    --policy-max-input-length 128 \
-    --policy-max-output-length 16 \
-    --no-policy-do-sample \
-    --policy-beta 4.0
+# python -m llm_rl_scripts.wordle.eval_ilql_gpt2 \
+#     PARAMS \
+#     gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/wordle_gpt2_ilql_test1.2023-09-24-23-55-18.774.d0b16fba5b3511eeaa2d5bbde740719c/epoch_8/ \
+#     PARAMS \
+#     gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_test3.2023-09-22-21-53-58.938.88bf2e58599211ee812d4554a3c5cde2/last/ \
+#     llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+#     --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/wordle_gpt2_ilql_test1.2023-09-24-23-55-18.774.d0b16fba5b3511eeaa2d5bbde740719c/epoch_8/eval_ilql_beta4_greedy/ \
+#     \
+#     --data-mesh-shape 1 \
+#     --fsdp-mesh-shape -1 \
+#     --model-mesh-shape 1 \
+#     \
+#     --policy-n-rollouts 4096 \
+#     --policy-bsize 128 \
+#     --policy-max-input-length 128 \
+#     --policy-max-output-length 16 \
+#     --no-policy-do-sample \
+#     --policy-beta 4.0
 
-python -m llm_rl_scripts.wordle.eval_ilql_gpt2 \
-    PARAMS \
-    gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/wordle_gpt2_ilql_test1.2023-09-24-23-55-18.774.d0b16fba5b3511eeaa2d5bbde740719c/epoch_8/ \
-    PARAMS \
-    gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_test3.2023-09-22-21-53-58.938.88bf2e58599211ee812d4554a3c5cde2/last/ \
-    llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
-    --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/wordle_gpt2_ilql_test1.2023-09-24-23-55-18.774.d0b16fba5b3511eeaa2d5bbde740719c/epoch_8/eval_ilql_beta8_sample/ \
-    \
-    --data-mesh-shape 1 \
-    --fsdp-mesh-shape -1 \
-    --model-mesh-shape 1 \
-    \
-    --policy-n-rollouts 4096 \
-    --policy-bsize 128 \
-    --policy-max-input-length 128 \
-    --policy-max-output-length 16 \
-    --policy-beta 8.0
+# python -m llm_rl_scripts.wordle.eval_ilql_gpt2 \
+#     PARAMS \
+#     gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/wordle_gpt2_ilql_test1.2023-09-24-23-55-18.774.d0b16fba5b3511eeaa2d5bbde740719c/epoch_8/ \
+#     PARAMS \
+#     gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_test3.2023-09-22-21-53-58.938.88bf2e58599211ee812d4554a3c5cde2/last/ \
+#     llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+#     --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/wordle_gpt2_ilql_test1.2023-09-24-23-55-18.774.d0b16fba5b3511eeaa2d5bbde740719c/epoch_8/eval_ilql_beta8_sample/ \
+#     \
+#     --data-mesh-shape 1 \
+#     --fsdp-mesh-shape -1 \
+#     --model-mesh-shape 1 \
+#     \
+#     --policy-n-rollouts 4096 \
+#     --policy-bsize 128 \
+#     --policy-max-input-length 128 \
+#     --policy-max-output-length 16 \
+#     --policy-beta 8.0
 
-python -m llm_rl_scripts.wordle.eval_ilql_gpt2 \
-    PARAMS \
-    gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/wordle_gpt2_ilql_test1.2023-09-24-23-55-18.774.d0b16fba5b3511eeaa2d5bbde740719c/epoch_8/ \
-    PARAMS \
-    gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_test3.2023-09-22-21-53-58.938.88bf2e58599211ee812d4554a3c5cde2/last/ \
-    llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
-    --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/wordle_gpt2_ilql_test1.2023-09-24-23-55-18.774.d0b16fba5b3511eeaa2d5bbde740719c/epoch_8/eval_ilql_beta8_greedy/ \
-    \
-    --data-mesh-shape 1 \
-    --fsdp-mesh-shape -1 \
-    --model-mesh-shape 1 \
-    \
-    --policy-n-rollouts 4096 \
-    --policy-bsize 128 \
-    --policy-max-input-length 128 \
-    --policy-max-output-length 16 \
-    --no-policy-do-sample \
-    --policy-beta 8.0
+# python -m llm_rl_scripts.wordle.eval_ilql_gpt2 \
+#     PARAMS \
+#     gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/wordle_gpt2_ilql_test1.2023-09-24-23-55-18.774.d0b16fba5b3511eeaa2d5bbde740719c/epoch_8/ \
+#     PARAMS \
+#     gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_test3.2023-09-22-21-53-58.938.88bf2e58599211ee812d4554a3c5cde2/last/ \
+#     llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+#     --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/wordle_gpt2_ilql_test1.2023-09-24-23-55-18.774.d0b16fba5b3511eeaa2d5bbde740719c/epoch_8/eval_ilql_beta8_greedy/ \
+#     \
+#     --data-mesh-shape 1 \
+#     --fsdp-mesh-shape -1 \
+#     --model-mesh-shape 1 \
+#     \
+#     --policy-n-rollouts 4096 \
+#     --policy-bsize 128 \
+#     --policy-max-input-length 128 \
+#     --policy-max-output-length 16 \
+#     --no-policy-do-sample \
+#     --policy-beta 8.0
 
-python -m llm_rl_scripts.wordle.eval_ilql_gpt2 \
-    PARAMS \
-    gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/wordle_gpt2_ilql_test1.2023-09-24-23-55-18.774.d0b16fba5b3511eeaa2d5bbde740719c/epoch_8/ \
-    PARAMS \
-    gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_test3.2023-09-22-21-53-58.938.88bf2e58599211ee812d4554a3c5cde2/last/ \
-    llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
-    --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/wordle_gpt2_ilql_test1.2023-09-24-23-55-18.774.d0b16fba5b3511eeaa2d5bbde740719c/epoch_8/eval_ilql_beta16_sample/ \
-    \
-    --data-mesh-shape 1 \
-    --fsdp-mesh-shape -1 \
-    --model-mesh-shape 1 \
-    \
-    --policy-n-rollouts 4096 \
-    --policy-bsize 128 \
-    --policy-max-input-length 128 \
-    --policy-max-output-length 16 \
-    --policy-beta 16.0
+# python -m llm_rl_scripts.wordle.eval_ilql_gpt2 \
+#     PARAMS \
+#     gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/wordle_gpt2_ilql_test1.2023-09-24-23-55-18.774.d0b16fba5b3511eeaa2d5bbde740719c/epoch_8/ \
+#     PARAMS \
+#     gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_test3.2023-09-22-21-53-58.938.88bf2e58599211ee812d4554a3c5cde2/last/ \
+#     llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+#     --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/wordle_gpt2_ilql_test1.2023-09-24-23-55-18.774.d0b16fba5b3511eeaa2d5bbde740719c/epoch_8/eval_ilql_beta16_sample/ \
+#     \
+#     --data-mesh-shape 1 \
+#     --fsdp-mesh-shape -1 \
+#     --model-mesh-shape 1 \
+#     \
+#     --policy-n-rollouts 4096 \
+#     --policy-bsize 128 \
+#     --policy-max-input-length 128 \
+#     --policy-max-output-length 16 \
+#     --policy-beta 16.0
 
-python -m llm_rl_scripts.wordle.eval_ilql_gpt2 \
-    PARAMS \
-    gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/wordle_gpt2_ilql_test1.2023-09-24-23-55-18.774.d0b16fba5b3511eeaa2d5bbde740719c/epoch_8/ \
-    PARAMS \
-    gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_test3.2023-09-22-21-53-58.938.88bf2e58599211ee812d4554a3c5cde2/last/ \
-    llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
-    --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/wordle_gpt2_ilql_test1.2023-09-24-23-55-18.774.d0b16fba5b3511eeaa2d5bbde740719c/epoch_8/eval_ilql_beta16_greedy/ \
-    \
-    --data-mesh-shape 1 \
-    --fsdp-mesh-shape -1 \
-    --model-mesh-shape 1 \
-    \
-    --policy-n-rollouts 4096 \
-    --policy-bsize 128 \
-    --policy-max-input-length 128 \
-    --policy-max-output-length 16 \
-    --no-policy-do-sample \
-    --policy-beta 16.0
+# python -m llm_rl_scripts.wordle.eval_ilql_gpt2 \
+#     PARAMS \
+#     gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/wordle_gpt2_ilql_test1.2023-09-24-23-55-18.774.d0b16fba5b3511eeaa2d5bbde740719c/epoch_8/ \
+#     PARAMS \
+#     gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_test3.2023-09-22-21-53-58.938.88bf2e58599211ee812d4554a3c5cde2/last/ \
+#     llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+#     --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/wordle_gpt2_ilql_test1.2023-09-24-23-55-18.774.d0b16fba5b3511eeaa2d5bbde740719c/epoch_8/eval_ilql_beta16_greedy/ \
+#     \
+#     --data-mesh-shape 1 \
+#     --fsdp-mesh-shape -1 \
+#     --model-mesh-shape 1 \
+#     \
+#     --policy-n-rollouts 4096 \
+#     --policy-bsize 128 \
+#     --policy-max-input-length 128 \
+#     --policy-max-output-length 16 \
+#     --no-policy-do-sample \
+#     --policy-beta 16.0
 
-python -m llm_rl_scripts.wordle.eval_ilql_gpt2 \
-    PARAMS \
-    gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/wordle_gpt2_ilql_test1.2023-09-24-23-55-18.774.d0b16fba5b3511eeaa2d5bbde740719c/epoch_8/ \
-    PARAMS \
-    gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_test3.2023-09-22-21-53-58.938.88bf2e58599211ee812d4554a3c5cde2/last/ \
-    llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
-    --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/wordle_gpt2_ilql_test1.2023-09-24-23-55-18.774.d0b16fba5b3511eeaa2d5bbde740719c/epoch_8/eval_ilql_beta32_sample/ \
-    \
-    --data-mesh-shape 1 \
-    --fsdp-mesh-shape -1 \
-    --model-mesh-shape 1 \
-    \
-    --policy-n-rollouts 4096 \
-    --policy-bsize 128 \
-    --policy-max-input-length 128 \
-    --policy-max-output-length 16 \
-    --policy-beta 32.0
+# python -m llm_rl_scripts.wordle.eval_ilql_gpt2 \
+#     PARAMS \
+#     gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/wordle_gpt2_ilql_test1.2023-09-24-23-55-18.774.d0b16fba5b3511eeaa2d5bbde740719c/epoch_8/ \
+#     PARAMS \
+#     gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_test3.2023-09-22-21-53-58.938.88bf2e58599211ee812d4554a3c5cde2/last/ \
+#     llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+#     --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/wordle_gpt2_ilql_test1.2023-09-24-23-55-18.774.d0b16fba5b3511eeaa2d5bbde740719c/epoch_8/eval_ilql_beta32_sample/ \
+#     \
+#     --data-mesh-shape 1 \
+#     --fsdp-mesh-shape -1 \
+#     --model-mesh-shape 1 \
+#     \
+#     --policy-n-rollouts 4096 \
+#     --policy-bsize 128 \
+#     --policy-max-input-length 128 \
+#     --policy-max-output-length 16 \
+#     --policy-beta 32.0
 
-python -m llm_rl_scripts.wordle.eval_ilql_gpt2 \
-    PARAMS \
-    gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/wordle_gpt2_ilql_test1.2023-09-24-23-55-18.774.d0b16fba5b3511eeaa2d5bbde740719c/epoch_8/ \
-    PARAMS \
-    gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_test3.2023-09-22-21-53-58.938.88bf2e58599211ee812d4554a3c5cde2/last/ \
-    llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
-    --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/wordle_gpt2_ilql_test1.2023-09-24-23-55-18.774.d0b16fba5b3511eeaa2d5bbde740719c/epoch_8/eval_ilql_beta32_greedy/ \
-    \
-    --data-mesh-shape 1 \
-    --fsdp-mesh-shape -1 \
-    --model-mesh-shape 1 \
-    \
-    --policy-n-rollouts 4096 \
-    --policy-bsize 128 \
-    --policy-max-input-length 128 \
-    --policy-max-output-length 16 \
-    --no-policy-do-sample \
-    --policy-beta 32.0
+# python -m llm_rl_scripts.wordle.eval_ilql_gpt2 \
+#     PARAMS \
+#     gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/wordle_gpt2_ilql_test1.2023-09-24-23-55-18.774.d0b16fba5b3511eeaa2d5bbde740719c/epoch_8/ \
+#     PARAMS \
+#     gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_test3.2023-09-22-21-53-58.938.88bf2e58599211ee812d4554a3c5cde2/last/ \
+#     llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+#     --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/wordle_gpt2_ilql_test1.2023-09-24-23-55-18.774.d0b16fba5b3511eeaa2d5bbde740719c/epoch_8/eval_ilql_beta32_greedy/ \
+#     \
+#     --data-mesh-shape 1 \
+#     --fsdp-mesh-shape -1 \
+#     --model-mesh-shape 1 \
+#     \
+#     --policy-n-rollouts 4096 \
+#     --policy-bsize 128 \
+#     --policy-max-input-length 128 \
+#     --policy-max-output-length 16 \
+#     --no-policy-do-sample \
+#     --policy-beta 32.0
 
-python -m llm_rl_scripts.wordle.eval_ilql_gpt2 \
-    PARAMS \
-    gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/wordle_gpt2_ilql_test1.2023-09-24-23-55-18.774.d0b16fba5b3511eeaa2d5bbde740719c/epoch_8/ \
-    PARAMS \
-    gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_test3.2023-09-22-21-53-58.938.88bf2e58599211ee812d4554a3c5cde2/last/ \
-    llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
-    --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/wordle_gpt2_ilql_test1.2023-09-24-23-55-18.774.d0b16fba5b3511eeaa2d5bbde740719c/epoch_8/eval_ilql_beta64_sample/ \
-    \
-    --data-mesh-shape 1 \
-    --fsdp-mesh-shape -1 \
-    --model-mesh-shape 1 \
-    \
-    --policy-n-rollouts 4096 \
-    --policy-bsize 128 \
-    --policy-max-input-length 128 \
-    --policy-max-output-length 16 \
-    --policy-beta 64.0
+# python -m llm_rl_scripts.wordle.eval_ilql_gpt2 \
+#     PARAMS \
+#     gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/wordle_gpt2_ilql_test1.2023-09-24-23-55-18.774.d0b16fba5b3511eeaa2d5bbde740719c/epoch_8/ \
+#     PARAMS \
+#     gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_test3.2023-09-22-21-53-58.938.88bf2e58599211ee812d4554a3c5cde2/last/ \
+#     llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+#     --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/wordle_gpt2_ilql_test1.2023-09-24-23-55-18.774.d0b16fba5b3511eeaa2d5bbde740719c/epoch_8/eval_ilql_beta64_sample/ \
+#     \
+#     --data-mesh-shape 1 \
+#     --fsdp-mesh-shape -1 \
+#     --model-mesh-shape 1 \
+#     \
+#     --policy-n-rollouts 4096 \
+#     --policy-bsize 128 \
+#     --policy-max-input-length 128 \
+#     --policy-max-output-length 16 \
+#     --policy-beta 64.0
 
-python -m llm_rl_scripts.wordle.eval_ilql_gpt2 \
-    PARAMS \
-    gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/wordle_gpt2_ilql_test1.2023-09-24-23-55-18.774.d0b16fba5b3511eeaa2d5bbde740719c/epoch_8/ \
-    PARAMS \
-    gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_test3.2023-09-22-21-53-58.938.88bf2e58599211ee812d4554a3c5cde2/last/ \
-    llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
-    --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/wordle_gpt2_ilql_test1.2023-09-24-23-55-18.774.d0b16fba5b3511eeaa2d5bbde740719c/epoch_8/eval_ilql_beta64_greedy/ \
-    \
-    --data-mesh-shape 1 \
-    --fsdp-mesh-shape -1 \
-    --model-mesh-shape 1 \
-    \
-    --policy-n-rollouts 4096 \
-    --policy-bsize 128 \
-    --policy-max-input-length 128 \
-    --policy-max-output-length 16 \
-    --no-policy-do-sample \
-    --policy-beta 64.0
+# python -m llm_rl_scripts.wordle.eval_ilql_gpt2 \
+#     PARAMS \
+#     gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/wordle_gpt2_ilql_test1.2023-09-24-23-55-18.774.d0b16fba5b3511eeaa2d5bbde740719c/epoch_8/ \
+#     PARAMS \
+#     gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_test3.2023-09-22-21-53-58.938.88bf2e58599211ee812d4554a3c5cde2/last/ \
+#     llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+#     --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/wordle_gpt2_ilql_test1.2023-09-24-23-55-18.774.d0b16fba5b3511eeaa2d5bbde740719c/epoch_8/eval_ilql_beta64_greedy/ \
+#     \
+#     --data-mesh-shape 1 \
+#     --fsdp-mesh-shape -1 \
+#     --model-mesh-shape 1 \
+#     \
+#     --policy-n-rollouts 4096 \
+#     --policy-bsize 128 \
+#     --policy-max-input-length 128 \
+#     --policy-max-output-length 16 \
+#     --no-policy-do-sample \
+#     --policy-beta 64.0
 
-python -m llm_rl_scripts.wordle.eval_ilql_gpt2 \
-    PARAMS \
-    gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/wordle_gpt2_ilql_test1.2023-09-24-23-55-18.774.d0b16fba5b3511eeaa2d5bbde740719c/epoch_8/ \
-    PARAMS \
-    gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_test3.2023-09-22-21-53-58.938.88bf2e58599211ee812d4554a3c5cde2/last/ \
-    llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
-    --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/wordle_gpt2_ilql_test1.2023-09-24-23-55-18.774.d0b16fba5b3511eeaa2d5bbde740719c/epoch_8/eval_ilql_beta128_sample/ \
-    \
-    --data-mesh-shape 1 \
-    --fsdp-mesh-shape -1 \
-    --model-mesh-shape 1 \
-    \
-    --policy-n-rollouts 4096 \
-    --policy-bsize 128 \
-    --policy-max-input-length 128 \
-    --policy-max-output-length 16 \
-    --policy-beta 128.0
+# python -m llm_rl_scripts.wordle.eval_ilql_gpt2 \
+#     PARAMS \
+#     gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/wordle_gpt2_ilql_test1.2023-09-24-23-55-18.774.d0b16fba5b3511eeaa2d5bbde740719c/epoch_8/ \
+#     PARAMS \
+#     gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_test3.2023-09-22-21-53-58.938.88bf2e58599211ee812d4554a3c5cde2/last/ \
+#     llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+#     --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/wordle_gpt2_ilql_test1.2023-09-24-23-55-18.774.d0b16fba5b3511eeaa2d5bbde740719c/epoch_8/eval_ilql_beta128_sample/ \
+#     \
+#     --data-mesh-shape 1 \
+#     --fsdp-mesh-shape -1 \
+#     --model-mesh-shape 1 \
+#     \
+#     --policy-n-rollouts 4096 \
+#     --policy-bsize 128 \
+#     --policy-max-input-length 128 \
+#     --policy-max-output-length 16 \
+#     --policy-beta 128.0
 
-python -m llm_rl_scripts.wordle.eval_ilql_gpt2 \
-    PARAMS \
-    gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/wordle_gpt2_ilql_test1.2023-09-24-23-55-18.774.d0b16fba5b3511eeaa2d5bbde740719c/epoch_8/ \
-    PARAMS \
-    gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_test3.2023-09-22-21-53-58.938.88bf2e58599211ee812d4554a3c5cde2/last/ \
-    llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
-    --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/wordle_gpt2_ilql_test1.2023-09-24-23-55-18.774.d0b16fba5b3511eeaa2d5bbde740719c/epoch_8/eval_ilql_beta128_greedy/ \
-    \
-    --data-mesh-shape 1 \
-    --fsdp-mesh-shape -1 \
-    --model-mesh-shape 1 \
-    \
-    --policy-n-rollouts 4096 \
-    --policy-bsize 128 \
-    --policy-max-input-length 128 \
-    --policy-max-output-length 16 \
-    --no-policy-do-sample \
-    --policy-beta 128.0
+# python -m llm_rl_scripts.wordle.eval_ilql_gpt2 \
+#     PARAMS \
+#     gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/wordle_gpt2_ilql_test1.2023-09-24-23-55-18.774.d0b16fba5b3511eeaa2d5bbde740719c/epoch_8/ \
+#     PARAMS \
+#     gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_test3.2023-09-22-21-53-58.938.88bf2e58599211ee812d4554a3c5cde2/last/ \
+#     llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+#     --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/wordle_gpt2_ilql_test1.2023-09-24-23-55-18.774.d0b16fba5b3511eeaa2d5bbde740719c/epoch_8/eval_ilql_beta128_greedy/ \
+#     \
+#     --data-mesh-shape 1 \
+#     --fsdp-mesh-shape -1 \
+#     --model-mesh-shape 1 \
+#     \
+#     --policy-n-rollouts 4096 \
+#     --policy-bsize 128 \
+#     --policy-max-input-length 128 \
+#     --policy-max-output-length 16 \
+#     --no-policy-do-sample \
+#     --policy-beta 128.0
 
 # # bc
 
