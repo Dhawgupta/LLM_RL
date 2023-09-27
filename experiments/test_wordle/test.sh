@@ -17,7 +17,144 @@ source ${PWD}/secrets.sh
 # 50% BC: charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_config_test1_filtered_50.2023-09-22-22-01-52.694.a32076b6599311eeaa2d5bbde740719c/last
 # 30% BC: charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_config_test1_filtered_30.2023-09-23-05-02-18.636.5ef5bfd859ce11eeaa2d5bbde740719c/last
 # 10% BC: charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_config_test1_filtered_10.2023-09-23-09-14-33.106.9bcea4e259f111eeaa2d5bbde740719c/last
-# PPO: 
+# PPO: waiting
+# ILQL: charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/wordle_gpt2_ilql_test1.2023-09-24-23-55-18.774.d0b16fba5b3511eeaa2d5bbde740719c/epoch_8
+# MC: charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_mc_test1/wordle_gpt2_mc_test1.2023-09-24-23-22-57.716.4bbb75345b3111ee812d4554a3c5cde2/epoch_3
+
+export GCLOUD_PROJECT="civic-boulder-204700"
+export GCLOUD_TOKEN_PATH="${HOME}/.config/gcloud/civic-boulder-204700-V2.json"
+
+# bc
+
+python -m llm_rl_scripts.wordle.eval_bc_gpt2 \
+    PARAMS \
+    gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_test3.2023-09-22-21-53-58.938.88bf2e58599211ee812d4554a3c5cde2/last/ \
+    llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+    --outputs-path gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_test3.2023-09-22-21-53-58.938.88bf2e58599211ee812d4554a3c5cde2/last/eval_bc_sample/ \
+    \
+    --data-mesh-shape 1 \
+    --fsdp-mesh-shape -1 \
+    --model-mesh-shape 1 \
+    \
+    --policy-n-rollouts 4096 \
+    --policy-bsize 128 \
+    --policy-max-input-length 128 \
+    --policy-max-output-length 16
+
+python -m llm_rl_scripts.wordle.eval_bc_gpt2 \
+    PARAMS \
+    gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_test3.2023-09-22-21-53-58.938.88bf2e58599211ee812d4554a3c5cde2/last/ \
+    llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+    --outputs-path gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_test3.2023-09-22-21-53-58.938.88bf2e58599211ee812d4554a3c5cde2/last/eval_bc_greedy/ \
+    \
+    --data-mesh-shape 1 \
+    --fsdp-mesh-shape -1 \
+    --model-mesh-shape 1 \
+    \
+    --policy-n-rollouts 4096 \
+    --policy-bsize 128 \
+    --policy-max-input-length 128 \
+    --policy-max-output-length 16 \
+    --no-policy-do-sample
+
+# 50% bc
+
+python -m llm_rl_scripts.wordle.eval_bc_gpt2 \
+    PARAMS \
+    gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_config_test1_filtered_50.2023-09-22-22-01-52.694.a32076b6599311eeaa2d5bbde740719c/last/ \
+    llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+    --outputs-path gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_config_test1_filtered_50.2023-09-22-22-01-52.694.a32076b6599311eeaa2d5bbde740719c/last/eval_bc_sample/ \
+    \
+    --data-mesh-shape 1 \
+    --fsdp-mesh-shape -1 \
+    --model-mesh-shape 1 \
+    \
+    --policy-n-rollouts 4096 \
+    --policy-bsize 128 \
+    --policy-max-input-length 128 \
+    --policy-max-output-length 16
+
+python -m llm_rl_scripts.wordle.eval_bc_gpt2 \
+    PARAMS \
+    gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_config_test1_filtered_50.2023-09-22-22-01-52.694.a32076b6599311eeaa2d5bbde740719c/last/ \
+    llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+    --outputs-path gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_config_test1_filtered_50.2023-09-22-22-01-52.694.a32076b6599311eeaa2d5bbde740719c/last/eval_bc_greedy/ \
+    \
+    --data-mesh-shape -1 \
+    --fsdp-mesh-shape 1 \
+    --model-mesh-shape 1 \
+    \
+    --policy-n-rollouts 4096 \
+    --policy-bsize 128 \
+    --policy-max-input-length 128 \
+    --policy-max-output-length 16 \
+    --no-policy-do-sample
+
+# 30% bc
+
+python -m llm_rl_scripts.wordle.eval_bc_gpt2 \
+    PARAMS \
+    gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_config_test1_filtered_30.2023-09-23-05-02-18.636.5ef5bfd859ce11eeaa2d5bbde740719c/last/ \
+    llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+    --outputs-path gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_config_test1_filtered_30.2023-09-23-05-02-18.636.5ef5bfd859ce11eeaa2d5bbde740719c/last/eval_bc_sample/ \
+    \
+    --data-mesh-shape 1 \
+    --fsdp-mesh-shape -1 \
+    --model-mesh-shape 1 \
+    \
+    --policy-n-rollouts 4096 \
+    --policy-bsize 128 \
+    --policy-max-input-length 128 \
+    --policy-max-output-length 16
+
+python -m llm_rl_scripts.wordle.eval_bc_gpt2 \
+    PARAMS \
+    gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_config_test1_filtered_30.2023-09-23-05-02-18.636.5ef5bfd859ce11eeaa2d5bbde740719c/last/ \
+    llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+    --outputs-path gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_config_test1_filtered_30.2023-09-23-05-02-18.636.5ef5bfd859ce11eeaa2d5bbde740719c/last/eval_bc_greedy/ \
+    \
+    --data-mesh-shape 1 \
+    --fsdp-mesh-shape -1 \
+    --model-mesh-shape 1 \
+    \
+    --policy-n-rollouts 4096 \
+    --policy-bsize 128 \
+    --policy-max-input-length 128 \
+    --policy-max-output-length 16 \
+    --no-policy-do-sample
+
+# 10% bc
+
+python -m llm_rl_scripts.wordle.eval_bc_gpt2 \
+    PARAMS \
+    gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_config_test1_filtered_10.2023-09-23-09-14-33.106.9bcea4e259f111eeaa2d5bbde740719c/last/ \
+    llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+    --outputs-path gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_config_test1_filtered_10.2023-09-23-09-14-33.106.9bcea4e259f111eeaa2d5bbde740719c/last/eval_bc_sample/ \
+    \
+    --data-mesh-shape 1 \
+    --fsdp-mesh-shape -1 \
+    --model-mesh-shape 1 \
+    \
+    --policy-n-rollouts 4096 \
+    --policy-bsize 128 \
+    --policy-max-input-length 128 \
+    --policy-max-output-length 16
+
+python -m llm_rl_scripts.wordle.eval_bc_gpt2 \
+    PARAMS \
+    gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_config_test1_filtered_10.2023-09-23-09-14-33.106.9bcea4e259f111eeaa2d5bbde740719c/last/ \
+    llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+    --outputs-path gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_config_test1_filtered_10.2023-09-23-09-14-33.106.9bcea4e259f111eeaa2d5bbde740719c/last/eval_bc_greedy/ \
+    \
+    --data-mesh-shape 1 \
+    --fsdp-mesh-shape -1 \
+    --model-mesh-shape 1 \
+    \
+    --policy-n-rollouts 4096 \
+    --policy-bsize 128 \
+    --policy-max-input-length 128 \
+    --policy-max-output-length 16 \
+    --no-policy-do-sample
 
 # 9/24/23
 
@@ -60,39 +197,39 @@ source ${PWD}/secrets.sh
 #     --no-save-best \
 #     --bc-loss-weight 0.0
 
-python -m llm_rl_scripts.wordle.train_ppo_gpt2 \
-    PARAMS \
-    gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_test3.2023-09-22-21-53-58.938.88bf2e58599211ee812d4554a3c5cde2/last \
-    gcs://charlie-bucket2/LLM_RL_data/wordle/bc_data1.jsonl \
-    llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
-    --exp-name None \
-    --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ppo_test2/ \
-    --use-wandb \
-    --wandb-project "LLM_RL_wordle_ppo" \
-    --n-rollouts 512 \
-    --train-bsize 8 \
-    --grad-accum-steps 4 \
-    --rollout-bsize 64 \
-    --ppo-data-bsize 8 \
-    --n-rounds 1000 \
-    --epochs 4 \
-    --log-every 32 \
-    --weight-decay 1e-6 \
-    --lr 3e-5 \
-    --init-kl-coef 0.001 \
-    --kl-target 0.1 \
-    --kl-horizon 10000 \
-    --value-loss-coef 1.0 \
-    \
-    --data-mesh-shape 1 \
-    --fsdp-mesh-shape -1 \
-    --model-mesh-shape 1 \
-    \
-    --bf16-activations \
-    --no-save-best \
-    --bc-loss-weight 10.0 \
-    \
-    --save-every-rounds 1
+# python -m llm_rl_scripts.wordle.train_ppo_gpt2 \
+#     PARAMS \
+#     gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_test3.2023-09-22-21-53-58.938.88bf2e58599211ee812d4554a3c5cde2/last \
+#     gcs://charlie-bucket2/LLM_RL_data/wordle/bc_data1.jsonl \
+#     llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+#     --exp-name None \
+#     --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ppo_test3/ \
+#     --use-wandb \
+#     --wandb-project "LLM_RL_wordle_ppo" \
+#     --n-rollouts 512 \
+#     --train-bsize 8 \
+#     --grad-accum-steps 4 \
+#     --rollout-bsize 64 \
+#     --ppo-data-bsize 8 \
+#     --n-rounds 1000 \
+#     --epochs 4 \
+#     --log-every 32 \
+#     --weight-decay 1e-6 \
+#     --lr 3e-5 \
+#     --init-kl-coef 0.001 \
+#     --kl-target 0.1 \
+#     --kl-horizon 10000 \
+#     --value-loss-coef 1.0 \
+#     \
+#     --data-mesh-shape 1 \
+#     --fsdp-mesh-shape -1 \
+#     --model-mesh-shape 1 \
+#     \
+#     --bf16-activations \
+#     --no-save-best \
+#     --bc-loss-weight 10.0 \
+#     \
+#     --save-every-rounds 1
 
 # 9/24/23
 
