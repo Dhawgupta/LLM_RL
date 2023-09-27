@@ -11,14 +11,22 @@ export TOKENIZERS_PARALLELISM=false
 export PROJECT_ROOT=${PWD}
 source ${PWD}/secrets.sh
 
+# 9/27/23
+
+# BC: charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_test3.2023-09-22-21-53-58.938.88bf2e58599211ee812d4554a3c5cde2/last
+# 50% BC: charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_config_test1_filtered_50.2023-09-22-22-01-52.694.a32076b6599311eeaa2d5bbde740719c/last
+# 30% BC: charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_config_test1_filtered_30.2023-09-23-05-02-18.636.5ef5bfd859ce11eeaa2d5bbde740719c/last
+# 10% BC: charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_config_test1_filtered_10.2023-09-23-09-14-33.106.9bcea4e259f111eeaa2d5bbde740719c/last
+# PPO: 
+
 # 9/24/23
 
 # source ~/miniconda3/bin/activate
 # conda activate LLM_RL
 
 
-export GCLOUD_PROJECT="civic-boulder-204700"
-export GCLOUD_TOKEN_PATH="${HOME}/.config/gcloud/civic-boulder-204700-V2.json"
+# export GCLOUD_PROJECT="civic-boulder-204700"
+# export GCLOUD_TOKEN_PATH="${HOME}/.config/gcloud/civic-boulder-204700-V2.json"
 
 # python -m llm_rl_scripts.wordle.train_ppo_gpt2 \
 #     PARAMS \
@@ -82,7 +90,9 @@ python -m llm_rl_scripts.wordle.train_ppo_gpt2 \
     \
     --bf16-activations \
     --no-save-best \
-    --bc-loss-weight 10.0
+    --bc-loss-weight 10.0 \
+    \
+    --save-every-rounds 1
 
 # 9/24/23
 
