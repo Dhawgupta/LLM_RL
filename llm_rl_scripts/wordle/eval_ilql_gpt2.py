@@ -22,10 +22,15 @@ from llm_rl_scripts.wordle.env import WordleEnvironment, ReformatWordleEnvironme
 from llm_rl_scripts.wordle.game import Vocabulary
 from LLM_RL.algorithms.ppo.gpt2.interface import GPT2PPOPolicy
 from LLM_RL.environment import text_history_to_str, text_env_eval
+from LLM_RL.algorithms.value_rl_base.gpt2.interface import GPT2ValuePolicy, GPT2ValueRLInference
+from LLM_RL.heads.mlp_head import load_params as load_head_params
+from LLM_RL.heads.mlp_head import ModelLoadMode as HeadModelLoadMode
 
 def main(
     model_load_mode: ModelLoadMode, 
-    model_load_path: str, 
+    model_load_path: str,
+    pi_beta_load_mode: ModelLoadMode,
+    pi_beta_load_path: str,
     vocab_file: str, 
 
     /,  # Mark the end of positional arguments.
@@ -53,7 +58,7 @@ def main(
     input_args = locals()
     print(input_args)
 
-    tokenizer = AutoTokenizer.from_pretrained('gpt2')
+    tokenizer = AutoTokenizer.from_pretrained('EleutherAI/gpt-j-6B')
     tokenizer.add_special_tokens({'pad_token': '<|pad|>'})
 
     mesh = load_mesh((data_mesh_shape, fsdp_mesh_shape, model_mesh_shape), ('dp', 'fsdp', 'mp'))
