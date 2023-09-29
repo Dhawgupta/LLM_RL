@@ -167,31 +167,25 @@ def main(
     #                                   max_length=max_length,
     #                               ))
     
-    def optim_getter(params: PyTree):
+    def policy_optim_getter(params: PyTree):
         mask = get_weight_decay_mask((
-            "".join([r"\['ln_\d+'\]", re.escape("['bias']")]), 
-            "".join([r"\['ln_\d+'\]", re.escape("['scale']")]), 
+            "".join([r"\['ln_[0-9]+'\]", re.escape("['bias']")]), 
+            "".join([r"\['ln_[0-9]+'\]", re.escape("['scale']")]), 
             re.escape("['ln_f']['bias']"), 
             re.escape("['ln_f']['scale']"), 
             "bias", 
         ))(params)
-
-        optimizer_config = GPT3Optimizer(
-            init_lr=init_lr, 
-            end_lr=end_lr, 
-            lr=lr, 
-            lr_warmup_steps=lr_warmup_steps, 
-            lr_decay_steps=lr_decay_steps, 
-            weight_decay=weight_decay, 
-            bf16_momentum=bf16_momentum, 
-            multiply_by_parameter_scale=multiply_by_parameter_scale, 
+        return optax.MultiSteps(
+            optax.adamw(
+                learning_rate=lr, 
+                b1=0.9, 
+                b2=0.95, 
+                eps=1e-8, 
+                weight_decay=weight_decay, 
+                mask=mask, 
+            ), 
+            every_k_schedule=grad_accum_steps, 
         )
-
-        optim, _ = optimizer_config.get_optim(mask)
-
-        if grad_accum_steps is not None:
-            return optax.MultiSteps(optim, every_k_schedule=grad_accum_steps)
-        return optim
     
     def value_head_optim_getter(params: PyTree):
         mask = get_weight_decay_mask(("bias",))(params)

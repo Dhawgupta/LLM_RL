@@ -55,8 +55,8 @@ def main(
     policy_top_p: Optional[float]=None, 
     policy_top_k: Optional[int]=None,
 
-    maze_name:str="umaze",
-    describe_function:str="describe_observation",
+    maze_name:str="double_t_maze",
+    describe_function:str="describe_observation_give_position",
     maze_last_k: int=1,
     maze_reward_function: str="standard_reward",
 
@@ -93,7 +93,7 @@ def main(
     model_prng_key = jax.random.PRNGKey(2)
     params, model = load_params(
         model_load_mode=model_load_mode, 
-        model_load_path=convert_path(model_load_path) if model_load_mode != ModelLoadMode.HF else model_load_path, 
+        model_load_path=model_load_path if model_load_mode != ModelLoadMode.HF else model_load_path, 
         model_dtype=jnp.bfloat16 if bf16_activations else jnp.float32, 
         tokenizer=tokenizer, 
         mesh=mesh, 
@@ -215,10 +215,10 @@ def main(
         if outputs_path is not None:
             create_path(outputs_path)
             if do_reward_eval:
-                with open(os.path.join(convert_path(outputs_path), 'interactions.pkl'), 'wb') as f:
+                with open(os.path.join(outputs_path, 'interactions.pkl'), 'wb') as f:
                     pkl.dump(interactions, f)
-            with open(os.path.join(convert_path(outputs_path), 'results.json'), 'w') as f:
-                json.dump(jax.tree_util.tree_map(lambda x: float(x), results), f)
+            with open(os.path.join(outputs_path, 'results.json'), 'w') as f:
+                json.dump(jax.tree_util.tree_map(lambda x: float(x), all_results), f)
 
         return all_results
     

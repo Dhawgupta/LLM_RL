@@ -182,7 +182,7 @@ class MazeEnv(TextEnv):
             return (Text(obs_description, False),), reward, False
 
         new_history = list(text_history) + [Text(obs_description, False)]
-        new_history = new_history[-self.last_k:]
+        new_history = new_history[max(0, len(new_history)-self.last_k):]
         return tuple(new_history), reward, False
     
     def reset(self, seed: Optional[int] = None, options: Optional[Dict] = None) -> TextHistory:

@@ -66,7 +66,7 @@ def main(
     model_mesh_shape: int=-1, 
 
     use_wandb: bool=False, 
-    wandb_project: Optional[str]=None, 
+    wandb_project: Optional[str]="llm_rl_ppo_maze", 
 
     n_rounds: int=1, 
     epochs: int=1, 
@@ -87,8 +87,8 @@ def main(
     use_fp16_activations: bool=False, 
     use_fp16_params: bool=False, 
 
-    max_input_length: int=64, 
-    max_output_length: int=32, 
+    max_input_length: int=512, 
+    max_output_length: int=10, 
 
     log_every: int=256, 
     eval_every_steps: Optional[int]=None, 
@@ -346,8 +346,8 @@ def main(
     #     describe_function=describe_function,
     #     reward_function=reward_function,
     # )
-    
-    env = setup_maze_env(maze_name=maze_name, describe_function=describe_function, reward_function=reward_function, last_k=40)
+    maze_last_k = 40
+    env = setup_maze_env(maze_name=maze_name, describe_function=describe_function, reward_function=reward_function, last_k=maze_last_k)
     start_position = pick_start_position(maze_name=maze_name)
 
     data_round = 0
@@ -367,37 +367,6 @@ def main(
                 
             )
         
-        generation_examples = []
-        positions = # todo get from maze
-        for position in positions:
-            generation_examples.append([describe_observation_give_position(maze, position, goal), optimal_move])
-            
-        generation_data = generate_language(
-            inference=ppo_inference, 
-            prompts=list(map(lambda x: tokenizer.bos_token+x['in_text'].removeprefix(tokenizer.bos_token), generation_examples)), 
-            references=list(map(lambda x: x['stockfish_actions'], generation_examples)), 
-            prng_key=jax.random.PRNGKey(0), 
-            bsize=8, 
-            generation_batches=None, 
-            blocking_strategy=BlockingStrategy(
-                padding=Padding.LEFT, 
-                truncation=Truncation.LEFT, 
-                max_length=max_input_length
-            ), 
-            generation_config=GenerationConfig(
-                max_length=max_input_length+max_output_length, 
-                do_sample=False, 
-                num_beams=1, 
-                pad_token_id=tokenizer.pad_token_id, 
-                eos_token_id=tokenizer.encode('\n')[0], 
-                temperature=None, 
-                top_k=None, 
-                top_p=None, 
-            ), 
-        )
-        
-        
-        
         print("collecting data ...")
         nonlocal data_round
         raw_results, summary_results = text_env_eval(
@@ -414,8 +383,13 @@ def main(
             curr_chain = []
             for transition in raw_result:
                 try: 
+                    # embed()
+                    # trim the first action and the last action
+                    state = " ".join([item.text for item in transition.post_action_history[:-1]])
+                    state = Text(state, False)
+                    action = transition.post_action_history[-1]
                     text_trajectory = TextTrajectory(
-                        text_history=transition.post_action_history, 
+                        text_history=[state, action], 
                         reward=[0.0, transition.reward], 
                         done=transition.done, 
                     )
@@ -431,7 +405,7 @@ def main(
                 )
             
             text_trajectory_chains.append(chain)
-        
+
         ppo_data, all_kls = ppo_inference.get_ppo_data_from_text_trajectory_chain(
             text_trajectory_chains, 
             bsize=ppo_data_bsize, 

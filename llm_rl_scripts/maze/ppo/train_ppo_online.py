@@ -347,7 +347,7 @@ def main(
     #     reward_function=reward_function,
     # )
     
-    env = setup_maze_env(maze_name=maze_name, describe_function=describe_function, reward_function=reward_function)
+    env = setup_maze_env(maze_name=maze_name, describe_function=describe_function, reward_function=reward_function, last_k=1)
     start_position = pick_start_position(maze_name=maze_name)
 
     data_round = 0

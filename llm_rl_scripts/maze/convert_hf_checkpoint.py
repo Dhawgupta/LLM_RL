@@ -23,7 +23,7 @@ def main(
         os.path.join(convert_path(load_dir)),
         FlaxGPT2LMHeadModel,
         gcloud_project="rail-tpus",
-        gcloud_token="/home/charliesnell/.config/gcloud/rail-tpus.json",
+        gcloud_token=None,
     )
     save_pytree(model.params, os.path.join(convert_path(load_dir), 'LLM_RL', 'params.msgpack'))
     with open(os.path.join(convert_path(load_dir), 'LLM_RL', 'config.json'), 'w') as f:
