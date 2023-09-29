@@ -480,7 +480,8 @@ class PPOInference(struct.PyTreeNode):
         gamma: Union[float, jax.Array], 
         lam: Union[float, jax.Array], 
         kl_weight: Union[float, jax.Array], 
-        use_advantage_whitening: bool=True, 
+        use_advantage_whitening: bool=True,
+        use_new_advantage_whitening: bool=False,
     ) -> Tuple[List[PPOData], np.ndarray]:
         assert self.initial_policy_model is not None and self.initial_policy_params is not None
         n_chains = len(token_trajectory_chains)
@@ -626,6 +627,24 @@ class PPOInference(struct.PyTreeNode):
                 combined_token_trajectory_chains[i].should_take_action, 
             )
 
+            all_advantages.append(advantages[0])
+            all_returns.append(returns[0])
+        
+        # do advantage whitening over the full batch
+        if use_new_advantage_whitening:
+            whitened_advantages = whiten(np.concatenate(all_advantages, axis=0), shift_mean=True)
+            curr_pos = 0
+            for i in range(n_chains):
+                curr_len = all_advantages[i].shape[0]
+                all_advantages[i] = whitened_advantages[curr_pos:(curr_pos+curr_len)]
+                curr_pos += curr_len
+
+        advantage_chains, return_chains = [], []
+        for i in range(n_chains):
+            action_idxs, state_idxs, next_state_idxs = get_action_state_next_state_idxs(
+                combined_token_trajectory_chains[i].should_take_action, 
+            )
+
             advantage_chain = np.zeros((values_chains[i].shape[0]-1,), dtype=np.float32)
             advantage_chain[action_idxs] = all_advantages[i]
 
@@ -669,7 +688,8 @@ class PPOInference(struct.PyTreeNode):
         gamma: Union[float, jax.Array], 
         lam: Union[float, jax.Array], 
         kl_weight: Union[float, jax.Array], 
-        use_advantage_whitening: bool=True, 
+        use_advantage_whitening: bool=True,
+        use_new_advantage_whitening: bool=False,
     ) -> Tuple[List[PPOData], np.ndarray]:
         
         token_trajectory_chains = [
@@ -691,6 +711,7 @@ class PPOInference(struct.PyTreeNode):
             lam=lam, 
             kl_weight=kl_weight, 
             use_advantage_whitening=use_advantage_whitening, 
+            use_new_advantage_whitening=use_new_advantage_whitening,
         )
     
     def get_ppo_data_from_text_trajectory_chain_iterble(

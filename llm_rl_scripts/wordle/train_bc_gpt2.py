@@ -1,4 +1,4 @@
-from typing import Optional
+sfrom typing import Optional
 import tyro
 from JaxSeq.bucket_manager import open_with_bucket as open
 from transformers import AutoTokenizer
@@ -112,7 +112,7 @@ def main(
 
     # load data
     train_data = MaskIterableDataset.blocked_from_str_segments_iterable(
-        MapIterable(lambda x: [(tokenizer.bos_token, 0.0)]+x['sequence']+[(tokenizer.eos_token, 1.0)], FileOpenIterable(convert_path(train_data_path), 'r', pipe=jsonl_stream)), 
+        MapIterable(lambda x: x['sequence'], FileOpenIterable(convert_path(train_data_path), 'r', pipe=jsonl_stream)), 
         tokenizer, 
         blocking_strategy=BlockingStrategy(
             padding=Padding.RIGHT, 
@@ -122,7 +122,7 @@ def main(
     )
 
     eval_data = MaskIterableDataset.blocked_from_str_segments_iterable(
-        MapIterable(lambda x: [(tokenizer.bos_token, 0.0)]+x['sequence']+[(tokenizer.eos_token, 1.0)], FileOpenIterable(convert_path(eval_data_path), 'r', pipe=jsonl_stream)), 
+        MapIterable(lambda x: x['sequence'], FileOpenIterable(convert_path(eval_data_path), 'r', pipe=jsonl_stream)), 
         tokenizer, 
         blocking_strategy=BlockingStrategy(
             padding=Padding.RIGHT, 

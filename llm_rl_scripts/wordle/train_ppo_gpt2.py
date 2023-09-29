@@ -8,8 +8,8 @@ import jax.numpy as jnp
 from JaxSeq.utils import BlockingStrategy, Padding, Truncation, uuid_name, jsonl_load, get_weight_decay_mask, create_path, get_enabled_save_path, MapIterable, FileOpenIterable
 import os
 import optax
-from JaxSeq.models.gptj.interface import GPTJTrain, GPTJInference
-from JaxSeq.models.gptj.load import load_train_state, ModelLoadMode
+from JaxSeq.models.gpt2.interface import GPT2Train, GPT2Inference
+from JaxSeq.models.gpt2.load import load_train_state, ModelLoadMode
 import pickle as pkl
 from JaxSeq.data import Seq2SeqDataset
 from LLM_RL.algorithms.ppo.train import train_loop
@@ -19,7 +19,7 @@ from transformers.generation import GenerationConfig
 from jaxtyping import PyTree
 import re
 from LLM_RL.environment import TextEnv, TextHistory, Text, interact_environment, text_env_eval, TextTrajectory, TextTrajectoryChain, TokenTrajectory, text_history_to_str
-from LLM_RL.algorithms.ppo.gptj.interface import GPTJPPOPolicy, GPTJPPOInference, GPTJPPOTrain
+from LLM_RL.algorithms.ppo.gpt2.interface import GPT2PPOPolicy, GPT2PPOInference, GPT2PPOTrain
 from LLM_RL.heads.linear_head import load_train_state_from_config as load_head_train_state_from_config
 from LLM_RL.heads.linear_head import LinearHeadConfig
 from JaxSeq.shard_model import shard_params_from_params
@@ -38,7 +38,7 @@ from llm_rl_scripts.wordle.game import Vocabulary
 from llm_rl_scripts.wordle.scripted_policies import RandomMixturePolicy
 from llm_rl_scripts.wordle.data import PolicyDataGenerator
 from dataclasses import replace
-from JaxSeq.models.gptj.interface import loss_fn_mask
+from JaxSeq.models.gpt2.interface import loss_fn_mask
 
 def main(
     model_load_mode: ModelLoadMode, 
@@ -137,7 +137,7 @@ def main(
 
     # load data
     bc_data = MaskIterableDataset.blocked_from_str_segments_iterable(
-        MapIterable(lambda x: [(tokenizer.bos_token, 0.0)]+x['sequence']+[(tokenizer.eos_token, 1.0)], FileOpenIterable(convert_path(bc_data_path), 'r', pipe=jsonl_stream)), 
+        MapIterable(lambda x: x['sequence'], FileOpenIterable(convert_path(bc_data_path), 'r', pipe=jsonl_stream)), 
         tokenizer, 
         blocking_strategy=BlockingStrategy(
             padding=Padding.RIGHT, 
@@ -203,7 +203,7 @@ def main(
         with open(os.path.join(convert_path(model_load_path), 'loop_state.pkl'), 'rb') as f:
             loop_state = pkl.load(f)
 
-    policy_inference = GPTJInference.load_inference(
+    policy_inference = GPT2Inference.load_inference(
         params=policy_train_state.params, 
         model=policy_model, 
         tokenizer=tokenizer, 
@@ -216,7 +216,7 @@ def main(
     env = ReformatWordleEnvironment(WordleEnvironment(vocab, require_words_in_vocab=True, bad_word_reward=-10.0))
     
     policy_prng = jax.random.PRNGKey(0)
-    policy = GPTJPPOPolicy(
+    policy = GPT2PPOPolicy(
         inference=policy_inference, 
         prng_key=policy_prng, 
         generation_config=GenerationConfig(
@@ -273,7 +273,7 @@ def main(
 
     loss_f = partial(ppo_loss_fn, cliprange_value=cliprange_value, cliprange=cliprange, value_loss_coef=value_loss_coef)
 
-    ppo_inference = GPTJPPOInference.load_inference(
+    ppo_inference = GPT2PPOInference.load_inference(
         initial_policy_params=initital_policy_params, 
         policy_params=policy_train_state.params, 
         value_head_params=value_head_train_state.params, 
@@ -286,7 +286,7 @@ def main(
         bc_loss_weight=bc_loss_weight,  
     )
 
-    ppo_trainer = GPTJPPOTrain.load_train(
+    ppo_trainer = GPT2PPOTrain.load_train(
         policy_train_state=policy_train_state, 
         value_head_train_state=value_head_train_state, 
         policy_model=policy_model, 
@@ -303,7 +303,7 @@ def main(
         kl_controller = FixedKLController(kl_coef=init_kl_coef)
 
     data_round = 0
-    def ppo_dataset_loader(ppo_inference: GPTJPPOInference, policy: GPTJPPOPolicy) -> PPODataset:
+    def ppo_dataset_loader(ppo_inference: GPT2PPOInference, policy: GPT2PPOPolicy) -> PPODataset:
         nonlocal data_round
         raw_results, summary_results = text_env_eval(
             env=env, 

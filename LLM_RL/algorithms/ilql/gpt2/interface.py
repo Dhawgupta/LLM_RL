@@ -388,6 +388,7 @@ class GPT2ILQLInference(ILQLInference):
         value_inference: GPT2ValueRLInference, 
         target_value_inference: GPT2ValueRLInference, 
         loss_fn: Callable, 
+        use_target_base_for_loss: bool=True, 
     ):
         mesh = value_inference.base_model.config.mesh
         assert mesh is not None
@@ -397,7 +398,7 @@ class GPT2ILQLInference(ILQLInference):
         assert mesh == target_value_inference.q_head_model.config.mesh
 
         base_params_partition_spec = match_partition_rules(value_inference.base_model.config.get_partition_rules(), value_inference.base_params)
-        target_base_params_partition_spec = match_partition_rules(target_value_inference.base_model.config.get_partition_rules(), target_value_inference.base_params)
+        target_base_params_partition_spec = PS() if (not use_target_base_for_loss) else match_partition_rules(target_value_inference.base_model.config.get_partition_rules(), target_value_inference.base_params)
         q1_head_params_partition_spec = match_partition_rules(value_inference.q_head_model.config.get_partition_rules(), value_inference.q1_head_params)
         q2_head_params_partition_spec = match_partition_rules(value_inference.q_head_model.config.get_partition_rules(), value_inference.q2_head_params)
         v_head_params_partition_spec = match_partition_rules(value_inference.v_head_model.config.get_partition_rules(), value_inference.v_head_params)
@@ -627,4 +628,5 @@ class GPT2ILQLInference(ILQLInference):
             value_inference=value_inference, 
             target_value_inference=target_value_inference, 
             _eval_loss=_eval_loss, 
+            use_target_base_for_loss=use_target_base_for_loss, 
         )
