@@ -11,6 +11,13 @@ export TOKENIZERS_PARALLELISM=false
 export PROJECT_ROOT=${PWD}
 source ${PWD}/secrets.sh
 
+<<<<<<< HEAD
+# 9/20/23
+
+source ~/miniconda3/bin/activate
+conda activate LLM_RL
+
+=======
 # 9/27/23
 
 # BC: charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gpt2_test3.2023-09-22-21-53-58.938.88bf2e58599211ee812d4554a3c5cde2/last
@@ -20,10 +27,36 @@ source ${PWD}/secrets.sh
 # PPO: charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ppo_test3/exp.2023-09-27-16-53-17.486.5b44c8585d5611eeafb787c6b9d91662/round_195
 # ILQL: charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ilql_test1/wordle_gpt2_ilql_test1.2023-09-24-23-55-18.774.d0b16fba5b3511eeaa2d5bbde740719c/epoch_8
 # MC: charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_mc_test1/wordle_gpt2_mc_test1.2023-09-24-23-22-57.716.4bbb75345b3111ee812d4554a3c5cde2/epoch_3
+>>>>>>> 0d66423213b31c2929b6b9e1f9694ac82bd1ad3e
 
 export GCLOUD_PROJECT="civic-boulder-204700"
 export GCLOUD_TOKEN_PATH="${HOME}/.config/gcloud/civic-boulder-204700-V2.json"
 
+<<<<<<< HEAD
+CUDA_VISIBLE_DEVICES=5 python -m llm_rl_scripts.wordle.train_ppo \
+    PARAMS \
+    gcs://charlie-bucket2/JaxSeq2_outputs/wordle_bc/wordle_gptj_config_test2.2023-05-12-17-01-25.893.a16043b2f0e611ed890c5d20da9db470/step_237568/ \
+    gcs://charlie-bucket2/LLM_RL_data/wordle/bc_data1.jsonl \
+    llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
+    --exp-name None \
+    --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_ppo_test2/ \
+    --use-wandb \
+    --wandb-project "LLM_RL_wordle_ppo" \
+    --n-rollouts 512 \
+    --train-bsize 8 \
+    --grad-accum-steps 4 \
+    --rollout-bsize 64 \
+    --ppo-data-bsize 64 \
+    --n-rounds 1000 \
+    --epochs 4 \
+    --log-every 32 \
+    --weight-decay 1e-6 \
+    --lr 3e-5 \
+    --init-kl-coef 0.001 \
+    --kl-target 0.1 \
+    --kl-horizon 10000 \
+    --value-loss-coef 1.0 \
+=======
 # ppo
 
 python -m llm_rl_scripts.wordle.eval_bc_gpt2 \
@@ -46,11 +79,17 @@ python -m llm_rl_scripts.wordle.eval_bc_gpt2 \
     gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ppo_test3/exp.2023-09-27-16-53-17.486.5b44c8585d5611eeafb787c6b9d91662/round_195/policy/ \
     llm_rl_scripts/wordle/vocab/wordle_official_400.txt \
     --outputs-path gcs://charlie-bucket2/LLM_RL_outputs/wordle/worlde_gpt2_ppo_test3/exp.2023-09-27-16-53-17.486.5b44c8585d5611eeafb787c6b9d91662/round_195/eval_bc_greedy/ \
+>>>>>>> 0d66423213b31c2929b6b9e1f9694ac82bd1ad3e
     \
     --data-mesh-shape 1 \
     --fsdp-mesh-shape -1 \
     --model-mesh-shape 1 \
     \
+<<<<<<< HEAD
+    --bf16-activations \
+    --no-save-best \
+    --bc-loss-weight 10.0
+=======
     --policy-n-rollouts 4096 \
     --policy-bsize 128 \
     --policy-max-input-length 128 \
@@ -1135,6 +1174,7 @@ python -m llm_rl_scripts.wordle.eval_bc_gpt2 \
 #     --bf16-activations \
 #     --no-save-best \
 #     --bc-loss-weight 10.0
+>>>>>>> 0d66423213b31c2929b6b9e1f9694ac82bd1ad3e
 
 # python -m llm_rl_scripts.wordle.train_bc_gpt2 \
 #     HF \

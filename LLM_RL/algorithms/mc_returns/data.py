@@ -6,6 +6,7 @@ import jax.numpy as jnp
 import jax
 from transformers.tokenization_utils import PreTrainedTokenizerBase
 from LLM_RL.environment import TokenTrajectoryChain
+from IPython import embed
 
 def get_rtg(rewards: np.ndarray, gamma: float) -> np.ndarray:
     gamma_row = jnp.cumprod(jnp.full((rewards.shape[0],), gamma, dtype=jnp.float32), axis=0)
@@ -67,7 +68,6 @@ class MCData(NamedTuple):
         should_take_action = token_trajectory_chain.token_trajectory.is_action[1:]
         returns = np.zeros_like(should_take_action, dtype=np.float32)
         returns[should_take_action] = rtgs_sequence[:should_take_action.sum()]
-        
         return cls(
             input_ids=token_trajectory_chain.token_trajectory.tokens, 
             should_take_action=should_take_action, 

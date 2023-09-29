@@ -9,7 +9,7 @@ class Cache(dict):
         if cache_init is None:
             cache_init = {}
         super().__init__(cache_init)
-        self.cache_hit_rate = 1.0
+        # self.cache_hit_rate = 1.0
 
     def dump(self, file_name: str):
         if not os.path.exists(os.path.dirname(file_name)):
@@ -22,11 +22,11 @@ class Cache(dict):
             self.update(pkl.load(f))
     
     def __getitem__(self, key: str) -> Dict:
-        self.cache_hit_rate = (self.cache_hit_rate * 0.99) + 0.01
+        # self.cache_hit_rate = (self.cache_hit_rate * 0.99) + 0.01
         return super().__getitem__(key)
     
     def __setitem__(self, key: str, newvalue: Any):
-        self.cache_hit_rate = self.cache_hit_rate * 0.99
+        # self.cache_hit_rate = self.cache_hit_rate * 0.99
         return super().__setitem__(key, newvalue)
     
     def get_hit_rate(self):

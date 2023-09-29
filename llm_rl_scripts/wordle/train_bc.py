@@ -19,7 +19,7 @@ import re
 from JaxSeq.optimizers import GPT3Optimizer
 from llm_rl_scripts.wordle.env import WordleEnvironment, ReformatWordleEnvironment
 from llm_rl_scripts.wordle.game import Vocabulary
-from LLM_RL.algorithms.ppo.gptj.interface import GPTJPolicy
+from LLM_RL.algorithms.ppo.gptj.interface import GPTJPPOPolicy
 from LLM_RL.environment import text_history_to_str, text_env_eval
 
 def main(
@@ -212,7 +212,7 @@ def main(
     def evaluator(inference: GPTJInferenceMask):
         nonlocal policy_prng
         policy_prng, new_key = jax.random.split(policy_prng)
-        policy = GPTJPolicy(
+        policy = GPTJPPOPolicy(
             inference=inference, 
             prng_key=new_key, 
             generation_config=GenerationConfig(

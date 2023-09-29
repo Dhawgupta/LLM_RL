@@ -20,6 +20,7 @@ from transformers.generation import GenerationConfig
 import json
 import numpy as np
 from transformers import AutoTokenizer
+from JaxSeq.bucket_manager import open_with_bucket as open
 
 def main(
     model_load_mode: ModelLoadMode, 
@@ -44,21 +45,21 @@ def main(
 
     weight_decay: float=0.001, 
     init_lr: float=0.0, 
-    end_lr: float=0.002, 
-    lr: float=0.002, 
+    end_lr: float=0.0001, 
+    lr: float=0.0001, 
     lr_warmup_steps: int=1000, 
     lr_decay_steps: int=1001, # no decay, so just needs to be > warmup steps
     bf16_momentum: bool=False, 
     multiply_by_parameter_scale: bool=True, 
 
-    train_bsize: int=16, 
+    train_bsize: int=128, 
     grad_accum_steps: Optional[int]=1, 
 
     gradient_checkpointing: bool=False, 
     gradient_checkpointing_policy: str='nothing_saveable', 
     bf16_activations: bool=False, 
 
-    max_input_length: int=128, 
+    max_input_length: int=256, 
     max_output_length: int=16, 
 
     log_every: int=256, 
@@ -95,6 +96,10 @@ def main(
     is_main_process = jax.process_index() == 0
     print(f"Mesh: {mesh}")
     print(f"Is main process: {is_main_process}")
+    
+    
+    
+    
 
     train_data = Seq2SeqIterableDataset.from_str_iterable(
         MapIterable(

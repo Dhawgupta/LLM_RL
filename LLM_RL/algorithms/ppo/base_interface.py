@@ -512,6 +512,7 @@ class PPOInference(struct.PyTreeNode):
 
         # get values, logits from forward pass
         initial_policy_logprobs, policy_logprobs, values = [], [], []
+        print("getting log probs...")
         for i in tqdm(range(0, len(tokens), bsize), disable=not verbose):
             tokens_batch = jnp.asarray(tokens[i:(i+bsize)], dtype=jnp.int32)
             new_key = None
@@ -605,7 +606,25 @@ class PPOInference(struct.PyTreeNode):
                 action_rewards=action_rewards[None], 
                 gamma=gamma, 
                 lam=lam, 
-                use_whitening=use_advantage_whitening, 
+                use_whitening=False, 
+            )
+
+            all_advantages.append(advantages[0])
+            all_returns.append(returns[0])
+        
+        # do advantage whitening over the full batch
+        if use_advantage_whitening:
+            whitened_advantages = whiten(np.concatenate(all_advantages, axis=0), shift_mean=True)
+            curr_pos = 0
+            for i in range(n_chains):
+                curr_len = all_advantages[i].shape[0]
+                all_advantages[i] = whitened_advantages[curr_pos:(curr_pos+curr_len)]
+                curr_pos += curr_len
+
+        advantage_chains, return_chains = [], []
+        for i in range(n_chains):
+            action_idxs, state_idxs, next_state_idxs = get_action_state_next_state_idxs(
+                combined_token_trajectory_chains[i].should_take_action, 
             )
 
             all_advantages.append(advantages[0])
@@ -693,6 +712,43 @@ class PPOInference(struct.PyTreeNode):
             kl_weight=kl_weight, 
             use_advantage_whitening=use_advantage_whitening, 
             use_new_advantage_whitening=use_new_advantage_whitening,
+        )
+    
+    def get_ppo_data_from_text_trajectory_chain_iterble(
+        self, 
+        text_trajectory_chains: List[TokenTrajectoryChain], 
+        bsize: int, 
+        max_length: Optional[int]=None, 
+        train: bool=False, 
+        prng_key: Optional[jax.random.PRNGKeyArray]=None, 
+        token_process: Optional[Callable[[List[int]], List[int]]]=None, 
+        verbose: bool=True, 
+        *, 
+        gamma: Union[float, jax.Array], 
+        lam: Union[float, jax.Array], 
+        kl_weight: Union[float, jax.Array], 
+        use_advantage_whitening: bool=True, 
+    ) -> Tuple[List[PPOData], np.ndarray]:
+        
+        token_trajectory_chains = [
+            TokenTrajectoryChain.from_text_trajectory_chain(
+                item, 
+                self.tokenizer, 
+                token_process=token_process, 
+            ) for item in text_trajectory_chains
+        ]
+
+        return self.get_ppo_data_from_token_trajectory_chain(
+            token_trajectory_chains=token_trajectory_chains, 
+            bsize=bsize, 
+            max_length=max_length, 
+            train=train, 
+            prng_key=prng_key, 
+            verbose=verbose, 
+            gamma=gamma, 
+            lam=lam, 
+            kl_weight=kl_weight, 
+            use_advantage_whitening=use_advantage_whitening, 
         )
     
     def eval_loss(

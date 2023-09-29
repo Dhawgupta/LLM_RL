@@ -9,3 +9,6 @@ data/
 dump.rdb
 secrets.sh
 *.egg-info/
+logs/*
+setup*
+
