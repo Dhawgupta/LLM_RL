@@ -270,10 +270,9 @@ def main(
     else:
         kl_controller = FixedKLController(kl_coef=init_kl_coef)
     
-    client = storage.Client.from_service_account_json("/nfs/nfs1/users/isadoracw/rail-tpus.json")
 
-    bucket_name = "rail-tpus-isadora"
-    blob_name = "queen_rook_unopposed/queen_rook_unopposed/train_unshuffled.jsonl"
+    bucket_name = "rl-llm-bench-dataset"
+    blob_name = "endgames/train_unshuffled.jsonl"
     data = get_data_from_bucket(bucket_name, blob_name)
     text_trajectory_chains = chess_text_trajectory_chain_from_json(data)
     n_rounds = len(text_trajectory_chains) // 256
@@ -337,8 +336,8 @@ def main(
         return ppo_dataset
     
     def evaluator(inference, policy):
-        bucket_name = "rail-tpus-isadora"
-        blob_name = "queen_rook_unopposed/queen_rook_unopposed/test_positions.jsonl"
+        bucket_name = "rl-llm-bench-dataset"
+        blob_name = "endgames/test_positions.jsonl"
         positions = get_random_positions_not_in_test(bucket_name=bucket_name, blob_name=blob_name, num_pos_per_setup=num_pos_per_setup)
 
         raw_results, summary_results = text_env_eval_chess_positions(
@@ -353,10 +352,9 @@ def main(
         
         # log(summary_results, use_wandb and is_main_process)
     if not on_cloud_bucket:
-        outputs_path = f"/nfs/nfs1/users/isadoracw/LLM_RL/outputs/chess/{exp_name}"
+        outputs_path = f"{outputs_path}/{exp_name}"
     else:
-        outputs_path = f"gcs://rail-tpus-isadora/llm-rl-outputs/chess/{exp_name}"
-    # outputs_path = f"/nfs/nfs1/users/isadoracw/LLM_RL/outputs/chess/{exp_name}"
+        outputs_path = f"{outputs_path}/{exp_name}"
     save_dir, exp_name = setup_experiment_save(
         exp_name=exp_name, 
         outputs_path=outputs_path, 

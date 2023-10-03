@@ -134,6 +134,7 @@ def main(
     reranker_policy: bool=False,
     
     reward_function: str="standard_reward",
+    outputs_path: str="outputs",
 ):
     
     input_args = locals().copy()
@@ -474,7 +475,7 @@ def main(
         return ppo_dataset
 
     # outputs_path = convert_path(f"outputs/chess/{exp_name}/")
-    outputs_path = f"gcs://rail-tpus-isadora/maze/maze_{maze_name}/{exp_name}"
+    outputs_path = f"{outputs_path}/{exp_name}"
     save_dir, exp_name = setup_experiment_save(
         exp_name=exp_name, 
         outputs_path=outputs_path, 

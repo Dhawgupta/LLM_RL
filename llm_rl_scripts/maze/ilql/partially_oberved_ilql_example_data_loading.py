@@ -11,7 +11,7 @@ if __name__ == "__main__":
     tokenizer = GPT2TokenizerFast.from_pretrained('gpt2')
     tokenizer.add_special_tokens({'pad_token': '<|pad|>'})
 
-    PATH = "gcs://rail-tpus-isadora/maze/data/double_t_maze_dialogue_history.jsonl"
+    PATH = "put your path here"
     STEPS_BACK = 10 # maximum number of steps back to look
     EVAL_FRAC = 0.1 # fraction of data to use for evaluation
 

@@ -42,7 +42,7 @@ def main(
     exp_name: str="ppo_online_endgames_queen_rook",
     model_load_mode: ModelLoadMode=ModelLoadMode.TRAIN_STATE,
     model_load_path: str="outputs/chess/test_bc_shuffled2/model/",
-    checkpoint_dir: str="/home/isadoracw/isadoracw/LLM_RL/outputs/chess/lr1e-6_ppo_online_endgames_queen_rook/lr1e-6_ppo_online_endgames_queen_rook.2023-06-05-07-13-26.269.76fee0fa037011eeb99cbd216c6583a9/round_99",
+    checkpoint_dir: str="",
     
     random_positions: bool=False,
     save_positions:bool=False,
@@ -69,7 +69,7 @@ def main(
     
 ):
     # get checkpoint directory
-    # checkpoint_dir = "~/isadoracw/LLM_RL/outputs/chess/ppo_online_endgames_queen_rook/ppo_online_endgames_queen_rook.2023-06-04-22-46-25.986.a317fd12032911ee9fce87d7217c0314/round_59/"
+    
     # policy_path = os.path.join(checkpoint_dir, "policy", "train_state.msgpack")
     # value_head_path = os.path.join(checkpoint_dir, "value_head", "train_state.msgpack")
 
@@ -207,8 +207,8 @@ def main(
         tokenizer=tokenizer, 
         loss_fn=None, 
     )
-    bucket_name = "rail-tpus-isadora"
-    blob_name = "queen_rook_unopposed/queen_rook_unopposed/tricky_test_positions.jsonl"
+    bucket_name = "rl-llm-bench-dataset"
+    blob_name = "endgames/tricky_test_positions.jsonl"
     if random_positions:
         print("evaluating from random positions...")
         test_positions = get_random_positions_not_in_test(bucket_name=bucket_name, blob_name=blob_name, num_pos_per_setup=4)

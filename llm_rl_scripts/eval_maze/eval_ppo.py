@@ -44,7 +44,7 @@ def main(
     exp_name: str="ppo_umaze",
     model_load_mode: ModelLoadMode=ModelLoadMode.TRAIN_STATE,
     model_load_path: str="outputs/chess/test_bc_shuffled2/model/",
-    checkpoint_dir: str="/home/isadoracw/isadoracw/LLM_RL/outputs/chess/lr1e-6_ppo_online_endgames_queen_rook/lr1e-6_ppo_online_endgames_queen_rook.2023-06-05-07-13-26.269.76fee0fa037011eeb99cbd216c6583a9/round_99",
+    checkpoint_dir: str="outputs/maze/ppo_umaze/",
     
     output_path: str="logs/maze/",
     data_mesh_shape:int=1,

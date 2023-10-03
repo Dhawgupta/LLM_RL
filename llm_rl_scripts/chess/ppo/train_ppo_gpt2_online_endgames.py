@@ -292,8 +292,8 @@ def main(
         nonlocal data_round
         nonlocal prev_positions
         # position = large_piece_random_endgame("kQK")
-        bucket_name = "rail-tpus-isadora"
-        blob_name = "queen_rook_unopposed/queen_rook_unopposed/test_positions.jsonl"
+        bucket_name = "rl-llm-bench-dataset"
+        blob_name = "endgames/test_positions.jsonl"
         positions = get_random_positions_not_in_test(bucket_name=bucket_name, blob_name=blob_name, num_pos_per_setup=num_pos_per_setup)
         prev_positions.extend(positions)
         prev_positions = list(set(prev_positions))
@@ -407,7 +407,7 @@ def main(
         return ppo_dataset
 
     # outputs_path = convert_path(f"outputs/chess/{exp_name}/")
-    outputs_path = f"gcs://rail-tpus-isadora/llm-rl-outputs/outputs/chess/{exp_name}/"
+    outputs_path = f"{outputs_path}/{exp_name}/"
     save_dir, exp_name = setup_experiment_save(
         exp_name=exp_name, 
         outputs_path=outputs_path, 

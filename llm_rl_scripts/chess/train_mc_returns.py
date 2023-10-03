@@ -252,7 +252,7 @@ def main(
     
     
     env = FenChessHistoryEnv()
-    outputs_path = f"gcs://rail-tpus-isadora/llm-rl-outputs/outputs/chess/{exp_name}/" if outputs_path is None else outputs_path
+    outputs_path = f"{outputs_path}/{exp_name}/"
     save_dir, exp_name = setup_experiment_save(
         exp_name=exp_name, 
         outputs_path=convert_path(outputs_path), 
