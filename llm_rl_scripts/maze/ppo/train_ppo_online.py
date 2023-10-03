@@ -540,7 +540,7 @@ def main(
         return ppo_dataset
 
     # outputs_path = convert_path(f"outputs/chess/{exp_name}/")
-    outputs_path = f"gcs://rail-tpus-isadora/maze/maze_{maze_name}/{exp_name}"
+    outputs_path = f"{outputs_path}/{exp_name}"
     save_dir, exp_name = setup_experiment_save(
         exp_name=exp_name, 
         outputs_path=outputs_path, 
