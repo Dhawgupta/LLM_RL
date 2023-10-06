@@ -1,4 +1,4 @@
-sfrom typing import Optional
+from typing import Optional
 import tyro
 from JaxSeq.bucket_manager import open_with_bucket as open
 from transformers import AutoTokenizer
