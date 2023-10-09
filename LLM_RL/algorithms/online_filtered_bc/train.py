@@ -1,16 +1,12 @@
 from typing import Any, Callable, Dict, Iterable, Optional, Tuple, Union, Hashable, Iterator
-import gcsfs
-from jaxtyping import PyTree
 from jax.random import KeyArray
 from collections import deque
 import jax
 from tqdm.auto import tqdm
 from JaxSeq.utils import Dataset, dataloader, get_enabled_save_path, create_path
-from LLM_RL.algorithms.ppo.data import PPODataset, PPOIterableDataset
-from LLM_RL.algorithms.ppo.base_interface import PPOTrain, PPOInference
+from JaxSeq.models.base_interface import TrainMask, InferenceMask
+from JaxSeq.data import MaskDataset, MaskIterableDataset
 from JaxSeq.logs import combine_logs, label_logs, log, pull_logs
-from JaxSeq.shard_model import get_sharding_from_model as get_sharding_from_model_policy
-from LLM_RL.heads.shard_heads import get_sharding_from_model as get_sharding_from_model_head
 import os
 import wandb
 from JaxSeq.bucket_manager import open_with_bucket as open
@@ -18,167 +14,82 @@ from JaxSeq.bucket_manager import delete_with_bucket as delete
 from JaxSeq.checkpointing import save_pytree
 from flax.training.train_state import TrainState
 from transformers.modeling_flax_utils import FlaxPreTrainedModel
+from JaxSeq.shard_model import get_sharding_from_model
 import pickle as pkl
-from LLM_RL.environment import TextEnv
 from LLM_RL.algorithms.ppo.base_interface import PPOPolicy
 import flax.linen as nn
 import os
 import jax.numpy as jnp
-import tempfile
-from JaxSeq.data import MaskDataset, MaskIterableDataset
 
 def dump_state(
-    policy_model: FlaxPreTrainedModel, 
-    policy_train_state: TrainState, 
-    value_head_model: nn.Module, 
-    value_head_train_state: TrainState, 
+    model: FlaxPreTrainedModel, 
+    train_state: TrainState, 
     save_dir: str, 
     save_train_state: bool, 
     enable_save: bool, 
     save_dtype: jnp.dtype, 
     **loop_state: Dict[Hashable, Any], 
-):
+):  
+    # dump model config
+    with open(get_enabled_save_path(os.path.join(save_dir, 'config.json'), enabled=enable_save), 'w') as f:
+        f.write(model.config.to_json_string())
     # dump loop_state
     with open(get_enabled_save_path(os.path.join(save_dir, 'loop_state.pkl'), enabled=enable_save), 'wb') as f:
         pkl.dump(loop_state, f)
-    
-    # save policy
-    if enable_save:
-        create_path(os.path.join(save_dir, 'policy'))
-    # dump policy config
-    with open(get_enabled_save_path(os.path.join(save_dir, 'policy', 'config.json'), enabled=enable_save), 'w') as f:
-        f.write(policy_model.config.to_json_string())
-    # dump policy_train_state
+    # dump train_state
     if save_train_state:
         save_pytree(
-            tree=policy_train_state, 
-            path=get_enabled_save_path(os.path.join(save_dir, 'policy', 'train_state.msgpack'), enabled=enable_save), 
+            tree=train_state, 
+            path=get_enabled_save_path(os.path.join(save_dir, 'train_state.msgpack'), enabled=enable_save), 
             dtype=save_dtype, 
-            sharding=get_sharding_from_model_policy(policy_model, policy_train_state), 
+            sharding=get_sharding_from_model(model, train_state), 
         )
     else:
         save_pytree(
-            tree=policy_train_state.params, 
-            path=get_enabled_save_path(os.path.join(save_dir, 'policy', 'params.msgpack'), enabled=enable_save), 
+            tree=train_state.params, 
+            path=get_enabled_save_path(os.path.join(save_dir, 'params.msgpack'), enabled=enable_save), 
             dtype=save_dtype, 
-            sharding=get_sharding_from_model_policy(policy_model, policy_train_state.params), 
+            sharding=get_sharding_from_model(model, train_state.params), 
         )
-
-    # save value head
-    if enable_save:
-        create_path(os.path.join(save_dir, 'value_head'))
-    # dump value_head config
-    with open(get_enabled_save_path(os.path.join(save_dir, 'value_head', 'config.json'), enabled=enable_save), 'w') as f:
-        f.write(value_head_model.config.to_json_string())
-    # dump value_head_train_state
-    if save_train_state:
-        save_pytree(
-            tree=value_head_train_state, 
-            path=get_enabled_save_path(os.path.join(save_dir, 'value_head', 'train_state.msgpack'), enabled=enable_save), 
-            dtype=save_dtype, 
-            sharding=get_sharding_from_model_head(value_head_model, value_head_train_state), 
-        )
-    else:
-        save_pytree(
-            tree=value_head_train_state.params, 
-            path=get_enabled_save_path(os.path.join(save_dir, 'value_head', 'params.msgpack'), enabled=enable_save), 
-            dtype=save_dtype, 
-            sharding=get_sharding_from_model_head(value_head_model, value_head_train_state.params), 
-        )
-
-def dump_state_to_bucket(
-    policy_model: FlaxPreTrainedModel, 
-    policy_train_state: TrainState, 
-    value_head_model: nn.Module, 
-    value_head_train_state: TrainState, 
-    save_dir: str, 
-    save_train_state: bool, 
-    enable_save: bool, 
-    save_dtype: jnp.dtype, 
-    gcloud_project: str=None,
-    gcloud_token: str=None,
-    **loop_state: Dict[Hashable, Any],
-):
-    if save_dir.startswith('gcs://'):
-        output_path = save_dir[len('gcs://'):]
-        
-        tmp_dir = tempfile.TemporaryDirectory()
-        dump_state(policy_model=policy_model, policy_train_state=policy_train_state, value_head_model=value_head_model, value_head_train_state=value_head_train_state, save_dir=tmp_dir.name, save_train_state=save_train_state, enable_save=True, save_dtype=save_dtype, **loop_state)
-        
-        gcsfs.GCSFileSystem(project=gcloud_project, token=gcloud_token).put(tmp_dir.name, output_path, recursive=True)
-        
-        tmp_dir.cleanup()
-    else:
-        dump_state(policy_model=policy_model, policy_train_state=policy_train_state, value_head_model=value_head_model, value_head_train_state=value_head_train_state, save_dir=save_dir, save_train_state=save_train_state, enable_save=enable_save, save_dtype=save_dtype, **loop_state)
-
-def eval_loss(
-    inference: PPOInference, 
-    dataset: Union[PPODataset, PPOIterableDataset], 
-    prng_key: Optional[KeyArray], 
-    bsize: int, 
-    eval_batches: Optional[int], 
-) -> Dict[str, Any]:
-    # setup evaluator loop state
-    eval_logs = []
-
-    # eval on batches
-    prng_key, new_prng = jax.random.split(prng_key) if prng_key is not None else (None, None)
-    d = dataloader(new_prng, dataset, bsize, truncate=True)
-    for i, batch in tqdm(enumerate(d)):
-        # conditionally terminate early
-        if eval_batches is not None and i >= eval_batches:
-            break
-
-        # get eval logs
-        _, info = inference.eval_loss(**batch)
-        eval_logs.append(info)
-    
-    # gather and postproc eval logs
-    eval_logs = pull_logs(combine_logs(eval_logs))
-    return eval_logs
 
 def train_loop(
-    trainer: PPOTrain, 
-    inference: PPOInference, 
-    policy: PPOPolicy, 
-    load_dataset: Callable[[PPOInference, PPOPolicy], Union[PPODataset, PPOIterableDataset]], 
-    evaluator: Optional[Callable[[PPOInference, PPOPolicy], Tuple[float, Dict[str, Any]]]], 
-    prng_key: KeyArray, 
-    save_dir: Optional[str], 
-    n_rounds: int, 
-    epochs: int, 
-    max_steps: Optional[int], 
-    bsize: int, 
-    log_every: int, 
-    eval_every_steps: Optional[int], 
-    eval_every_epochs: Optional[int], 
-    eval_every_rounds: Optional[int], 
-    eval_at_beginning: bool, 
-    eval_at_end: bool, 
-    save_every_steps: Optional[int], 
-    save_every_epochs: Optional[int], 
-    save_every_rounds: Optional[int], 
-    save_at_beginning: bool, 
-    save_at_end: bool, 
-    save_best: bool, 
-    max_checkpoints: Optional[int], 
-    save_train_state: bool, 
-    save_dtype: jnp.dtype, 
-    use_wandb: bool, 
-    wandb_project: Optional[str], 
-    wandb_run_name: Optional[str], 
-    wandb_config: Optional[Dict[str, Any]], 
-    is_main_process: Optional[bool]=None, 
-    bc_dataset: Optional[Union[MaskDataset, MaskIterableDataset]]=None, 
-    bc_bsize: Optional[int]=None, 
-    **loop_state: Dict[Hashable, Any], 
-) -> Tuple[PPOTrain, PPOInference, PPOPolicy]:
+    trainer: TrainMask,
+    inference: InferenceMask,
+    policy: PPOPolicy,
+    load_dataset: Callable[[InferenceMask, PPOPolicy], Union[MaskDataset, MaskIterableDataset]],
+    evaluator: Optional[Callable[[InferenceMask, PPOPolicy], Tuple[float, Dict[str, Any]]]],
+    prng_key: KeyArray,
+    save_dir: Optional[str],
+    n_rounds: int,
+    epochs: int,
+    max_steps: Optional[int],
+    bsize: int,
+    log_every: int,
+    eval_every_steps: Optional[int],
+    eval_every_epochs: Optional[int],
+    eval_every_rounds: Optional[int],
+    eval_at_beginning: bool,
+    eval_at_end: bool,
+    save_every_steps: Optional[int],
+    save_every_epochs: Optional[int],
+    save_every_rounds: Optional[int],
+    save_at_beginning: bool,
+    save_at_end: bool,
+    save_best: bool,
+    max_checkpoints: Optional[int],
+    save_train_state: bool,
+    save_dtype: jnp.dtype,
+    use_wandb: bool,
+    wandb_project: Optional[str],
+    wandb_run_name: Optional[str],
+    wandb_config: Optional[Dict[str, Any]],
+    is_main_process: Optional[bool]=None,
+    **loop_state: Dict[Hashable, Any],
+) -> Tuple[TrainMask, InferenceMask, PPOPolicy]:
     print("entering training loop ...")
     assert (not use_wandb) or (use_wandb and wandb_project is not None)
     if is_main_process is None:
         is_main_process = jax.process_index() == 0
-    if bc_bsize is None:
-        bc_bsize = bsize
     
     # initalize wandb
     wandb_id = loop_state.get('wandb_id', None)
@@ -201,6 +112,7 @@ def train_loop(
     step = 0
     epoch = -1
     round = -1
+
     def _save(
         name: str, 
         add_to_queue: bool, 
@@ -208,7 +120,6 @@ def train_loop(
     ):
         nonlocal saved_checkpoints
         print(f'saving checkpoint {name} ...')
-        print(f'saving in {save_dir}...')
         # conditionally delete old checkpoints
         if add_to_queue and is_main_process:
             if (max_checkpoints is not None) and (len(saved_checkpoints) >= max_checkpoints):
@@ -217,10 +128,8 @@ def train_loop(
         if is_main_process:
             create_path(curr_save_dir)
         dump_state(
-            policy_model=trainer.policy_model, 
-            policy_train_state=trainer.policy_train_state, 
-            value_head_model=trainer.value_head_model, 
-            value_head_train_state=trainer.value_head_train_state, 
+            model=trainer.model, 
+            train_state=trainer.train_state, 
             save_dir=curr_save_dir, 
             save_train_state=save_train_state, 
             enable_save=is_main_process, 
@@ -236,18 +145,13 @@ def train_loop(
     ):
         nonlocal best_perf
         nonlocal inference
-        nonlocal policy
         # get eval logs
-        print("beginning evaluation ...")
-        inference = inference.replace(
-            policy_params=trainer.policy_train_state.params, 
-            value_head_params=trainer.value_head_train_state.params, 
-        )
-        policy.set_params(trainer.policy_train_state.params)
+        inference = inference.replace(params=trainer.train_state.params)
+        policy.set_params(trainer.train_state.params)
         eval_perf, eval_logs = evaluator(inference, policy)
 
         # publish eval logs
-        eval_logs = pull_logs(label_logs(eval_logs, 'eval', {'step': step+1, 'epoch': epoch, 'round': round}))
+        eval_logs = pull_logs(label_logs(eval_logs, 'eval', {'step': step+1, 'epoch': epoch}))
         log(eval_logs, use_wandb and is_main_process)
 
         # conditionally save best model and optimizer state
@@ -259,11 +163,6 @@ def train_loop(
                 add_to_queue=False, 
                 **{**loop_state, 'best_perf': best_perf}, 
             )
-
-    bc_d = None
-    if bc_dataset is not None:
-        prng_key, new_prng = jax.random.split(prng_key)
-        bc_d = dataloader(new_prng, bc_dataset, bc_bsize, truncate=True)
     
     # begin training loop
     for round in tqdm(range(n_rounds)):
@@ -311,20 +210,10 @@ def train_loop(
             d = dataloader(new_prng, dataset, bsize, truncate=True)
             print("steps per epoch: ", steps_per_epoch)
             for batch in tqdm(d, total=steps_per_epoch):
-                if bc_d is not None:
-                    try:
-                        bc_batch = next(bc_d)
-                    except StopIteration as e:
-                        prng_key, new_prng = jax.random.split(prng_key)
-                        bc_d = dataloader(new_prng, bc_dataset, bc_bsize, truncate=True)
-                        bc_batch = next(bc_d)
-                    batch = {**batch, **{'bc_data_'+k: v for k, v in bc_batch.items()}}
-                
                 # step model and get training logs
                 if 'step' in loop_state and step < loop_state['step']:
                     step += 1
                     continue
-                # print("trainer step: ", step)
                 trainer, _, info = trainer.step(
                     **batch, 
                     prng_key=new_prng, 
@@ -433,11 +322,8 @@ def train_loop(
                 wandb_id=wandb_id, 
             )
         
-        inference = inference.replace(
-            policy_params=trainer.policy_train_state.params, 
-            value_head_params=trainer.value_head_train_state.params, 
-        )
-        policy.set_params(trainer.policy_train_state.params)
+        inference = inference.replace(params=trainer.train_state.params)
+        policy.set_params(trainer.train_state.params)
     
     # begin evaluation
     if evaluator is not None and eval_at_end:
@@ -472,9 +358,6 @@ def train_loop(
     if use_wandb and is_main_process:
         wandb.finish()
     
-    inference = inference.replace(
-        policy_params=trainer.policy_train_state.params, 
-        value_head_params=trainer.value_head_train_state.params, 
-    )
-    policy.set_params(trainer.policy_train_state.params)
+    inference = inference.replace(params=trainer.train_state.params)
+    policy.set_params(trainer.train_state.params)
     return trainer, inference, policy

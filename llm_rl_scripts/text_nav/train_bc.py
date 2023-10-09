@@ -1,4 +1,4 @@
-from typing import Optional
+sfrom typing import Optional
 import tyro
 from JaxSeq.bucket_manager import open_with_bucket as open
 from transformers import AutoTokenizer
@@ -17,8 +17,7 @@ from transformers.generation import GenerationConfig
 from jaxtyping import PyTree
 import re
 from JaxSeq.optimizers import GPT3Optimizer
-from llm_rl_scripts.wordle.env import WordleEnvironment, ReformatWordleEnvironment
-from llm_rl_scripts.wordle.game import Vocabulary
+from llm_rl_scripts.text_nav.env import TextNavEnv
 from LLM_RL.algorithms.ppo.gpt2.interface import GPT2PPOPolicy
 from LLM_RL.environment import text_history_to_str, text_env_eval
 
@@ -47,7 +46,7 @@ def main(
     weight_decay: float=0.001, 
     init_lr: float=0.0, 
     end_lr: float=0.002, 
-    lr: float=0.002, 
+    lr: float=0.001, 
     lr_warmup_steps: int=1000, 
     lr_decay_steps: int=1001, # no decay, so just needs to be > warmup steps
     bf16_momentum: bool=False, 
@@ -131,11 +130,7 @@ def main(
         ), 
     )
 
-    vocab = Vocabulary.from_file(
-        vocab_file=vocab_file, 
-        fill_cache=False, 
-    )
-    env = ReformatWordleEnvironment(WordleEnvironment(vocab))
+    env = TextNavEnv()
 
     def optim_getter(params: PyTree):
         mask = get_weight_decay_mask((
