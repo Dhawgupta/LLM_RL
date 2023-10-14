@@ -11,6 +11,7 @@ from llm_rl_scripts.wordle.game import Vocabulary
 from JaxSeq.bucket_manager import open_with_bucket as open
 from JaxSeq.utils import create_path
 from LLM_RL.utils import convert_path
+import tiktoken
 
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
@@ -51,12 +52,17 @@ Now let's start a new game. Return your word as a space separated sequence of 5 
 
 VOCAB_FILE = "llm_rl_scripts/wordle/vocab/wordle_official_400.txt"
 
+TOKENIZER = tiktoken.encoding_for_model("gpt-4")
+INPUT_TOKEN_COUNT = 0
+OUTPUT_TOKEN_COUNT = 0
+
 class GPT4WordlePolicy(TextPolicy):
     def __init__(self, vocab: Vocabulary):
         vocab_text = '\n'.join(map(lambda x: ' '.join(list(x)), vocab.all_vocab))
         self.prompt = MAIN_PROMPT.replace("{{vocab}}", vocab_text)
 
     def act(self, text_history: TextHistory) -> TextHistory:
+        global INPUT_TOKEN_COUNT, OUTPUT_TOKEN_COUNT
         game_content = ""
         for i, item in enumerate(text_history[1:]):
             if i % 2 == 0:
@@ -68,6 +74,7 @@ class GPT4WordlePolicy(TextPolicy):
                     game_content += f"feedback {(i//2)+1}: {item.text}"
         game_content = game_content.strip()
         prompt = self.prompt.replace('{{game_content}}', game_content)
+        INPUT_TOKEN_COUNT += len(TOKENIZER.encode(prompt))
         while True:
             try:
                 response = openai.ChatCompletion.create(
@@ -94,12 +101,17 @@ class GPT4WordlePolicy(TextPolicy):
                 continue
             break
         response_text = response.choices[0].message.content
+        OUTPUT_TOKEN_COUNT += len(TOKENIZER.encode(response_text))
         response_json = json.loads(response_text)
+        print(f"total cost: {compute_cost(INPUT_TOKEN_COUNT, OUTPUT_TOKEN_COUNT)}; total input tokens: {INPUT_TOKEN_COUNT}; total output tokens: {OUTPUT_TOKEN_COUNT}")
         return text_history+(Text(response_json['guess'].strip(), True),)
+
+def compute_cost(input_token_count: int, output_token_count: int) -> float:
+    return ((0.03 * input_token_count) / 1000) + ((0.06 * output_token_count) / 1000)
 
 if __name__ == "__main__":
     N_INTERACTIONS = 64
-    OUTPUTS_PATH = "gcs://charlie-bucket2/LLM_RL_outputs/wordle/gpt4_eval/gpt4_test1_official/"
+    OUTPUTS_PATH = "gcs://charlie-bucket2/LLM_RL_outputs/wordle/gpt4_eval/gpt4_test1_temp__/"
 
     def text_history_to_str(text_history: TextHistory) -> str:
         return '\n'.join(map(lambda x: x.text, text_history))
