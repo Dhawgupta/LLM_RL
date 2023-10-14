@@ -12,6 +12,8 @@ from JaxSeq.bucket_manager import open_with_bucket as open
 from JaxSeq.utils import create_path
 from LLM_RL.utils import convert_path
 
+VOCAB_FILE = "llm_rl_scripts/wordle/vocab/wordle_official_400.txt"
+
 INTRO_TEXT = """\
 Welcome to the game of Wordle!
 Your objective is to guess a hidden 5 letter word.
@@ -44,10 +46,10 @@ green: If the environment returns a green letter, it means that the letter at th
 
 As a note, if you guess an invalid word (e.g. not a 5 letter word or a word not in the vocabulary), the environment will respond with an "invalid word" message.
 
+For your reference, the list of valid vocab words is at the path `llm_rl_scripts/wordle/vocab/wordle_official_400.txt`. Feel free to reference this list when playing the game.
+
 Now that you know the rules, let's get started!
 """.strip()
-
-VOCAB_FILE = "llm_rl_scripts/wordle/vocab/wordle_official_400.txt"
 
 if __name__ == "__main__":
     N_INTERACTIONS = 20
