@@ -1,4 +1,3 @@
-from typing import List, Optional
 from LLM_RL.algorithms.ppo.base_interface import PPOInference
 from JaxSeq.models.base_interface import Inference
 from LLM_RL.environment import TextHistory, TokenHistory
@@ -6,7 +5,6 @@ from transformers.tokenization_utils import PreTrainedTokenizer
 import jax.numpy as jnp
 import numpy as np
 import jax
-from JaxSeq.utils import multihost_device_get
 
 def build_ppo_score_fn(
     inference: PPOInference, 

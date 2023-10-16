@@ -1,4 +1,4 @@
-from typing import Any, Callable, Dict, Iterable, Optional, Tuple, Union, Hashable, Iterator
+from typing import Any, Callable, Dict, Optional, Tuple, Union, Hashable
 from jax.random import KeyArray
 from collections import deque
 import jax
@@ -17,7 +17,6 @@ from transformers.modeling_flax_utils import FlaxPreTrainedModel
 from JaxSeq.shard_model import get_sharding_from_model
 import pickle as pkl
 from LLM_RL.algorithms.ppo.base_interface import PPOPolicy
-import flax.linen as nn
 import os
 import jax.numpy as jnp
 

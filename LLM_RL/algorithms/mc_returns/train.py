@@ -1,10 +1,9 @@
-from typing import Any, Callable, Dict, Iterable, Optional, Tuple, Union, Hashable, Iterator
-from jaxtyping import PyTree
+from typing import Any, Callable, Dict, Optional, Tuple, Union, Hashable
 from jax.random import KeyArray
 from collections import deque
 import jax
 from tqdm.auto import tqdm
-from JaxSeq.utils import Dataset, dataloader, create_path, match_partition_rules, get_enabled_save_path
+from JaxSeq.utils import Dataset, dataloader, create_path, get_enabled_save_path
 from JaxSeq.data import Seq2SeqDataset, Seq2SeqIterableDataset
 from JaxSeq.models.base_interface import Train, Inference
 from JaxSeq.logs import combine_logs, label_logs, log, pull_logs
@@ -17,7 +16,6 @@ from JaxSeq.shard_model import get_sharding_from_model
 from flax.training.train_state import TrainState
 from transformers.modeling_flax_utils import FlaxPreTrainedModel
 import pickle as pkl
-from jax.sharding import NamedSharding
 from LLM_RL.algorithms.mc_returns.base_interface import MCTrain, MCInference
 from LLM_RL.algorithms.value_rl_base.base_interface import ValueRLInference
 import jax.numpy as jnp

@@ -12,8 +12,6 @@ import optax
 from flax.training.train_state import TrainState
 from LLM_RL.heads.shard_heads import shard_params_from_config, shard_train_state_from_params, shard_train_state_from_checkpoint, shard_params_from_checkpoint, get_sharding_from_model
 from flax.core import freeze, unfreeze
-from JaxSeq.utils import inplace_float_to_dtype, match_partition_rules
-from jax.sharding import NamedSharding
 from JaxSeq.bucket_manager import open_with_bucket as open
 import json
 import os

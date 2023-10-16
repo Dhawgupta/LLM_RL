@@ -1,6 +1,5 @@
-from typing import Any, Callable, Dict, Iterable, Optional, Tuple, Union, Hashable, Iterator
+from typing import Any, Callable, Dict, Optional, Tuple, Union, Hashable
 import gcsfs
-from jaxtyping import PyTree
 from jax.random import KeyArray
 from collections import deque
 import jax
@@ -19,7 +18,6 @@ from JaxSeq.checkpointing import save_pytree
 from flax.training.train_state import TrainState
 from transformers.modeling_flax_utils import FlaxPreTrainedModel
 import pickle as pkl
-from LLM_RL.environment import TextEnv
 from LLM_RL.algorithms.ppo.base_interface import PPOPolicy
 import flax.linen as nn
 import os

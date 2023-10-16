@@ -1,11 +1,10 @@
 from JaxSeq.bucket_manager import open_with_bucket as open
 import json
-from LLM_RL.environment import TextEnv, TextHistory, Text, interact_environment, text_env_eval, TextTrajectory, TextTrajectoryChain, TokenTrajectoryChain, text_history_to_str
+from LLM_RL.environment import Text, TextTrajectory, TextTrajectoryChain, TokenTrajectoryChain
 from tqdm.auto import tqdm
 import random
 from transformers import GPT2TokenizerFast
 from LLM_RL.algorithms.ilql.data import ILQLData
-import numpy as np
 
 if __name__ == "__main__":
     tokenizer = GPT2TokenizerFast.from_pretrained('gpt2')

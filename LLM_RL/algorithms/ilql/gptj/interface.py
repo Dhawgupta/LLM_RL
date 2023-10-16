@@ -1,4 +1,4 @@
-from typing import Optional, Callable, Tuple, List
+from typing import Optional, Callable, Tuple
 from jax.experimental.pjit import pjit
 from LLM_RL.algorithms.ilql.base_interface import ILQLTrain, ILQLInference
 from flax.training.train_state import TrainState

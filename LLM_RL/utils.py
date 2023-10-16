@@ -1,10 +1,8 @@
-from typing import Optional
 import os
 import jax.numpy as jnp
 import jax
 import numpy as np
 from JaxSeq.utils import ConvertPath
-from functools import partial
 
 # override projct root for convert_path
 class LLMConvertPath(ConvertPath):

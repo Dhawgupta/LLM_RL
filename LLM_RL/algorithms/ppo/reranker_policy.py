@@ -1,6 +1,6 @@
 import numpy as np
-from LLM_RL.environment import Text, TextPolicy, TextHistory
-from typing import Callable, List, Tuple
+from LLM_RL.environment import TextPolicy, TextHistory
+from typing import Callable, List
 
 class ReRankerSamplePolicy(TextPolicy):
     
