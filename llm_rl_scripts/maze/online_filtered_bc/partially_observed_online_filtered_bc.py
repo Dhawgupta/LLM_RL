@@ -27,6 +27,7 @@ import json
 import random
 from JaxSeq.utils import multihost_device_get
 from JaxSeq.data import MaskIterableDataset
+from llm_rl_scripts.maze.maze_utils import setup_maze_env
 from llm_rl_scripts.wordle.env import ReformatWordleEnvironment, WordleEnvironment
 from llm_rl_scripts.wordle.game import Vocabulary
 from llm_rl_scripts.wordle.scripted_policies import RandomMixturePolicy
@@ -102,6 +103,10 @@ def main(
     force_pad_embeddings: bool=False, 
 
     should_restore_loop_state: bool=False, 
+    
+    maze_name: str="double_t_maze",
+    describe_function: str="describe_observation_only_walls", 
+    reward_function: str="standard_reward",
 ):
     input_args = locals()
     print(input_args)
@@ -168,11 +173,7 @@ def main(
         tokenizer=tokenizer,
     )
 
-    vocab = Vocabulary.from_file(
-        vocab_file=vocab_file,
-        fill_cache=False,
-    )
-    env = ReformatWordleEnvironment(WordleEnvironment(vocab, require_words_in_vocab=True, bad_word_reward=-10.0))
+    env = setup_maze_env(maze_name=maze_name, describe_function=describe_function, reward_function=reward_function, last_k=1)
     
     policy_prng = jax.random.PRNGKey(0)
     policy = GPTJPPOPolicy(
@@ -220,7 +221,7 @@ def main(
         summary_results = pull_logs(summary_results)
 
         mask_str_segments = []
-        trajectory_rewards = []
+        filtered_mask_str_segments = []
         for raw_result in raw_results:
             print('='*25)
             print(text_history_to_str(raw_result[-1].post_transition_history))
@@ -228,19 +229,24 @@ def main(
             print(sum([[item.reward, 0.0] for item in raw_result], [0.0]))
             print('='*25)
 
+            str_segment = [(history_item.text, float(history_item.is_action)) for history_item in raw_result[-1].post_transition_history]
             mask_str_segments.append(
                 [(history_item.text, float(history_item.is_action)) for history_item in raw_result[-1].post_transition_history]
             )
-            trajectory_rewards.append(
-                sum([item.reward for item in raw_result])
-            )
+            rewards = [item.reward for item in raw_result]
+            if rewards[-1] == 0: # success has been achieved
+                filtered_mask_str_segments.append(str_segment)
+            # trajectory_rewards.append(
+            #     sum([item.reward for item in raw_result])
+            # )
         
-        data_idxs = list(range(len(mask_str_segments)))
-        top_data_idxs = sorted(data_idxs, key=lambda idx: trajectory_rewards[idx], reverse=True)[:int(len(data_idxs)*filter_percengage)]
-        top_mask_str_segments = [mask_str_segments[idx] for idx in top_data_idxs]
+        # data_idxs = list(range(len(mask_str_segments)))
+        # top_data_idxs = [idx for idx in data_idxs if trajectory_rewards[idx] > -50]
+        # top_data_idxs = sorted(data_idxs, key=lambda idx: trajectory_rewards[idx], reverse=True)[:int(len(data_idxs)*filter_percengage)]
+        # top_mask_str_segments = [mask_str_segments[idx] for idx in top_data_idxs]
 
         filtered_bc_dataset = MaskDataset.blocked_from_str_segments_list(
-            top_mask_str_segments,
+            filtered_mask_str_segments,
             tokenizer,
             blocking_strategy=BlockingStrategy(
                 padding=Padding.RIGHT,
@@ -272,7 +278,7 @@ def main(
                 os.path.join(data_save_path, 'top_mask_str_segments.pkl'), 
                 enabled=is_main_process, 
             ), 'wb') as f:
-                pkl.dump(top_mask_str_segments, f)
+                pkl.dump(filtered_mask_str_segments, f)
             # save raw_results
             with open(get_enabled_save_path(
                 os.path.join(data_save_path, 'raw_results.pkl'), 

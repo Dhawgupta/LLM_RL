@@ -59,7 +59,7 @@ def main(
     
     exp_name: Optional[str]=None, 
     outputs_path: Optional[str]=None, 
-    maze_name: str="medium",
+    maze_name: str="double_t_maze",
 
     data_mesh_shape: int=1, 
     fsdp_mesh_shape: int=1, 

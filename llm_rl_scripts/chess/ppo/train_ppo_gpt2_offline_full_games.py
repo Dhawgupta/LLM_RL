@@ -268,9 +268,8 @@ def main(
     else:
         kl_controller = FixedKLController(kl_coef=init_kl_coef)
     
-    dataset_path = os.path.join("/nfs/nfs1/users/isadoracw/ILQL5/src/environments/chess/complete_background_generated/")
-    actions, states, done, reward = get_dataset(dataset_path)
-    text_trajectory_chains = chess_trajectory_chain_from_npy(actions, states, done, reward)
+    # def ppo_dataset_loader(ppo_inference:GPT2ILQLInference, policy, num_to_sample=256):
+    # todo: get text trajectory chains
     print("there are this many chains: ", len(text_trajectory_chains))
     data_round = 0
     def ppo_dataset_loader(ppo_inference:GPT2ILQLInference, policy, num_to_sample=256):
