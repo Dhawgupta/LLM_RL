@@ -1,24 +1,39 @@
-from typing import Optional
+from typing import Optional, Dict, Any, Tuple
 import tyro
 from JaxSeq.bucket_manager import open_with_bucket as open
 from transformers import AutoTokenizer
-from JaxSeq.utils import convert_path, load_mesh, setup_experiment_save
+from JaxSeq.utils import jsonl_stream, convert_path, load_mesh, get_dtype, setup_experiment_save
 import jax
 import jax.numpy as jnp
-from JaxSeq.utils import BlockingStrategy, Padding, Truncation, get_weight_decay_mask, create_path, get_enabled_save_path
+from JaxSeq.utils import BlockingStrategy, Padding, Truncation, uuid_name, jsonl_load, get_weight_decay_mask, create_path, get_enabled_save_path, MapIterable, FileOpenIterable
 import os
 import optax
+from JaxSeq.models.gptj.interface import GPTJTrain, GPTJInference
 from JaxSeq.models.gptj.load import load_train_state, ModelLoadMode
 import pickle as pkl
+from JaxSeq.data import Seq2SeqDataset
+from JaxSeq.generation_eval import generate_language, compute_metrics
 from transformers.generation import GenerationConfig
 from jaxtyping import PyTree
 import re
-from LLM_RL.environment import text_env_eval, text_history_to_str
+from LLM_RL.environment import TextEnv, TextHistory, Text, interact_environment, text_env_eval, TextTrajectory, TextTrajectoryChain, TokenTrajectory, text_history_to_str
+from JaxSeq.shard_model import shard_params_from_params
+from flax.training.train_state import TrainState
+from LLM_RL.utils import get_tensor_stats_np
+from functools import partial
+import numpy as np
 from JaxSeq.logs import label_logs, log, pull_logs
 import json
+import random
+from JaxSeq.utils import multihost_device_get
 from JaxSeq.data import MaskIterableDataset
-from llm_rl_scripts.wordle.env.env import ReformatWordleEnvironment, WordleEnvironment
-from llm_rl_scripts.wordle.env.game import Vocabulary
+from llm_rl_scripts.maze.maze_utils import setup_maze_env
+from llm_rl_scripts.wordle.env import ReformatWordleEnvironment, WordleEnvironment
+from llm_rl_scripts.wordle.game import Vocabulary
+from llm_rl_scripts.wordle.scripted_policies import RandomMixturePolicy
+from llm_rl_scripts.wordle.data import PolicyDataGenerator
+from dataclasses import replace
+from JaxSeq.models.gptj.interface import loss_fn_mask
 from JaxSeq.data import MaskIterableDataset, MaskDataset
 from JaxSeq.models.gptj.interface import GPTJTrainMask, GPTJInferenceMask
 from LLM_RL.algorithms.ppo.gptj.interface import GPTJPPOPolicy
@@ -88,6 +103,10 @@ def main(
     force_pad_embeddings: bool=False, 
 
     should_restore_loop_state: bool=False, 
+    
+    maze_name: str="double_t_maze",
+    describe_function: str="describe_observation_give_position", 
+    reward_function: str="standard_reward",
 ):
     input_args = locals()
     print(input_args)
@@ -154,11 +173,7 @@ def main(
         tokenizer=tokenizer,
     )
 
-    vocab = Vocabulary.from_file(
-        vocab_file=vocab_file,
-        fill_cache=False,
-    )
-    env = ReformatWordleEnvironment(WordleEnvironment(vocab, require_words_in_vocab=True, bad_word_reward=-10.0))
+    env = setup_maze_env(maze_name=maze_name, describe_function=describe_function, reward_function=reward_function, last_k=1)
     
     policy_prng = jax.random.PRNGKey(0)
     policy = GPTJPPOPolicy(
@@ -206,7 +221,7 @@ def main(
         summary_results = pull_logs(summary_results)
 
         mask_str_segments = []
-        trajectory_rewards = []
+        filtered_mask_str_segments = []
         for raw_result in raw_results:
             print('='*25)
             print(text_history_to_str(raw_result[-1].post_transition_history))
@@ -214,19 +229,24 @@ def main(
             print(sum([[item.reward, 0.0] for item in raw_result], [0.0]))
             print('='*25)
 
+            str_segment = [(history_item.text, float(history_item.is_action)) for history_item in raw_result[-1].post_transition_history]
             mask_str_segments.append(
                 [(history_item.text, float(history_item.is_action)) for history_item in raw_result[-1].post_transition_history]
             )
-            trajectory_rewards.append(
-                sum([item.reward for item in raw_result])
-            )
+            rewards = [item.reward for item in raw_result]
+            if rewards[-1] == 0: # success has been achieved
+                filtered_mask_str_segments.append(str_segment)
+            # trajectory_rewards.append(
+            #     sum([item.reward for item in raw_result])
+            # )
         
-        data_idxs = list(range(len(mask_str_segments)))
-        top_data_idxs = sorted(data_idxs, key=lambda idx: trajectory_rewards[idx], reverse=True)[:int(len(data_idxs)*filter_percengage)]
-        top_mask_str_segments = [mask_str_segments[idx] for idx in top_data_idxs]
+        # data_idxs = list(range(len(mask_str_segments)))
+        # top_data_idxs = [idx for idx in data_idxs if trajectory_rewards[idx] > -50]
+        # top_data_idxs = sorted(data_idxs, key=lambda idx: trajectory_rewards[idx], reverse=True)[:int(len(data_idxs)*filter_percengage)]
+        # top_mask_str_segments = [mask_str_segments[idx] for idx in top_data_idxs]
 
         filtered_bc_dataset = MaskDataset.blocked_from_str_segments_list(
-            top_mask_str_segments,
+            filtered_mask_str_segments,
             tokenizer,
             blocking_strategy=BlockingStrategy(
                 padding=Padding.RIGHT,
@@ -258,7 +278,7 @@ def main(
                 os.path.join(data_save_path, 'top_mask_str_segments.pkl'), 
                 enabled=is_main_process, 
             ), 'wb') as f:
-                pkl.dump(top_mask_str_segments, f)
+                pkl.dump(filtered_mask_str_segments, f)
             # save raw_results
             with open(get_enabled_save_path(
                 os.path.join(data_save_path, 'raw_results.pkl'), 

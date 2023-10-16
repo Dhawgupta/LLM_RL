@@ -11,4 +11,4 @@ secrets.sh
 *.egg-info/
 logs/*
 setup*
-
+experiments/
