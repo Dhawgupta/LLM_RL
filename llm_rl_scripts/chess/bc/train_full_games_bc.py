@@ -1,36 +1,27 @@
-from typing import Optional, Dict, Any, Tuple, List
-from IPython import embed
+from typing import Optional
 import tyro
-from JaxSeq.utils import convert_path, load_mesh, setup_experiment_save, get_enabled_save_path, MapIterable, FileOpenIterable, BlockingStrategy, Padding, Truncation, create_path, uuid_name
+from JaxSeq.utils import convert_path, load_mesh, setup_experiment_save, MapIterable, BlockingStrategy, Padding, Truncation
 import jax
 import jax.numpy as jnp
-from JaxSeq.utils import jsonl_load, get_weight_decay_mask, jsonl_stream
-from JaxSeq.generation_eval import generate_language
+from JaxSeq.utils import get_weight_decay_mask
 import os
 import optax
 from JaxSeq.models.gpt2.interface import GPT2Train, GPT2Inference
 from JaxSeq.models.gpt2.load import load_train_state, ModelLoadMode
 import pickle as pkl
-from JaxSeq.data import Seq2SeqDataset, Seq2SeqIterableDataset
+from JaxSeq.data import Seq2SeqIterableDataset
 from JaxSeq.train import eval_loss, train_loop
 from jaxtyping import PyTree
 import re
 from JaxSeq.optimizers import GPT3Optimizer
 from transformers.generation import GenerationConfig
 import json
-import numpy as np
 from transformers import AutoTokenizer
 from JaxSeq.bucket_manager import open_with_bucket as open
-from LLM_RL.algorithms.ppo.reranker_policy import ReRankerSamplePolicy
-from LLM_RL.algorithms.ppo.score_fn import build_bc_score_fn
-import random
 from LLM_RL.algorithms.ppo.gpt2.interface import GPT2PPOPolicy
 from LLM_RL.environment import text_env_eval
-from llm_rl_scripts.chess.env import FenChessHistoryEnv, preprocess_move, preprocess_state, text_env_eval_chess_positions
-from llm_rl_scripts.maze.env import maze_proposal_function
-from llm_rl_scripts.maze.maze_utils import pick_start_position, setup_maze_env
-from llm_rl_scripts.maze.mazes import double_t_maze
-from JaxSeq.logs import label_logs, log, pull_logs
+from llm_rl_scripts.chess.env import FenChessHistoryEnv, preprocess_move, preprocess_state
+from JaxSeq.logs import pull_logs
 
 def main(
     model_load_mode: ModelLoadMode, 

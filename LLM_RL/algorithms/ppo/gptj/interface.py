@@ -3,7 +3,7 @@ import jax
 from jax.sharding import PartitionSpec as PS
 from jaxtyping import PyTree
 from functools import partial
-from typing import List, Optional, Union, Tuple, Callable, NamedTuple, Dict, Any
+from typing import List, Optional, Tuple, Callable
 from transformers.modeling_flax_utils import FlaxPreTrainedModel
 from transformers.tokenization_utils import PreTrainedTokenizerBase
 from JaxSeq.utils import with_named_sharding_constraint, match_partition_rules
@@ -11,10 +11,9 @@ from optax import softmax_cross_entropy_with_integer_labels
 from flax.training.train_state import TrainState
 from transformers.modeling_flax_outputs import FlaxCausalLMOutput
 import flax.linen as nn
-from LLM_RL.algorithms.ppo.base_interface import PPOTrain, ppo_loss_fn, PPOInference, PPOForwardOutput
+from LLM_RL.algorithms.ppo.base_interface import PPOTrain, PPOInference, PPOForwardOutput
 from jax.sharding import NamedSharding
-from LLM_RL.environment import TextPolicy, TextHistory, text_history_to_str, Text
-from JaxSeq.models.base_interface import Inference
+from LLM_RL.environment import TextHistory, text_history_to_str, Text
 from JaxSeq.utils import BlockingStrategy, Padding, Truncation
 from transformers.generation import GenerationConfig
 from JaxSeq.models.gptj.interface import GPTJInference

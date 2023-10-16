@@ -4,7 +4,7 @@ from jaxtyping import PyTree
 from transformers.modeling_flax_utils import FlaxPreTrainedModel
 from transformers.tokenization_utils import PreTrainedTokenizerBase
 import flax.linen as nn
-from JaxSeq.utils import with_named_sharding_constraint, match_partition_rules, BlockingStrategy, block_sequences, Padding, Truncation
+from JaxSeq.utils import with_named_sharding_constraint, match_partition_rules, BlockingStrategy, Padding, Truncation
 from functools import partial
 import jax
 from jax.sharding import NamedSharding

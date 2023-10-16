@@ -1,9 +1,7 @@
-import os
 import openai
 import random
 import re
 import json
-import pickle as pkl
 
 key = "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"
 openai.api_key = key

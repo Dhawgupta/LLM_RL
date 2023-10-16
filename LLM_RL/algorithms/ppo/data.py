@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Dict, Iterable, List, Tuple, Iterator, NamedTuple
+from typing import Dict, Iterable, List, Iterator, NamedTuple
 from JaxSeq.utils import Dataset, IterableDataset, block_sequences, BlockingStrategy
 import numpy as np
 import jax.numpy as jnp

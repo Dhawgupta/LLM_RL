@@ -2,26 +2,19 @@ from __future__ import annotations
 import jax
 import jax.numpy as jnp
 import numpy as np
-from transformers.generation import GenerationConfig
-from jax.sharding import Mesh
-from jax.sharding import PartitionSpec as PS
 from jaxtyping import PyTree
 from flax import struct
-from functools import partial
 from typing import List, Optional, Union, Tuple, Callable, NamedTuple, Dict, Any
 from transformers.modeling_flax_utils import FlaxPreTrainedModel
 from transformers.tokenization_utils import PreTrainedTokenizerBase
-from JaxSeq.utils import with_named_sharding_constraint, match_partition_rules, BlockingStrategy, block_sequences, Padding, Truncation, multihost_device_get
+from JaxSeq.utils import BlockingStrategy, block_sequences, Padding, Truncation, multihost_device_get
 from optax import softmax_cross_entropy_with_integer_labels
 from flax.training.train_state import TrainState
 from transformers.modeling_flax_outputs import FlaxCausalLMOutput
-from transformers.generation import FlaxBeamSearchOutput, FlaxGreedySearchOutput, FlaxSampleOutput
-from flax.core import FrozenDict, freeze
 import flax.linen as nn
 from LLM_RL.utils import get_tensor_stats, unpad_array
 from JaxSeq.models.base_interface import initialize_attn_mask_pos_ids
-from LLM_RL.environment import TextTrajectoryChain, text_history_to_str, TokenTrajectoryChain
-from scipy.special import softmax
+from LLM_RL.environment import TokenTrajectoryChain
 from tqdm.auto import tqdm
 from LLM_RL.algorithms.ppo.data import PPOData
 from LLM_RL.environment import BatchedTextPolicy

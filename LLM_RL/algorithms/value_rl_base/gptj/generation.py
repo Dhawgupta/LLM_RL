@@ -1,17 +1,15 @@
-from typing import Optional, Tuple, Union, Dict, Any
+from typing import Optional, Tuple, Union
 from dataclasses import dataclass
 from transformers.modeling_outputs import CausalLMOutputWithCrossAttentions
 from transformers.utils import ModelOutput
-import numpy as np
 import jax.numpy as jnp
 import flax.linen as nn
 import jax
-from flax.core.frozen_dict import freeze, unfreeze, FrozenDict
+from flax.core.frozen_dict import freeze, unfreeze
 from jax import lax
 from transformers.modeling_flax_utils import FlaxPreTrainedModel
 from transformers.configuration_utils import PretrainedConfig
 from JaxSeq.stream_tokens import FlaxStreamGenerationMixin
-from transformers.generation.flax_logits_process import FlaxLogitsProcessorList
 from transformers.generation import FlaxGenerationMixin
 
 @dataclass

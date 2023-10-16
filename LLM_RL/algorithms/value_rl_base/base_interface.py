@@ -1,12 +1,8 @@
 from __future__ import annotations
-from typing import Union, Tuple, Any, Callable, Optional, NamedTuple, List
+from typing import Union, Callable, Optional, NamedTuple, List
 import jax
 import jax.numpy as jnp
-from jax.random import PRNGKeyArray
-import optax
-from LLM_RL.utils import get_tensor_stats
 from flax import struct
-from flax.training.train_state import TrainState
 from transformers.modeling_flax_utils import FlaxPreTrainedModel
 from transformers.tokenization_utils import PreTrainedTokenizerBase
 import flax.linen as nn
@@ -18,7 +14,7 @@ from transformers.generation import GenerationConfig
 import numpy as np
 from JaxSeq.utils import block_sequences, BlockingStrategy, Padding, Truncation
 from transformers.generation import FlaxBeamSearchOutput, FlaxGreedySearchOutput, FlaxSampleOutput
-from JaxSeq.models.base_interface import GenerationFromStrOutput, Inference
+from JaxSeq.models.base_interface import GenerationFromStrOutput
 from LLM_RL.environment import BatchedTextPolicy
 
 class ValueRLForwardOutput(NamedTuple):

@@ -2,36 +2,23 @@ from typing import Optional, Callable, Union, List
 from jax.experimental.pjit import pjit
 from jaxtyping import PyTree
 from transformers.modeling_flax_utils import FlaxPreTrainedModel
-<<<<<<< HEAD
-from transformers.modeling_flax_outputs import FlaxCausalLMOutputWithCrossAttentions
-=======
->>>>>>> 0d66423213b31c2929b6b9e1f9694ac82bd1ad3e
 from transformers.tokenization_utils import PreTrainedTokenizerBase
 import flax.linen as nn
-from JaxSeq.utils import with_named_sharding_constraint, match_partition_rules, BlockingStrategy, block_sequences, Padding, Truncation
+from JaxSeq.utils import with_named_sharding_constraint, match_partition_rules, BlockingStrategy, Padding, Truncation
 from functools import partial
 import jax
-from jax.sharding import NamedSharding
 from jax.sharding import PartitionSpec as PS
+from jax.sharding import NamedSharding
 from flax.core import FrozenDict
 from transformers.generation import FlaxBeamSearchOutput, FlaxGreedySearchOutput, FlaxSampleOutput
 from LLM_RL.algorithms.value_rl_base.gpt2.generation import GPT2ValueRLGeneration
 from LLM_RL.algorithms.value_rl_base.base_interface import ValueRLForwardOutput, ValueRLInference
 from JaxSeq.stream_tokens import StreamingGenerationConfig
-<<<<<<< HEAD
-from transformers.modeling_flax_outputs import FlaxCausalLMOutput
-=======
-from transformers.modeling_flax_outputs import FlaxCausalLMOutputWithCrossAttentions
->>>>>>> 0d66423213b31c2929b6b9e1f9694ac82bd1ad3e
 from LLM_RL.algorithms.value_rl_base.base_interface import ValueRLPolicy
 from transformers.generation import GenerationConfig
-from LLM_RL.environment import TextHistory, text_history_to_str, Text
+from LLM_RL.environment import TextHistory, Text, text_history_to_str
+from transformers.modeling_flax_outputs import FlaxCausalLMOutputWithCrossAttentions
 from JaxSeq.utils import strip_prompt_from_completion
-<<<<<<< HEAD
-from IPython import embed
-=======
-
->>>>>>> 0d66423213b31c2929b6b9e1f9694ac82bd1ad3e
 
 class GPT2ValueRLInference(ValueRLInference):
     @classmethod
@@ -57,25 +44,11 @@ class GPT2ValueRLInference(ValueRLInference):
             assert mesh == v_head_model.config.mesh
         assert (pi_beta_model is None and pi_beta_params is None) or (pi_beta_model is not None and pi_beta_params is not None)
         
-<<<<<<< HEAD
-        pi_beta_params_partition_spec = None
-        if pi_beta_params is not None:
-            pi_beta_params_partition_spec = match_partition_rules(pi_beta_model.config.get_partition_rules(), pi_beta_params)
-        base_params_partition_spec = match_partition_rules(base_model.config.get_partition_rules(), base_params)
-        q1_head_params_partition_spec = match_partition_rules(q_head_model.config.get_partition_rules(), q1_head_params)
-        q2_head_params_partition_spec = None
-        if q2_head_params is not None:
-            q2_head_params_partition_spec = match_partition_rules(q_head_model.config.get_partition_rules(), q2_head_params)
-        v_head_params_partition_spec = None
-        if v_head_params is not None:
-            v_head_params_partition_spec = match_partition_rules(v_head_model.config.get_partition_rules(), v_head_params)
-=======
         pi_beta_params_partition_spec = PS() if pi_beta_params is None else match_partition_rules(pi_beta_model.config.get_partition_rules(), pi_beta_params)
         base_params_partition_spec = match_partition_rules(base_model.config.get_partition_rules(), base_params)
         q1_head_params_partition_spec = match_partition_rules(q_head_model.config.get_partition_rules(), q1_head_params)
         q2_head_params_partition_spec = PS() if q2_head_params is None else match_partition_rules(q_head_model.config.get_partition_rules(), q2_head_params)
         v_head_params_partition_spec = PS() if v_head_params is None else match_partition_rules(v_head_model.config.get_partition_rules(), v_head_params)
->>>>>>> 0d66423213b31c2929b6b9e1f9694ac82bd1ad3e
 
         generator = None
         if pi_beta_model is not None:
@@ -92,17 +65,10 @@ class GPT2ValueRLInference(ValueRLInference):
                 pjit, 
                 static_argnames=('generation_config', 'trace'), 
                 in_shardings=(
-<<<<<<< HEAD
-                    NamedSharding(mesh, PS()) if pi_beta_params_partition_spec is None else jax.tree_util.tree_map(lambda ps: NamedSharding(mesh, ps), pi_beta_params_partition_spec), 
-                    jax.tree_util.tree_map(lambda ps: NamedSharding(mesh, ps), base_params_partition_spec), 
-                    jax.tree_util.tree_map(lambda ps: NamedSharding(mesh, ps), q1_head_params_partition_spec), 
-                    NamedSharding(mesh, PS()) if q2_head_params_partition_spec is None else jax.tree_util.tree_map(lambda ps: NamedSharding(mesh, ps), q2_head_params_partition_spec), 
-=======
                     jax.tree_util.tree_map(lambda ps: NamedSharding(mesh, ps), pi_beta_params_partition_spec), 
                     jax.tree_util.tree_map(lambda ps: NamedSharding(mesh, ps), base_params_partition_spec), 
                     jax.tree_util.tree_map(lambda ps: NamedSharding(mesh, ps), q1_head_params_partition_spec), 
                     jax.tree_util.tree_map(lambda ps: NamedSharding(mesh, ps), q2_head_params_partition_spec), 
->>>>>>> 0d66423213b31c2929b6b9e1f9694ac82bd1ad3e
                     NamedSharding(mesh, PS()), 
                     NamedSharding(mesh, PS()), 
                     NamedSharding(mesh, PS()), 
@@ -160,13 +126,8 @@ class GPT2ValueRLInference(ValueRLInference):
             in_shardings=(
                 jax.tree_util.tree_map(lambda ps: NamedSharding(mesh, ps), base_params_partition_spec), 
                 jax.tree_util.tree_map(lambda ps: NamedSharding(mesh, ps), q1_head_params_partition_spec), 
-<<<<<<< HEAD
-                NamedSharding(mesh, PS()) if q2_head_params_partition_spec is None else jax.tree_util.tree_map(lambda ps: NamedSharding(mesh, ps), q2_head_params_partition_spec), 
-                NamedSharding(mesh, PS()) if v_head_params_partition_spec is None else jax.tree_util.tree_map(lambda ps: NamedSharding(mesh, ps), v_head_params_partition_spec), 
-=======
                 jax.tree_util.tree_map(lambda ps: NamedSharding(mesh, ps), q2_head_params_partition_spec), 
                 jax.tree_util.tree_map(lambda ps: NamedSharding(mesh, ps), v_head_params_partition_spec), 
->>>>>>> 0d66423213b31c2929b6b9e1f9694ac82bd1ad3e
                 NamedSharding(mesh, PS()), 
                 NamedSharding(mesh, PS()), 
                 NamedSharding(mesh, PS()), 
@@ -177,12 +138,8 @@ class GPT2ValueRLInference(ValueRLInference):
                     logits=NamedSharding(mesh, PS(("dp", "fsdp"), None, None)) if dp_shard_logits else NamedSharding(mesh, PS()), 
                     hidden_states=NamedSharding(mesh, PS()), # assume no sharding for hidden states
                     attentions=NamedSharding(mesh, PS()), # assume no sharding for attentions
-<<<<<<< HEAD
                     cross_attentions=NamedSharding(mesh, PS()), # assume no sharding for cross attentions
                     past_key_values=NamedSharding(mesh, PS()), # assume no sharding for past key values
-=======
-                    cross_attentions=NamedSharding(mesh, PS()) # assume no sharding for cross attentions
->>>>>>> 0d66423213b31c2929b6b9e1f9694ac82bd1ad3e
                 ), 
                 q1=NamedSharding(mesh, PS(("dp", "fsdp"), None, None)) if dp_shard_logits else NamedSharding(mesh, PS()), 
                 q2=NamedSharding(mesh, PS(("dp", "fsdp"), None, None)) if (dp_shard_logits and q2_head_params is not None) else NamedSharding(mesh, PS()), 
@@ -337,10 +294,6 @@ class GPT2ValuePolicy(ValueRLPolicy):
             eos_token if d else self.in_str_process(text_history_to_str(item)) \
                 for item, d in zip(text_history, done)
         ]
-<<<<<<< HEAD
-        # embed()
-=======
->>>>>>> 0d66423213b31c2929b6b9e1f9694ac82bd1ad3e
 
         new_key = None
         if self.prng_key is not None:

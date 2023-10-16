@@ -1,54 +1,38 @@
-from collections import defaultdict
-from typing import Optional, Dict, Any, Tuple
+from typing import Optional
 import tyro
 from JaxSeq.bucket_manager import open_with_bucket as open
-from transformers import AutoTokenizer
-from JaxSeq.utils import jsonl_stream, convert_path, load_mesh, get_dtype, setup_experiment_save
+from JaxSeq.utils import convert_path, load_mesh, setup_experiment_save
 import jax
 import jax.numpy as jnp
-from JaxSeq.utils import BlockingStrategy, Padding, Truncation, uuid_name, jsonl_load, get_weight_decay_mask, create_path, get_enabled_save_path
+from JaxSeq.utils import BlockingStrategy, Padding, Truncation, get_weight_decay_mask
 import os
 import optax
-from JaxSeq.models.gpt2.interface import GPT2Train, GPT2Inference
 from JaxSeq.models.gpt2.load import load_train_state, ModelLoadMode
 import pickle as pkl
-from JaxSeq.data import Seq2SeqDataset
-from JaxSeq.generation_eval import generate_language, compute_metrics
 from transformers.generation import GenerationConfig
 from jaxtyping import PyTree
 import re
-from LLM_RL.environment import TextEnv, TextHistory, Text, interact_environment, text_env_eval, TextTrajectory, TextTrajectoryChain, TokenTrajectoryChain, text_history_to_str
-from LLM_RL.algorithms.mc_returns.data import MCData, MCDataset
-from LLM_RL.algorithms.value_rl_base.gpt2.interface import GPT2ValuePolicy, GPT2ValueRLInference
+from LLM_RL.environment import Text, text_env_eval, TextTrajectory, TextTrajectoryChain, TokenTrajectoryChain
+from LLM_RL.algorithms.mc_returns.data import MCData
+from LLM_RL.algorithms.value_rl_base.gpt2.interface import GPT2ValuePolicy
 from LLM_RL.heads.mlp_head import load_train_state_from_config as load_head_train_state_from_config
 from LLM_RL.heads.mlp_head import MLPHeadConfig
-from JaxSeq.shard_model import shard_params_from_params
-from flax.training.train_state import TrainState
 from LLM_RL.algorithms.mc_returns.gpt2.interface import GPT2MCTrain, GPT2MCInference
-from LLM_RL.utils import get_tensor_stats_np
 from functools import partial
 import numpy as np
-from JaxSeq.logs import label_logs, log, pull_logs
 import json
-from LLM_RL.heads.mlp_head import load_train_state as load_head_train_state, ModelLoadMode as HeadModelLoadMode
-from JaxSeq.utils import multihost_device_get
 from transformers import GPT2TokenizerFast
-from IPython import embed
-from llm_rl_scripts.maze.maze_utils import setup_maze_env, pick_start_position
-from llm_rl_scripts.maze.mazes import double_t_maze_optimal_directions, double_t_maze
-from llm_rl_scripts.maze.env import MazeEnv, describe_observation_give_position, manhatten_actions, describe_observation, maze_proposal_function, standard_reward
+from llm_rl_scripts.maze.env.maze_utils import setup_maze_env, pick_start_position
+from llm_rl_scripts.maze.env.mazes import double_t_maze
+from llm_rl_scripts.maze.env.env import maze_proposal_function
 from LLM_RL.algorithms.ppo.reranker_policy import ReRankerPolicy, ReRankerSamplePolicy
-from LLM_RL.algorithms.ilql.gpt2.score_fn import build_ilql_score_fn
-from JaxSeq.shard_model import shard_params_from_params, copy_sharded_pytree
-import random 
-from LLM_RL.heads.linear_head import LinearHeadConfig
-from LLM_RL.algorithms.mc_returns.base_interface import mc_loss, MCTrain
+from JaxSeq.shard_model import copy_sharded_pytree
+import random
+from LLM_RL.algorithms.mc_returns.base_interface import mc_loss
 from LLM_RL.algorithms.mc_returns.train import train_loop, eval_loss
-from LLM_RL.algorithms.mc_returns.data import MCData, MCDataset, MCIterableDataset
-from LLM_RL.algorithms.mc_returns.gptj.interface import GPTJMCTrain, GPTJMCInference
+from LLM_RL.algorithms.mc_returns.data import MCData, MCIterableDataset
 from LLM_RL.algorithms.mc_returns.score_fn import build_mc_score_fn
 from tqdm.auto import tqdm
-from flax.traverse_util import flatten_dict, unflatten_dict
 from JaxSeq.optimizers import GPT3Optimizer
 
 def main(

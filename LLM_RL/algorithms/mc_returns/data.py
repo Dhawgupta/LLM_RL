@@ -1,12 +1,11 @@
 from __future__ import annotations
-from typing import Dict, Iterable, List, Tuple, Iterator, NamedTuple, Optional
+from typing import Dict, Iterable, List, Iterator, NamedTuple
 from JaxSeq.utils import Dataset, IterableDataset, block_sequences, BlockingStrategy
 import numpy as np
 import jax.numpy as jnp
 import jax
 from transformers.tokenization_utils import PreTrainedTokenizerBase
 from LLM_RL.environment import TokenTrajectoryChain
-from IPython import embed
 
 def get_rtg(rewards: np.ndarray, gamma: float) -> np.ndarray:
     gamma_row = jnp.cumprod(jnp.full((rewards.shape[0],), gamma, dtype=jnp.float32), axis=0)

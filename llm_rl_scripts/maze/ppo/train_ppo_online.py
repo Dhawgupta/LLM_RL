@@ -2,28 +2,27 @@ from typing import Optional, Dict, Any, Tuple
 import tyro
 from JaxSeq.bucket_manager import open_with_bucket as open
 from transformers import AutoTokenizer
-from JaxSeq.utils import jsonl_stream, convert_path, load_mesh, get_dtype, setup_experiment_save
+from JaxSeq.utils import convert_path, load_mesh, get_dtype, setup_experiment_save
 import jax
 import jax.numpy as jnp
-from JaxSeq.utils import BlockingStrategy, Padding, Truncation, uuid_name, jsonl_load, get_weight_decay_mask, create_path, get_enabled_save_path
+from JaxSeq.utils import BlockingStrategy, Padding, Truncation, get_weight_decay_mask, create_path, get_enabled_save_path
 import os
 import optax
-from JaxSeq.models.gpt2.interface import GPT2Train, GPT2Inference
+from JaxSeq.models.gpt2.interface import GPT2Inference
 from JaxSeq.models.gpt2.load import load_train_state, ModelLoadMode
 import pickle as pkl
-from JaxSeq.data import Seq2SeqDataset
 from LLM_RL.algorithms.ppo.score_fn import build_ppo_score_fn
 from LLM_RL.algorithms.ppo.train import train_loop
 from LLM_RL.algorithms.ppo.base_interface import ppo_loss_fn, FixedKLController, AdaptiveKLController
 from transformers.generation import GenerationConfig
 from jaxtyping import PyTree
 import re
-from LLM_RL.environment import TextEnv, TextHistory, Text, TokenHistory, TokenTrajectory, interact_environment, text_env_eval, TextTrajectory, TextTrajectoryChain, TokenTrajectoryChain, text_history_to_str
+from LLM_RL.environment import Text, TokenHistory, text_env_eval, TextTrajectory, TextTrajectoryChain
 from LLM_RL.algorithms.ppo.gpt2.interface import GPT2PPOPolicy, GPT2PPOInference, GPT2PPOTrain
 from LLM_RL.heads.linear_head import load_train_state_from_config as load_head_train_state_from_config
 from LLM_RL.heads.linear_head import LinearHeadConfig
 from JaxSeq.shard_model import shard_params_from_params
-from LLM_RL.algorithms.ppo.data import PPODataset, PPOIterableDataset
+from LLM_RL.algorithms.ppo.data import PPODataset
 from LLM_RL.utils import get_tensor_stats_np
 from functools import partial
 import numpy as np
@@ -31,19 +30,13 @@ from JaxSeq.logs import label_logs, log, pull_logs
 import json
 from JaxSeq.utils import multihost_device_get
 from IPython import embed
-from llm_rl_scripts.chess.data import get_random_positions_not_in_test
-from tqdm.auto import tqdm
-from JaxSeq.checkpointing import save_pytree_to_bucket, save_dataset_to_bucket
-from llm_rl_scripts.maze.mazes import double_t_maze_optimal_directions, maze2d_large, maze2d_medium, maze2d_umaze, double_t_maze
+from llm_rl_scripts.maze.env.mazes import double_t_maze_optimal_directions, double_t_maze
 from JaxSeq.data import MaskDataset
 from JaxSeq.models.gpt2.interface import loss_fn_mask
-
-from llm_rl_scripts.chess.env import FenChessHistoryEnv, FenChessHistoryEnvSingleTurn, large_piece_random_endgame, text_env_eval_chess_positions
-from llm_rl_scripts.maze.env import MazeEnv, describe_observation_give_position, manhatten_actions, describe_observation, maze_proposal_function, illegal_penalty_reward, illegal_penalty_diff_scale, standard_reward
-from LLM_RL.algorithms.ppo.reranker_policy import ReRankerPolicy, ReRankerSamplePolicy
-from JaxSeq.utils import pad_sequence, block_sequences
-from llm_rl_scripts.maze.maze_utils import setup_maze_env, pick_start_position, compute_move_accuracy
-from JaxSeq.generation_eval import generate_language
+from llm_rl_scripts.maze.env.env import MazeEnv, describe_observation_give_position, maze_proposal_function
+from LLM_RL.algorithms.ppo.reranker_policy import ReRankerPolicy
+from JaxSeq.utils import block_sequences
+from llm_rl_scripts.maze.env.maze_utils import setup_maze_env, pick_start_position
 
 # from LLM_RL.gpt2 import load_gpt2_from_pretrained
 

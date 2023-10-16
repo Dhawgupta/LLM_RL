@@ -2,40 +2,34 @@ from typing import Optional, Dict, Any, Tuple
 import tyro
 from JaxSeq.bucket_manager import open_with_bucket as open
 from transformers import AutoTokenizer
-from JaxSeq.utils import jsonl_stream, convert_path, load_mesh, get_dtype, setup_experiment_save
+from JaxSeq.utils import convert_path, load_mesh, get_dtype, setup_experiment_save
 import jax
 import jax.numpy as jnp
-from JaxSeq.utils import BlockingStrategy, Padding, Truncation, uuid_name, jsonl_load, get_weight_decay_mask, create_path, get_enabled_save_path
+from JaxSeq.utils import BlockingStrategy, Padding, Truncation, get_weight_decay_mask, create_path, get_enabled_save_path
 import os
 import optax
-from JaxSeq.models.gpt2.interface import GPT2Train, GPT2Inference
+from JaxSeq.models.gpt2.interface import GPT2Inference
 from JaxSeq.models.gpt2.load import load_train_state, ModelLoadMode
 import pickle as pkl
-from JaxSeq.data import Seq2SeqDataset
 from LLM_RL.algorithms.ppo.train import train_loop
 from LLM_RL.algorithms.ppo.base_interface import ppo_loss_fn, FixedKLController, AdaptiveKLController
-from LLM_RL.algorithms.ilql.data import ILQLData, ILQLIterableDataset, ILQLDataset
+from LLM_RL.algorithms.ilql.data import ILQLData, ILQLDataset
 from transformers.generation import GenerationConfig
 from jaxtyping import PyTree
 import re
-from LLM_RL.environment import TextEnv, TextHistory, Text, TokenTrajectoryChain, interact_environment, text_env_eval, TextTrajectory, TextTrajectoryChain
+from LLM_RL.environment import TextEnv, TextHistory, Text, TokenTrajectoryChain, TextTrajectory, TextTrajectoryChain
 from LLM_RL.algorithms.ppo.gpt2.interface import GPT2ILQLPolicy, GPT2ILQLInference, GPT2PPOTrain
 from LLM_RL.heads.linear_head import load_train_state_from_config as load_head_train_state_from_config
 from LLM_RL.heads.linear_head import LinearHeadConfig
 from JaxSeq.shard_model import shard_params_from_params
-from LLM_RL.algorithms.ppo.data import PPODataset, PPOIterableDataset
-from LLM_RL.utils import get_tensor_stats_np
+from LLM_RL.algorithms.ppo.data import PPODataset
 from functools import partial
-import numpy as np
 from JaxSeq.logs import label_logs, log, pull_logs
 import json
 from JaxSeq.utils import multihost_device_get
 from IPython import embed
-from llm_rl_scripts.chess.data import get_random_positions_not_in_test
-from tqdm.auto import tqdm
-from JaxSeq.checkpointing import save_pytree_to_bucket, save_dataset_to_bucket
-
-from llm_rl_scripts.chess.env import FenChessHistoryEnv, FenChessHistoryEnvSingleTurn, large_piece_random_endgame, text_env_eval_chess_positions
+from llm_rl_scripts.chess.env.data import get_random_positions_not_in_test
+from llm_rl_scripts.chess.env.env import FenChessHistoryEnv, text_env_eval_chess_positions
 
 class BitsTestEnv(TextEnv):
     def __init__(self, n: int):
@@ -359,7 +353,7 @@ def main(
         
         ilql_dataset = ILQLDataset.from_ilql_data_list(ilql_data_list, 
                                                        tokenizer, 
-                                                       BlockingStrategy(Padding.RIGHT, Truncation.RIGHT, max_length=max_length))s
+                                                       BlockingStrategy(Padding.RIGHT, Truncation.RIGHT, max_length=max_length))
         
         
         logs = dict(

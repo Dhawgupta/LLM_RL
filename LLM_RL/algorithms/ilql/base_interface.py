@@ -2,7 +2,6 @@ from __future__ import annotations
 from typing import Union, Tuple, Any, Callable, Optional, NamedTuple, List
 import jax
 import jax.numpy as jnp
-from jax.random import PRNGKeyArray
 import optax
 from LLM_RL.utils import get_tensor_stats
 from flax import struct
@@ -12,14 +11,10 @@ from transformers.tokenization_utils import PreTrainedTokenizerBase
 import flax.linen as nn
 from jaxtyping import PyTree
 from JaxSeq.models.base_interface import initialize_attn_mask_pos_ids
-from transformers.modeling_flax_outputs import FlaxCausalLMOutput
-from flax.core import freeze
 from transformers.generation import GenerationConfig
-import numpy as np
-from JaxSeq.utils import block_sequences, BlockingStrategy, Padding, Truncation
+from JaxSeq.utils import BlockingStrategy, Padding, Truncation
 from transformers.generation import FlaxBeamSearchOutput, FlaxGreedySearchOutput, FlaxSampleOutput
-from JaxSeq.models.base_interface import GenerationFromStrOutput, Inference
-from LLM_RL.environment import BatchedTextPolicy
+from JaxSeq.models.base_interface import GenerationFromStrOutput
 from LLM_RL.algorithms.value_rl_base.base_interface import ValueRLForwardOutput, ValueRLInference
 
 # loss function

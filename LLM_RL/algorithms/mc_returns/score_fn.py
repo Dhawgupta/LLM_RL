@@ -6,7 +6,6 @@ import jax.numpy as jnp
 import numpy as np
 from LLM_RL.environment import TextHistory, TokenHistory
 import jax
-from IPython import embed
 
 def build_mc_score_fn(
     inference: MCInference, 
