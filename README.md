@@ -1,5 +1,7 @@
 # LLM_RL
 
+This is the official repository for LLM-RL. 
+
 ## installation
 
 ### **1. pull from github**
@@ -47,3 +49,4 @@ git clone https://github.com/Sea-Snell/JaxSeq2.git
 cd JaxSeq2
 python -m pip install -e .
 ```
+### **4. install JaxSeq2**
